@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../../contexts/ModalContext';
 
+/**
+ * FinanceVendor.jsx
+ * 공급/거래처 관리
+ * MushroomFarm의 기능을 포팅하고, CSI-Manager SalesReception/FinancePurchase과 유사한 Premium UI를 적용함.
+ */
 const FinanceVendor = () => {
+    // --- Custom Hooks ---
     const { showAlert, showConfirm } = useModal();
+
+    // --- State Management ---
     const [vendors, setVendors] = useState([]);
     const [allVendors, setAllVendors] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Form
-    const [form, setForm] = useState({
+    const initialFormState = {
         id: null,
         name: '',
         bizNum: '',
@@ -18,15 +26,26 @@ const FinanceVendor = () => {
         address: '',
         items: '',
         memo: ''
-    });
+    };
+    const [form, setForm] = useState(initialFormState);
 
     // --- Init ---
     useEffect(() => {
         loadVendors();
     }, []);
 
+    // Local filtering
     useEffect(() => {
-        handleSearch();
+        if (!searchQuery) {
+            setVendors(allVendors);
+        } else {
+            const query = searchQuery.toLowerCase();
+            const filtered = allVendors.filter(v =>
+                v.vendor_name.toLowerCase().includes(query) ||
+                (v.main_items && v.main_items.toLowerCase().includes(query))
+            );
+            setVendors(filtered);
+        }
     }, [searchQuery, allVendors]);
 
     const loadVendors = async () => {
@@ -37,10 +56,16 @@ const FinanceVendor = () => {
             setVendors(list || []);
         } catch (e) {
             console.error(e);
+            showAlert("오류", "데이터 로딩 실패: " + e);
         }
     };
 
     // --- Handlers ---
+    const handleFormChange = (e) => {
+        const { name, value } = e.target;
+        setForm(prev => ({ ...prev, [name]: value }));
+    };
+
     const handleSave = async () => {
         if (!form.name.trim()) return showAlert("알림", "거래처명을 입력해주세요.");
 
@@ -82,17 +107,7 @@ const FinanceVendor = () => {
     };
 
     const handleReset = () => {
-        setForm({
-            id: null,
-            name: '',
-            bizNum: '',
-            rep: '',
-            mobile: '',
-            email: '',
-            address: '',
-            items: '',
-            memo: ''
-        });
+        setForm(initialFormState);
         setSearchQuery('');
     };
 
@@ -111,139 +126,153 @@ const FinanceVendor = () => {
         setSearchQuery(v.vendor_name);
     };
 
-    const handleSearch = () => {
-        if (!searchQuery) {
-            setVendors(allVendors);
-            return;
-        }
-        const filtered = allVendors.filter(v =>
-            v.vendor_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (v.main_items && v.main_items.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-        setVendors(filtered);
-    };
-
     return (
-        <div className="sales-v3-container fade-in flex gap-4 p-4 h-full bg-slate-50">
-            {/* Left: Form */}
-            <div className="w-[380px] flex flex-col">
-                <div className="modern-card bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                        <span className="material-symbols-rounded text-purple-600">store</span>
-                        {form.id ? '거래처 수정' : '거래처 등록'}
-                    </h3>
-
-                    <div className="space-y-3">
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">거래처명 <span className="text-red-500">*</span></label>
-                            <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                                className="input-field w-full font-bold" placeholder="ex. OO농산" autoFocus />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">사업자번호</label>
-                            <input value={form.bizNum} onChange={e => setForm({ ...form, bizNum: e.target.value })}
-                                className="input-field w-full" placeholder="000-00-00000" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">대표자</label>
-                                <input value={form.rep} onChange={e => setForm({ ...form, rep: e.target.value })}
-                                    className="input-field w-full" placeholder="홍길동" />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">연락처</label>
-                                <input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })}
-                                    className="input-field w-full" placeholder="010-0000-0000" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">이메일</label>
-                            <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                                className="input-field w-full" placeholder="email@example.com" />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">주소</label>
-                            <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}
-                                className="input-field w-full" placeholder="사업장 주소" />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">주요 품목</label>
-                            <input value={form.items} onChange={e => setForm({ ...form, items: e.target.value })}
-                                className="input-field w-full" placeholder="ex. 생표고버섯, 새송이버섯" />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">메모</label>
-                            <textarea value={form.memo} onChange={e => setForm({ ...form, memo: e.target.value })}
-                                className="input-field w-full h-16 resize-none" placeholder="거래 특이사항..." />
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                            <button onClick={handleReset} className="btn-secondary flex-1">초기화</button>
-                            <button onClick={handleSave} className="btn-primary flex-1">저장</button>
-                        </div>
-                    </div>
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+            {/* Header Area */}
+            <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="w-6 h-1 bg-violet-600 rounded-full"></span>
+                    <span className="text-[9px] font-black tracking-[0.2em] text-violet-600 uppercase">Vendor Management</span>
                 </div>
+                <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                    공급/거래처 관리 <span className="text-slate-300 font-light ml-1 text-xl">Supply Vendors</span>
+                </h1>
             </div>
 
-            {/* Right: List */}
-            <div className="flex-1 flex flex-col">
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-                    <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-lg">거래처 목록</h3>
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-500">총 <span className="font-bold text-purple-600">{vendors.length}</span>곳</span>
-                            <div className="relative">
-                                <span className="material-symbols-rounded absolute left-2 top-2 text-slate-400 text-sm">search</span>
-                                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                                    className="input-field pl-8 h-8 w-64 text-sm" placeholder="거래처명 또는 품목 검색..." />
+            <div className="flex flex-1 gap-6 px-6 lg:px-8 pb-6 min-h-0">
+                {/* Left: Input Form */}
+                <div className="w-[420px] flex flex-col gap-4 h-full">
+                    <div className="bg-white rounded-[1.5rem] p-5 border border-slate-200 shadow-sm relative group overflow-hidden flex flex-col flex-1 h-full">
+                        <div className="absolute top-0 right-0 w-24 h-full bg-violet-50/50 -skew-x-12 translate-x-12 transition-transform group-hover:translate-x-6" />
+
+                        <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center text-violet-600">
+                                <span className="material-symbols-rounded">store</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-700">거래처 정보 입력</h3>
+                        </div>
+
+                        <div className="flex flex-col gap-3 relative z-10 overflow-y-auto flex-1 px-1 custom-scrollbar">
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">거래처명 (업체명) <span className="text-violet-500">*</span></label>
+                                <input name="name" value={form.name} onChange={handleFormChange} placeholder="예: OO농산" autoFocus
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">대표자</label>
+                                    <input name="rep" value={form.rep} onChange={handleFormChange} placeholder="홍길동"
+                                        className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">사업자번호</label>
+                                    <input name="bizNum" value={form.bizNum} onChange={handleFormChange} placeholder="000-00-00000"
+                                        className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                                </div>
+                            </div>
+
+                            <div className="w-1/2 pr-1.5">
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">연락처</label>
+                                <input name="mobile" value={form.mobile} onChange={handleFormChange} placeholder="010.."
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">이메일</label>
+                                <input type="email" name="email" value={form.email} onChange={handleFormChange} placeholder="email@example.com"
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주소</label>
+                                <input name="address" value={form.address} onChange={handleFormChange} placeholder="사업장 주소 입력"
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주요 취급 품목</label>
+                                <input name="items" value={form.items} onChange={handleFormChange} placeholder="예: 박스, 라벨지, 버섯종균 등"
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
+                                <textarea name="memo" value={form.memo} onChange={handleFormChange}
+                                    className="w-full h-24 rounded-xl bg-white border-slate-200 text-slate-800 text-sm p-3 focus:ring-2 focus:ring-violet-500 transition-all resize-none" placeholder="거래 특이사항을 입력하세요"></textarea>
+                            </div>
+
+                            <div className="flex gap-2 mt-auto pt-4">
+                                <button onClick={handleSave} className="flex-1 h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2">
+                                    <span className="material-symbols-rounded">save</span> 저장하기
+                                </button>
+                                <button onClick={handleReset} className="w-12 h-11 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center transition-all">
+                                    <span className="material-symbols-rounded">restart_alt</span>
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-auto bg-white rounded-lg shadow-sm border border-slate-200">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold sticky top-0">
-                            <tr>
-                                <th className="p-3 text-left">거래처명</th>
-                                <th className="p-3 text-left w-32">대표자</th>
-                                <th className="p-3 text-left w-40">연락처</th>
-                                <th className="p-3 text-left">주요 품목</th>
-                                <th className="p-3 text-center w-20">편집</th>
-                                <th className="p-3 text-center w-20">삭제</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {vendors.length === 0 ? (
-                                <tr><td colSpan="6" className="p-20 text-center text-slate-400">등록된 거래처가 없습니다.</td></tr>
-                            ) : (
-                                vendors.map(v => (
-                                    <tr key={v.vendor_id} onClick={() => loadToForm(v)} className="hover:bg-slate-50 cursor-pointer">
-                                        <td className="p-3 font-bold text-slate-800">{v.vendor_name}</td>
-                                        <td className="p-3 text-slate-600">{v.representative || '-'}</td>
-                                        <td className="p-3 text-slate-500 font-mono text-xs">{v.mobile_number || '-'}</td>
-                                        <td className="p-3 text-slate-600">{v.main_items || '-'}</td>
-                                        <td className="p-3 text-center">
-                                            <button onClick={(e) => { e.stopPropagation(); loadToForm(v); }} className="text-blue-500 hover:text-blue-700">
-                                                <span className="material-symbols-rounded text-base">edit</span>
-                                            </button>
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(v.vendor_id, v.vendor_name); }} className="text-red-400 hover:text-red-600">
-                                                <span className="material-symbols-rounded text-base">delete</span>
-                                            </button>
-                                        </td>
+                {/* Right: List & Table */}
+                <div className="flex-1 flex flex-col min-w-0 gap-4">
+                    {/* Filter Bar */}
+                    <div className="bg-white rounded-[1.5rem] p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <span className="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="거래처명 또는 품목 검색..."
+                                    className="pl-10 pr-4 h-10 rounded-xl bg-slate-50 border-slate-200 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500 transition-all w-64" />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-400 uppercase">등록된 거래처</span>
+                            <span className="text-lg font-black text-violet-600">{vendors.length}</span>
+                            <span className="text-sm font-medium text-slate-500">곳</span>
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="flex-1 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div className="flex-1 overflow-y-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                                    <tr className="text-slate-500 border-b border-slate-200">
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-[15%] min-w-[120px]">거래처명</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-[10%] min-w-[80px]">대표자</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-[12%] min-w-[100px]">연락처</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-[25%] min-w-[200px]">주소</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-[30%] min-w-[150px]">주요 품목</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap text-center w-[80px]">관리</th>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {vendors.length === 0 ? (
+                                        <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">등록된 거래처가 없습니다.</td></tr>
+                                    ) : (
+                                        vendors.map(v => (
+                                            <tr key={v.vendor_id} onClick={() => loadToForm(v)} className="hover:bg-violet-50/50 cursor-pointer transition-colors group">
+                                                <td className="py-3 px-4 font-bold text-slate-800 break-keep">{v.vendor_name}</td>
+                                                <td className="py-3 px-4 font-medium text-slate-600">{v.representative || '-'}</td>
+                                                <td className="py-3 px-4 font-mono text-xs text-slate-500">{v.mobile_number || '-'}</td>
+                                                <td className="py-3 px-4 text-slate-600 text-xs break-keep">{v.address || '-'}</td>
+                                                <td className="py-3 px-4 text-slate-700 text-sm truncate">{v.main_items || '-'}</td>
+                                                <td className="py-3 px-4 text-center">
+                                                    <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(v.vendor_id, v.vendor_name); }}
+                                                            className="w-8 h-8 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors">
+                                                            <span className="material-symbols-rounded text-lg">delete</span>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

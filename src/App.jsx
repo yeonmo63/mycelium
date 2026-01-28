@@ -21,6 +21,7 @@ import CustomerSms from './features/customer/CustomerSms';
 import FinancePurchase from './features/finance/FinancePurchase';
 import FinanceExpense from './features/finance/FinanceExpense';
 import FinanceVendor from './features/finance/FinanceVendor';
+import FinanceAnalysis from './features/finance/FinanceAnalysis';
 import SettingsProduct from './features/settings/SettingsProduct';
 import SalesReception from './features/sales/SalesReception';
 import SalesSpecial from './features/sales/SalesSpecial';
@@ -31,6 +32,8 @@ import SalesDailyReceipts from './features/sales/SalesDailyReceipts';
 import SalesStock from './features/sales/SalesStock';
 import SalesLedger from './features/sales/SalesLedger';
 import SalesPersonalHistory from './features/sales/SalesPersonalHistory';
+import SalesIntelligence from './features/intel/SalesIntelligence';
+import CustomerIntelligence from './features/intel/CustomerIntelligence';
 import Placeholder from './components/Placeholder';
 
 const router = createBrowserRouter(
@@ -56,9 +59,9 @@ const router = createBrowserRouter(
       <Route path="finance/purchase" element={<FinancePurchase />} />
       <Route path="finance/expense" element={<FinanceExpense />} />
       <Route path="finance/vendor" element={<FinanceVendor />} />
-      <Route path="status/financial-analysis" element={<Placeholder title="손익/재무 분석" />} />
-      <Route path="intel/sales" element={<Placeholder title="지능형 판매 분석 리포트" />} />
-      <Route path="intel/customer" element={<Placeholder title="AI 고객 성장 센터" />} />
+      <Route path="status/financial-analysis" element={<FinanceAnalysis />} />
+      <Route path="intel/sales" element={<SalesIntelligence />} />
+      <Route path="intel/customer" element={<CustomerIntelligence />} />
       <Route path="marketing/association" element={<Placeholder title="상품 연관 분석 (MBA)" />} />
       <Route path="marketing/orm" element={<Placeholder title="온라인 AI 평판 분석 (ORM)" />} />
       <Route path="intel/region-analysis" element={<Placeholder title="AI 지역별 매출 히트맵" />} />

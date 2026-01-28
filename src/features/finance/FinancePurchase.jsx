@@ -1,398 +1,543 @@
-import React, { useState, useEffect } from 'react';
-import { formatCurrency, parseNumber } from '../../utils/common';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useModal } from '../../contexts/ModalContext';
+import { formatCurrency, parseNumber } from '../../utils/common';
 
+/**
+ * FinancePurchase.jsx
+ * 매입 등록 및 내역 관리
+ * MushroomFarm의 기능을 포팅하고 CSI-Manager의 SalesReception 스타일을 적용함.
+ */
 const FinancePurchase = () => {
+    // --- Custom Hooks ---
     const { showAlert, showConfirm } = useModal();
+
+    // --- State Management ---
     const [purchases, setPurchases] = useState([]);
-    const [vendors, setVendors] = useState([]);
     const [products, setProducts] = useState([]);
-    const [materials, setMaterials] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [vendors, setVendors] = useState([]);
 
-    // Filter
-    const today = new Date().toISOString().split('T')[0];
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-    const [filter, setFilter] = useState({ start: startOfMonth, end: today, vendorId: '' });
+    // Filters
+    const [filterStart, setFilterStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+    const [filterEnd, setFilterEnd] = useState(new Date().toISOString().split('T')[0]);
+    const [filterVendor, setFilterVendor] = useState('');
 
-    // Form
-    const [form, setForm] = useState({
-        id: null,
-        date: today,
+    // Form Stats
+    const initialFormState = {
+        purchaseId: null, // null for new
+        date: new Date().toISOString().split('T')[0],
         vendorId: '',
         itemName: '',
         spec: '',
         qty: 1,
         price: 0,
+        total: 0,
         paymentStatus: '계좌이체',
         memo: '',
-        linkProductId: '',
-        inventoryMode: false,
-        syncMode: false
-    });
 
-    // Sync suggestions
-    const [syncSuggestions, setSyncSuggestions] = useState([]);
-    const [syncQty, setSyncQty] = useState({});
+        // Inventory Logic
+        linkProductId: '', // If set, inventory_synced is likely true
+        isInventoryMode: false, // Toggle UI for inventory
 
-    // --- Init ---
-    useEffect(() => {
-        loadData();
+        // Sync Manufacturing Logic
+        isSyncMode: false,
+        syncItems: [] // { product_id, quantity, product_name }
+    };
+    const [formState, setFormState] = useState(initialFormState);
+    const [syncSearchQuery, setSyncSearchQuery] = useState('');
+    const [suggestedProducts, setSuggestedProducts] = useState([]);
+
+    // --- Data Loading ---
+    const loadProducts = useCallback(async () => {
+        try {
+            if (!window.__TAURI__) return;
+            // init_db_schema might be needed if it's the very first run, but usually main.rs handles it.
+            // keeping it safe if mushroomfarm logic relied on it explicitly.
+            const list = await window.__TAURI__.core.invoke('get_product_list');
+            setProducts(list || []);
+        } catch (e) {
+            console.error("Product load error:", e);
+        }
     }, []);
 
-    const loadData = async () => {
-        await Promise.all([loadPurchases(), loadVendors(), loadProducts()]);
-    };
-
-    const loadPurchases = async () => {
-        if (!window.__TAURI__) return;
-        setIsLoading(true);
+    const loadVendors = useCallback(async () => {
         try {
-            const list = await window.__TAURI__.core.invoke('get_purchase_list', {
-                startDate: filter.start,
-                endDate: filter.end,
-                vendorId: filter.vendorId ? parseInt(filter.vendorId) : null
-            });
-            setPurchases(list || []);
-        } catch (e) {
-            console.error(e);
-            setPurchases([]);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const loadVendors = async () => {
-        if (!window.__TAURI__) return;
-        try {
+            if (!window.__TAURI__) return;
             const list = await window.__TAURI__.core.invoke('get_vendor_list');
             setVendors(list || []);
         } catch (e) {
-            console.error(e);
+            console.error("Vendor load error:", e);
         }
-    };
+    }, []);
 
-    const loadProducts = async () => {
-        if (!window.__TAURI__) return;
+    const loadPurchases = useCallback(async () => {
         try {
-            await window.__TAURI__.core.invoke('init_db_schema');
-            const list = await window.__TAURI__.core.invoke('get_product_list');
-            setProducts(list || []);
-            setMaterials((list || []).filter(p => p.item_type === 'material'));
+            if (!window.__TAURI__) return;
+            const list = await window.__TAURI__.core.invoke('get_purchase_list', {
+                startDate: filterStart,
+                endDate: filterEnd,
+                vendorId: filterVendor ? parseInt(filterVendor) : null
+            });
+            setPurchases(list || []);
         } catch (e) {
-            console.error(e);
+            console.error("Purchase list load error:", e);
         }
-    };
+    }, [filterStart, filterEnd, filterVendor]);
+
+    useEffect(() => {
+        loadProducts();
+        loadVendors();
+        loadPurchases();
+    }, [loadProducts, loadVendors, loadPurchases]);
 
     // --- Handlers ---
-    const handleSave = async () => {
-        if (!form.itemName.trim()) return showAlert("알림", "품목명을 입력해주세요.");
-        if (!form.vendorId) return showAlert("알림", "거래처를 선택해주세요.");
+    const handleFormChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormState(prev => {
+            const next = { ...prev, [name]: type === 'checkbox' ? checked : value };
 
-        let inventorySyncData = null;
-        if (form.syncMode) {
-            const items = Object.entries(syncQty)
-                .filter(([_, qty]) => qty > 0)
-                .map(([pid, qty]) => ({ product_id: parseInt(pid), quantity: qty }));
-            if (items.length > 0) inventorySyncData = items;
-        }
+            // Auto Calculation
+            if (name === 'qty' || name === 'price') {
+                const q = name === 'qty' ? parseNumber(value) : prev.qty;
+                const p = name === 'price' ? parseNumber(value) : prev.price;
+                next.total = q * p;
 
-        const purchase = {
-            purchase_id: form.id,
-            vendor_id: parseInt(form.vendorId),
-            purchase_date: form.date,
-            item_name: form.itemName,
-            specification: form.spec,
-            quantity: form.qty,
-            unit_price: form.price,
-            total_amount: form.qty * form.price,
-            payment_status: form.paymentStatus,
-            memo: form.memo,
-            inventory_synced: inventorySyncData !== null,
-            material_item_id: form.linkProductId ? parseInt(form.linkProductId) : null
-        };
-
-        try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('save_purchase', { purchase, inventorySyncData });
-                await showAlert("성공", "매입 내역이 저장되었습니다." + (inventorySyncData ? "\n(재고가 반영되었습니다)" : ""));
-                handleReset();
-                loadPurchases();
-                loadProducts();
+                // Allow empty string for UX
+                if (name === 'qty' && value === '') next.qty = '';
+                if (name === 'price' && value === '') next.price = '';
             }
-        } catch (e) {
-            showAlert("오류", "저장 실패: " + e);
-        }
-    };
 
-    const handleDelete = async (id) => {
-        if (!await showConfirm("삭제 확인", "이 매입 내역을 삭제하시겠습니까?")) return;
-        try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_purchase', { id });
-                loadPurchases();
+            // Inventory Mode Logic
+            if (name === 'isInventoryMode' && !checked) {
+                // If turning off inventory mode, clear related fields
+                next.linkProductId = '';
+                next.isSyncMode = false;
+                next.syncItems = [];
             }
-        } catch (e) {
-            showAlert("오류", "삭제 실패: " + e);
-        }
-    };
 
-    const handleReset = () => {
-        setForm({
-            id: null,
-            date: new Date().toISOString().split('T')[0],
-            vendorId: '',
-            itemName: '',
-            spec: '',
-            qty: 1,
-            price: 0,
-            paymentStatus: '계좌이체',
-            memo: '',
-            linkProductId: '',
-            inventoryMode: false,
-            syncMode: false
+            // Sync Mode Logic
+            if (name === 'isSyncMode') {
+                if (checked && !prev.linkProductId) {
+                    showAlert('알림', '먼저 "재고 입고 대상 품목"을 선택해주세요.');
+                    return prev;
+                }
+                if (!checked) {
+                    next.syncItems = [];
+                } else {
+                    // Try to suggest products based on item name
+                    updateSuggestions(prev.itemName);
+                }
+            }
+
+            // Link Product Logic
+            if (name === 'linkProductId') {
+                if (!value) {
+                    next.isSyncMode = false;
+                    next.syncItems = [];
+                } else {
+                    // Auto-fill item name if empty
+                    if (!prev.itemName) {
+                        const p = products.find(prod => String(prod.product_id) === String(value));
+                        if (p) next.itemName = p.product_name;
+                    }
+                }
+            }
+
+            // Item Name Change -> Updates Suggestions if in sync mode
+            if (name === 'itemName' && prev.isSyncMode) {
+                updateSuggestions(value);
+            }
+
+            return next;
         });
-        setSyncSuggestions([]);
-        setSyncQty({});
     };
 
-    const loadToForm = (p) => {
-        setForm({
-            id: p.purchase_id,
-            date: p.purchase_date,
-            vendorId: p.vendor_id,
-            itemName: p.item_name,
-            spec: p.specification || '',
-            qty: p.quantity,
-            price: p.unit_price,
-            paymentStatus: p.payment_status,
-            memo: p.memo || '',
-            linkProductId: p.material_item_id || '',
-            inventoryMode: !!p.material_item_id,
-            syncMode: false
-        });
-        setSyncSuggestions([]);
-        setSyncQty({});
-    };
-
-    // Sync suggestions
-    useEffect(() => {
-        if (form.syncMode && form.itemName) {
-            updateSuggestions();
-        }
-    }, [form.itemName, form.syncMode]);
-
-    const updateSuggestions = () => {
+    const updateSuggestions = (keyword) => {
+        if (!keyword) return;
         const regex = /(\d+\s*(kg|g|호|세트|종|입))/i;
-        const match = form.itemName.match(regex);
-        const keyword = match ? match[0].toLowerCase() : form.itemName.toLowerCase();
+        const match = keyword.match(regex);
+        const searchKey = match ? match[0].toLowerCase() : keyword.toLowerCase();
 
-        if (keyword.length < 2) {
-            setSyncSuggestions([]);
+        if (searchKey.length < 2) {
+            setSuggestedProducts([]);
             return;
         }
 
         const filtered = products.filter(p =>
-            p.item_type === 'product' && (
-                p.product_name.toLowerCase().includes(keyword) ||
-                (p.specification && p.specification.toLowerCase().includes(keyword))
+            (p.item_type === 'product') && (
+                p.product_name.toLowerCase().includes(searchKey) ||
+                (p.specification && p.specification.toLowerCase().includes(searchKey))
             )
         ).slice(0, 20);
-
-        setSyncSuggestions(filtered);
+        setSuggestedProducts(filtered);
     };
 
-    // Stats
-    const totalSum = purchases.reduce((sum, p) => sum + p.total_amount, 0);
-    const unpaidSum = purchases.filter(p => p.payment_status === '미지급').reduce((sum, p) => sum + p.total_amount, 0);
+    const handleSyncSearch = (e) => {
+        const val = e.target.value;
+        setSyncSearchQuery(val);
+        updateSuggestions(val);
+    };
+
+    const handleAddSyncItem = (product, qty) => {
+        setFormState(prev => {
+            const existing = prev.syncItems.find(item => item.product_id === product.product_id);
+            if (existing) {
+                return {
+                    ...prev,
+                    syncItems: prev.syncItems.map(item =>
+                        item.product_id === product.product_id ? { ...item, quantity: qty } : item
+                    )
+                };
+            } else {
+                return {
+                    ...prev,
+                    syncItems: [...prev.syncItems, { product_id: product.product_id, quantity: qty, product_name: product.product_name }]
+                };
+            }
+        });
+    };
+
+    const handleSave = async () => {
+        if (!formState.itemName) { showAlert('알림', '품목명을 입력해주세요.'); return; }
+        if (!formState.vendorId) { showAlert('알림', '공급처(거래처)를 선택해주세요.'); return; }
+
+        try {
+            const purchasePayload = {
+                purchase_id: formState.purchaseId,
+                vendor_id: parseInt(formState.vendorId),
+                purchase_date: formState.date,
+                item_name: formState.itemName,
+                specification: formState.spec,
+                quantity: Number(formState.qty) || 0,
+                unit_price: Number(formState.price) || 0,
+                total_amount: Number(formState.total) || 0,
+                payment_status: formState.paymentStatus,
+                memo: formState.memo,
+                inventory_synced: formState.linkProductId ? true : false, // Logic from mushroomfarm
+                material_item_id: formState.linkProductId ? parseInt(formState.linkProductId) : null
+            };
+
+            // inventorySyncData: Array of { product_id, quantity }
+            let inventorySyncData = null;
+            if (formState.isSyncMode && formState.syncItems.some(i => i.quantity > 0)) {
+                inventorySyncData = formState.syncItems
+                    .filter(i => i.quantity > 0)
+                    .map(i => ({ product_id: i.product_id, quantity: Number(i.quantity) }));
+            }
+
+            await window.__TAURI__.core.invoke('save_purchase', {
+                purchase: purchasePayload,
+                inventorySyncData
+            });
+
+            await showAlert('성공', '매입 내역이 저장되었습니다.');
+            handleReset();
+            loadPurchases();
+            loadProducts(); // Stock might have changed
+        } catch (e) {
+            showAlert('오류', `저장 실패: ${e}`);
+        }
+    };
+
+    const handleReset = () => {
+        setFormState(initialFormState);
+        setSuggestedProducts([]);
+        setSyncSearchQuery('');
+    };
+
+    const handleEdit = (p) => {
+        setFormState({
+            purchaseId: p.purchase_id,
+            date: p.purchase_date,
+            vendorId: p.vendor_id || '',
+            itemName: p.item_name,
+            spec: p.specification || '',
+            qty: p.quantity,
+            price: p.unit_price,
+            total: p.total_amount,
+            paymentStatus: p.payment_status,
+            memo: p.memo || '',
+
+            // Inventory Logic Restoration
+            isInventoryMode: !!p.material_item_id,
+            linkProductId: p.material_item_id || '',
+            isSyncMode: false, // Reset sync mode on edit as per original logic (complex to restore fully without extra data)
+            syncItems: []
+        });
+    };
+
+    const handleDelete = async (id) => {
+        if (await showConfirm('삭제', '이 매입 내역을 정말 삭제하시겠습니까?')) {
+            try {
+                await window.__TAURI__.core.invoke('delete_purchase', { id });
+                loadPurchases();
+            } catch (e) {
+                showAlert('오류', `삭제 실패: ${e}`);
+            }
+        }
+    };
+
+    // Summary calculation
+    const summary = useMemo(() => {
+        const total = purchases.reduce((sum, p) => sum + p.total_amount, 0);
+        const unpaid = purchases.filter(p => p.payment_status === '미지급').reduce((sum, p) => sum + p.total_amount, 0);
+        return { total, unpaid };
+    }, [purchases]);
 
     return (
-        <div className="sales-v3-container fade-in flex gap-4 p-4 h-full bg-slate-50">
-            {/* Left: Form */}
-            <div className="w-[400px] flex flex-col gap-4">
-                <div className="modern-card bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                        <span className="material-symbols-rounded text-green-600">shopping_cart</span>
-                        {form.id ? '매입 수정' : '매입 등록'}
-                    </h3>
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+            {/* Header Area */}
+            <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="w-6 h-1 bg-violet-600 rounded-full"></span>
+                    <span className="text-[9px] font-black tracking-[0.2em] text-violet-600 uppercase">Start Your Business</span>
+                </div>
+                <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                    매입 등록/내역 <span className="text-slate-300 font-light ml-1 text-xl">Purchase History</span>
+                </h1>
+            </div>
 
-                    <div className="space-y-3">
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">매입일자</label>
-                            <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-field w-full" />
-                        </div>
+            <div className="flex flex-1 gap-6 px-6 lg:px-8 pb-6 min-h-0">
+                {/* Left: Input Form */}
+                <div className="w-[360px] flex flex-col gap-4 h-full">
+                    <div className="bg-white rounded-[1.5rem] p-5 border border-slate-200 shadow-sm relative group overflow-hidden flex flex-col flex-1 h-full">
+                        <div className="absolute top-0 right-0 w-24 h-full bg-violet-50/50 -skew-x-12 translate-x-12 transition-transform group-hover:translate-x-6" />
 
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">거래처</label>
-                            <select value={form.vendorId} onChange={e => setForm({ ...form, vendorId: e.target.value })} className="input-field w-full">
-                                <option value="">거래처 선택</option>
-                                {vendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.vendor_name}</option>)}
-                            </select>
-                        </div>
-
-                        {/* Inventory Mode Toggle */}
-                        <label className="flex items-center gap-2 p-2 bg-blue-50 rounded cursor-pointer border border-blue-100">
-                            <input type="checkbox" checked={form.inventoryMode} onChange={e => setForm({ ...form, inventoryMode: e.target.checked, linkProductId: '', syncMode: false })} />
-                            <span className="text-sm font-bold text-blue-700">재고 연동 모드</span>
-                        </label>
-
-                        {form.inventoryMode && (
-                            <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                                <label className="text-xs font-bold text-slate-500 block mb-1">연계 재고 품목</label>
-                                <select value={form.linkProductId} onChange={e => {
-                                    const val = e.target.value;
-                                    setForm({ ...form, linkProductId: val });
-                                    if (val && !form.itemName) {
-                                        const mat = materials.find(m => m.product_id == val);
-                                        if (mat) setForm(prev => ({ ...prev, itemName: mat.product_name, linkProductId: val }));
-                                    }
-                                }} className="input-field w-full text-sm">
-                                    <option value="">재고 연동 안함 (일반 지출)</option>
-                                    {materials.map(m => <option key={m.product_id} value={m.product_id}>{m.product_name} {m.specification ? `(${m.specification})` : ''}</option>)}
-                                </select>
-
-                                <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                                    <input type="checkbox" checked={form.syncMode} disabled={!form.linkProductId} onChange={e => setForm({ ...form, syncMode: e.target.checked })} />
-                                    <span className="text-xs font-bold text-slate-600">완제품 재고도 함께 입고</span>
-                                </label>
+                        <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0">
+                            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center text-violet-600">
+                                <span className="material-symbols-rounded">edit_square</span>
                             </div>
-                        )}
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">품목명</label>
-                            <input value={form.itemName} onChange={e => setForm({ ...form, itemName: e.target.value })} className="input-field w-full" placeholder="ex. 생표고버섯" />
+                            <h3 className="text-lg font-bold text-slate-700">매입 정보 입력</h3>
                         </div>
 
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">규격</label>
-                            <input value={form.spec} onChange={e => setForm({ ...form, spec: e.target.value })} className="input-field w-full" placeholder="ex. 1kg" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-3 relative z-10 overflow-y-auto flex-1 px-1 custom-scrollbar">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">수량</label>
-                                <input type="number" value={form.qty} onChange={e => setForm({ ...form, qty: Number(e.target.value) })} className="input-field w-full text-right" />
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">매입 일자</label>
+                                <input type="date" name="date" value={formState.date} onChange={handleFormChange}
+                                    className="w-full h-10 rounded-xl bg-slate-50 border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
+
                             <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">단가</label>
-                                <input type="number" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} className="input-field w-full text-right" />
-                            </div>
-                        </div>
-
-                        <div className="bg-blue-50 p-3 rounded">
-                            <div className="text-xs font-bold text-slate-500 mb-1">총액</div>
-                            <div className="text-2xl font-black text-blue-600">{formatCurrency(form.qty * form.price)}원</div>
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">지급 상태</label>
-                            <select value={form.paymentStatus} onChange={e => setForm({ ...form, paymentStatus: e.target.value })} className="input-field w-full">
-                                <option>계좌이체</option>
-                                <option>현금</option>
-                                <option>미지급</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold text-slate-500 block mb-1">메모</label>
-                            <textarea value={form.memo} onChange={e => setForm({ ...form, memo: e.target.value })} className="input-field w-full h-16 resize-none" />
-                        </div>
-
-                        {/* Sync Suggestions */}
-                        {form.syncMode && syncSuggestions.length > 0 && (
-                            <div className="bg-purple-50 p-3 rounded border border-purple-200">
-                                <div className="text-xs font-bold text-purple-700 mb-2">완제품 입고 수량</div>
-                                <div className="space-y-2 max-h-[200px] overflow-auto">
-                                    {syncSuggestions.map(p => (
-                                        <div key={p.product_id} className="flex items-center gap-2 bg-white p-2 rounded text-xs">
-                                            <span className="flex-1 font-bold truncate" title={p.product_name}>{p.product_name}</span>
-                                            <span className="text-slate-400 text-[10px]">재고 {formatCurrency(p.stock_quantity)}</span>
-                                            <input type="number" value={syncQty[p.product_id] || ''} onChange={e => setSyncQty({ ...syncQty, [p.product_id]: Number(e.target.value) })}
-                                                className="input-field w-16 h-7 text-right text-xs" placeholder="0" />
-                                        </div>
-                                    ))}
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">공급처 (거래처)</label>
+                                <div className="relative">
+                                    <select name="vendorId" value={formState.vendorId} onChange={handleFormChange}
+                                        className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3 appearance-none">
+                                        <option value="">거래처 선택</option>
+                                        {vendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.vendor_name}</option>)}
+                                    </select>
+                                    <span className="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">unfold_more</span>
                                 </div>
                             </div>
-                        )}
 
-                        <div className="flex gap-2 pt-2">
-                            <button onClick={handleReset} className="btn-secondary flex-1">초기화</button>
-                            <button onClick={handleSave} className="btn-primary flex-1">저장</button>
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">품목명 (지출 항목)</label>
+                                <input type="text" name="itemName" value={formState.itemName} onChange={handleFormChange} placeholder="예: 택배 박스 5kg용"
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">규격 (선택)</label>
+                                <input type="text" name="spec" value={formState.spec} onChange={handleFormChange}
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">수량</label>
+                                    <input type="text" name="qty" value={formatCurrency(formState.qty)} onChange={handleFormChange}
+                                        className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold text-right focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                                </div>
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">단가</label>
+                                    <input type="text" name="price" value={formatCurrency(formState.price)} onChange={handleFormChange}
+                                        className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold text-right focus:ring-2 focus:ring-violet-500 transition-all px-3" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-violet-600 uppercase ml-1 mb-1 block">총 금액</label>
+                                <input type="text" value={formatCurrency(formState.total)} readOnly
+                                    className="w-full h-10 rounded-xl bg-violet-50 border-none text-violet-700 font-black text-right px-4" />
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">결제 상태</label>
+                                <select name="paymentStatus" value={formState.paymentStatus} onChange={handleFormChange}
+                                    className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3">
+                                    <option value="계좌이체">계좌이체</option>
+                                    <option value="미지급">미지급(외상)</option>
+                                    <option value="현금">현금</option>
+                                    <option value="카드">카드</option>
+                                </select>
+                            </div>
+
+                            {/* Inventory Toggle */}
+                            <div className="mt-2 bg-slate-50 rounded-xl p-3 border border-slate-200">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                        <span className="material-symbols-rounded text-sm">inventory_2</span> 창고 재고 입고
+                                    </span>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" name="isInventoryMode" checked={formState.isInventoryMode} onChange={handleFormChange} className="sr-only peer" />
+                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
+                                    </label>
+                                </div>
+
+                                {formState.isInventoryMode && (
+                                    <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div>
+                                            <select name="linkProductId" value={formState.linkProductId} onChange={handleFormChange}
+                                                className="w-full h-9 rounded-lg border-orange-200 bg-orange-50 text-xs font-bold text-orange-800 focus:ring-2 focus:ring-orange-400">
+                                                <option value="">재고 연동 안함 (일반 지출)</option>
+                                                {products.filter(p => p.item_type === 'material').map(p => (
+                                                    <option key={p.product_id} value={p.product_id}>
+                                                        {p.product_name} {p.specification ? `(${p.specification})` : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <p className="text-[10px] text-orange-600 mt-1 ml-1">* 선택 시 해당 원자재 재고가 증가합니다.</p>
+                                        </div>
+
+                                        {/* Sync Finished Goods Toggle */}
+                                        <div className="pt-2 border-t border-dashed border-slate-300">
+                                            <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                                <input type="checkbox" name="isSyncMode" checked={formState.isSyncMode} onChange={handleFormChange}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300" />
+                                                <span className="text-xs font-bold text-blue-600">완제품(버섯) 포장 완료 처리</span>
+                                            </label>
+
+                                            {formState.isSyncMode && (
+                                                <div className="bg-blue-50/50 rounded-lg p-2 border border-blue-100">
+                                                    <input type="text" value={syncSearchQuery} onChange={handleSyncSearch} placeholder="완제품명 검색..."
+                                                        className="w-full h-8 rounded border-blue-200 text-xs mb-2 px-2 focus:ring-1 focus:ring-blue-400" />
+
+                                                    <div className="max-h-[150px] overflow-y-auto flex flex-col gap-1">
+                                                        {suggestedProducts.length === 0 ? (
+                                                            <p className="text-[10px] text-slate-400 text-center py-2">검색 결과가 없습니다.</p>
+                                                        ) : (
+                                                            suggestedProducts.map(p => {
+                                                                const currentQty = formState.syncItems.find(i => i.product_id === p.product_id)?.quantity || '';
+                                                                return (
+                                                                    <div key={p.product_id} className="flex items-center justify-between bg-white px-2 py-1.5 rounded border border-blue-100">
+                                                                        <span className="text-xs font-medium truncate flex-1">{p.product_name}</span>
+                                                                        <input type="number" placeholder="수량" value={currentQty}
+                                                                            onChange={e => handleAddSyncItem(p, e.target.value)}
+                                                                            className="w-16 h-6 text-right text-xs border border-slate-200 rounded px-1 focus:border-blue-500 outline-none" />
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
+                                <textarea name="memo" value={formState.memo} onChange={handleFormChange}
+                                    className="w-full h-20 rounded-xl bg-white border-slate-200 text-slate-800 text-sm p-3 focus:ring-2 focus:ring-violet-500 transition-all resize-none"></textarea>
+                            </div>
+
+                            <div className="flex gap-2 mt-2">
+                                <button onClick={handleSave} className="flex-1 h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold shadow-lg shadow-violet-200 transition-all flex items-center justify-center gap-2">
+                                    <span className="material-symbols-rounded">save</span> 저장하기
+                                </button>
+                                <button onClick={handleReset} className="w-12 h-11 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl flex items-center justify-center transition-all">
+                                    <span className="material-symbols-rounded">restart_alt</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Right: List */}
-            <div className="flex-1 flex flex-col">
-                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-lg">매입 내역</h3>
-                        <div className="flex gap-4 text-sm">
-                            <div className="bg-blue-50 px-3 py-1 rounded">총 매입액: <span className="font-bold text-blue-600">{formatCurrency(totalSum)}원</span></div>
-                            <div className="bg-red-50 px-3 py-1 rounded">미지급: <span className="font-bold text-red-600">{formatCurrency(unpaidSum)}원</span></div>
+                {/* Right: List & Table */}
+                <div className="flex-1 flex flex-col min-w-0 gap-4">
+                    {/* Filter Bar */}
+                    <div className="bg-white rounded-[1.5rem] p-4 border border-slate-200 shadow-sm flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                            <span className="material-symbols-rounded text-slate-400 text-[18px]">calendar_today</span>
+                            <input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none w-28" />
+                            <span className="text-slate-400">~</span>
+                            <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none w-28" />
                         </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <input type="date" value={filter.start} onChange={e => setFilter({ ...filter, start: e.target.value })} className="input-field h-8 text-sm" />
-                        <span className="flex items-center">~</span>
-                        <input type="date" value={filter.end} onChange={e => setFilter({ ...filter, end: e.target.value })} className="input-field h-8 text-sm" />
-                        <select value={filter.vendorId} onChange={e => setFilter({ ...filter, vendorId: e.target.value })} className="input-field h-8 text-sm w-40">
+
+                        <select value={filterVendor} onChange={e => setFilterVendor(e.target.value)}
+                            className="h-10 rounded-lg border-slate-200 text-sm font-bold text-slate-600 w-40">
                             <option value="">모든 거래처</option>
                             {vendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.vendor_name}</option>)}
                         </select>
-                        <button onClick={loadPurchases} className="btn-primary h-8 px-4 text-sm">조회</button>
-                    </div>
-                </div>
 
-                <div className="flex-1 overflow-auto bg-white rounded-lg shadow-sm border border-slate-200">
-                    <table className="w-full text-sm">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold sticky top-0">
-                            <tr>
-                                <th className="p-3 w-28 text-center">매입일</th>
-                                <th className="p-3 text-left w-32">거래처</th>
-                                <th className="p-3 text-left">품목</th>
-                                <th className="p-3 text-right w-24">수량</th>
-                                <th className="p-3 text-right w-32">총액</th>
-                                <th className="p-3 text-center w-24">지급상태</th>
-                                <th className="p-3 text-center w-20">편집</th>
-                                <th className="p-3 text-center w-20">삭제</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {isLoading ? (
-                                <tr><td colSpan="8" className="p-20 text-center"><span className="material-symbols-rounded spin text-3xl text-slate-400">sync</span></td></tr>
-                            ) : purchases.length === 0 ? (
-                                <tr><td colSpan="8" className="p-20 text-center text-slate-400">매입 내역이 없습니다.</td></tr>
-                            ) : (
-                                purchases.map(p => (
-                                    <tr key={p.purchase_id} onClick={() => loadToForm(p)} className="hover:bg-slate-50 cursor-pointer">
-                                        <td className="p-3 text-center text-slate-500">{p.purchase_date}</td>
-                                        <td className="p-3 font-bold text-slate-700">{p.vendor_name || '-'}</td>
-                                        <td className="p-3 text-slate-600">
-                                            {p.item_name} {p.specification && <span className="text-slate-400 text-xs">({p.specification})</span>}
-                                        </td>
-                                        <td className="p-3 text-right font-mono">{formatCurrency(p.quantity)}</td>
-                                        <td className="p-3 text-right font-mono font-bold">{formatCurrency(p.total_amount)}원</td>
-                                        <td className="p-3 text-center">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${p.payment_status === '미지급' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-green-50 text-green-600 border-green-200'
-                                                }`}>{p.payment_status}</span>
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <button onClick={(e) => { e.stopPropagation(); loadToForm(p); }} className="text-blue-500 hover:text-blue-700">
-                                                <span className="material-symbols-rounded text-base">edit</span>
-                                            </button>
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(p.purchase_id); }} className="text-red-400 hover:text-red-600">
-                                                <span className="material-symbols-rounded text-base">delete</span>
-                                            </button>
-                                        </td>
+                        <button onClick={loadPurchases} className="h-10 px-4 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-700 transition-colors flex items-center gap-2 text-sm">
+                            <span className="material-symbols-rounded text-[18px]">search</span> 조회
+                        </button>
+
+                        <div className="ml-auto flex items-center gap-6">
+                            <div className="text-right">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase block">검색 합계</span>
+                                <span className="text-lg font-black text-slate-800">{formatCurrency(summary.total)}원</span>
+                            </div>
+                            <div className="text-right pl-6 border-l border-slate-200">
+                                <span className="text-[10px] font-bold text-red-400 uppercase block">미지급 합계</span>
+                                <span className="text-lg font-black text-red-500">{formatCurrency(summary.unpaid)}원</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="flex-1 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div className="flex-1 overflow-y-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                                    <tr className="text-slate-500 border-b border-slate-200">
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap">일자</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap">공급처</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap w-1/3">품목명</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap text-center">수량</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap text-right">총 금액</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap text-center">결제</th>
+                                        <th className="py-3 px-4 font-bold whitespace-nowrap text-center">관리</th>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {purchases.map(p => (
+                                        <tr key={p.purchase_id} onClick={() => handleEdit(p)} className="hover:bg-violet-50/50 cursor-pointer transition-colors group">
+                                            <td className="py-3 px-4 font-medium text-slate-600">{p.purchase_date}</td>
+                                            <td className="py-3 px-4 font-bold text-slate-700">{p.vendor_name || '-'}</td>
+                                            <td className="py-3 px-4">
+                                                <div className="font-bold text-slate-800">{p.item_name}</div>
+                                                {p.specification && <div className="text-xs text-slate-500">({p.specification})</div>}
+                                            </td>
+                                            <td className="py-3 px-4 text-center font-medium text-slate-600">{formatCurrency(p.quantity)}</td>
+                                            <td className="py-3 px-4 text-right font-bold text-slate-800">{formatCurrency(p.total_amount)}원</td>
+                                            <td className="py-3 px-4 text-center">
+                                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold border ${p.payment_status === '미지급'
+                                                    ? 'bg-red-50 text-red-600 border-red-200'
+                                                    : 'bg-green-50 text-green-600 border-green-200'
+                                                    }`}>
+                                                    {p.payment_status}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(p.purchase_id); }}
+                                                        className="w-8 h-8 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors">
+                                                        <span className="material-symbols-rounded text-lg">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {purchases.length === 0 && (
+                                        <tr>
+                                            <td colspan="7" className="py-12 text-center text-slate-400 font-medium">매입 내역이 없습니다.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
