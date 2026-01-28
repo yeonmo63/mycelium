@@ -4228,6 +4228,7 @@ pub fn run() {
             delete_experience_reservation,
             update_experience_payment_status,
             update_experience_status,
+            get_experience_dashboard_stats,
             get_product_sales_stats,
             get_ten_year_sales_stats,
             get_monthly_sales_by_cohort,
@@ -4905,17 +4906,19 @@ async fn create_experience_program(
     duration_min: i32,
     max_capacity: i32,
     price_per_person: i32,
+    is_active: bool,
 ) -> Result<i32, String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let id: i32 = sqlx::query_scalar(
-        "INSERT INTO experience_programs (program_name, description, duration_min, max_capacity, price_per_person) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING program_id"
+        "INSERT INTO experience_programs (program_name, description, duration_min, max_capacity, price_per_person, is_active) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING program_id"
     )
     .bind(program_name)
     .bind(description)
     .bind(duration_min)
     .bind(max_capacity)
     .bind(price_per_person)
+    .bind(is_active)
     .fetch_one(&*state)
     .await
     .map_err(|e: sqlx::Error| e.to_string())?;
@@ -4938,7 +4941,7 @@ async fn update_experience_program(
     sqlx::query(
         "UPDATE experience_programs SET 
          program_name = $1, description = $2, duration_min = $3, 
-         max_capacity = $4, price_per_person = $5, is_active = $6, updated_at = NOW()
+         max_capacity = $4, price_per_person = $5, is_active = $6
          WHERE program_id = $7",
     )
     .bind(program_name)
@@ -4967,6 +4970,77 @@ async fn delete_experience_program(
         .await
         .map_err(|e: sqlx::Error| e.to_string())?;
     Ok(())
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct ExpMonthlyTrend {
+    pub month: String,
+    pub count: i64,
+    pub revenue: i64,
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct ExpProgramPopularity {
+    pub program_name: String,
+    pub count: i64,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ExperienceDashboardStats {
+    pub monthly_trend: Vec<ExpMonthlyTrend>,
+    pub program_popularity: Vec<ExpProgramPopularity>,
+}
+
+#[tauri::command]
+async fn get_experience_dashboard_stats(
+    state: State<'_, DbPool>,
+) -> Result<ExperienceDashboardStats, String> {
+    // 1. Monthly Trend (Last 6 months)
+    let trend_sql = r#"
+        WITH RECURSIVE months AS (
+            SELECT TO_CHAR(CURRENT_DATE - (i || ' month')::interval, 'YYYY-MM') as month
+            FROM generate_series(0, 5) i
+        )
+        SELECT 
+            m.month,
+            COALESCE(COUNT(r.reservation_id), 0) as count,
+            COALESCE(SUM(r.total_amount), 0) as revenue
+        FROM months m
+        LEFT JOIN experience_reservations r 
+            ON TO_CHAR(r.reservation_date, 'YYYY-MM') = m.month
+            AND r.status != '예약취소'
+        GROUP BY m.month
+        ORDER BY m.month ASC
+    "#;
+
+    let monthly_trend = sqlx::query_as::<_, ExpMonthlyTrend>(trend_sql)
+        .fetch_all(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. Program Popularity (Top 5)
+    let pop_sql = r#"
+        SELECT 
+            p.program_name,
+            COUNT(r.reservation_id) as count
+        FROM experience_programs p
+        LEFT JOIN experience_reservations r 
+            ON p.program_id = r.program_id 
+            AND r.status != '예약취소'
+        GROUP BY p.program_id, p.program_name
+        ORDER BY count DESC
+        LIMIT 5
+    "#;
+
+    let program_popularity = sqlx::query_as::<_, ExpProgramPopularity>(pop_sql)
+        .fetch_all(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(ExperienceDashboardStats {
+        monthly_trend,
+        program_popularity,
+    })
 }
 
 #[tauri::command]

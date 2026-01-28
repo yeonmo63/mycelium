@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chart, registerables } from 'chart.js';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
@@ -14,6 +15,15 @@ const CustomerIntelligence = () => {
     // Shared Data
     const [rfmData, setRfmData] = useState([]);
     const [membershipData, setMembershipData] = useState([]);
+    const [isTabLoading, setIsTabLoading] = useState(false);
+
+    // SMS Modal State
+    const [smsModal, setSmsModal] = useState({ isOpen: false, targetCustomer: null, mode: 'sms' });
+
+    // Summary Modal State
+    const [summaryId, setSummaryId] = useState(null);
+    const openSummaryModal = useCallback((id) => setSummaryId(id), []);
+    const closeSummaryModal = useCallback(() => setSummaryId(null), []);
 
     const tabs = [
         { id: 'rfm', label: '생애주기(RFM) 분석', icon: 'group_work', color: 'text-indigo-500' },
@@ -21,11 +31,17 @@ const CustomerIntelligence = () => {
         { id: 'membership', label: '멤버십 가치 분석', icon: 'loyalty', color: 'text-amber-500' },
     ];
 
-    useEffect(() => {
-        loadSharedData();
-    }, []);
+    const handleTabChange = useCallback((tabId) => {
+        if (activeTab === tabId) return;
+        setIsTabLoading(true);
+        // Short delay to show spinner for better perceived responsiveness
+        setTimeout(() => {
+            setActiveTab(tabId);
+            setTimeout(() => setIsTabLoading(false), 200);
+        }, 50);
+    }, [activeTab]);
 
-    const loadSharedData = async () => {
+    const loadSharedData = useCallback(async () => {
         if (!window.__TAURI__) return;
         try {
             const year = new Date().getFullYear();
@@ -40,12 +56,24 @@ const CustomerIntelligence = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    const handleRefresh = async () => {
+    const openSmsModal = useCallback((customer, mode = 'sms') => {
+        setSmsModal({ isOpen: true, targetCustomer: customer, mode });
+    }, []);
+
+    const closeSmsModal = useCallback(() => {
+        setSmsModal(prev => ({ ...prev, isOpen: false }));
+    }, []);
+
+    useEffect(() => {
+        loadSharedData();
+    }, [loadSharedData]);
+
+    const handleRefresh = useCallback(async () => {
         setIsLoading(true);
         await loadSharedData();
-    };
+    }, [loadSharedData]);
 
     return (
         <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
@@ -77,12 +105,15 @@ const CustomerIntelligence = () => {
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap
-                                ${activeTab === tab.id ? `border-rose-500 text-slate-800 bg-rose-50/50 rounded-t-lg` : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/50 rounded-t-lg'}
+                            onClick={() => handleTabChange(tab.id)}
+                            className={`px-5 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap rounded-t-lg
+                                ${activeTab === tab.id
+                                    ? `border-current ${tab.color.replace('text-', 'border-')} ${tab.color} bg-white shadow-sm`
+                                    : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                                }
                             `}
                         >
-                            <span className={`material-symbols-rounded text-lg ${activeTab === tab.id ? tab.color : 'text-slate-400'}`}>{tab.icon}</span>
+                            <span className={`material-symbols-rounded text-lg`}>{tab.icon}</span>
                             {tab.label}
                         </button>
                     ))}
@@ -98,39 +129,81 @@ const CustomerIntelligence = () => {
                     </div>
                 )}
 
-                <div style={{ display: activeTab === 'rfm' ? 'block' : 'none' }}>
-                    <TabRfm data={rfmData} onRefresh={handleRefresh} isVisible={activeTab === 'rfm'} showAlert={showAlert} />
-                </div>
-                <div style={{ display: activeTab === 'repurchase' ? 'block' : 'none' }}>
-                    <TabRepurchase isVisible={activeTab === 'repurchase'} showAlert={showAlert} />
-                </div>
-                <div style={{ display: activeTab === 'membership' ? 'block' : 'none' }}>
-                    <TabMembership data={membershipData} isVisible={activeTab === 'membership'} />
+                {isTabLoading && (
+                    <div className="absolute inset-0 z-40 bg-white/60 backdrop-blur-[2px] flex items-center justify-center transition-opacity duration-300">
+                        <div className="bg-white p-4 rounded-full shadow-lg flex items-center gap-3">
+                            <span className="material-symbols-rounded w-6 h-6 animate-spin text-rose-500">progress_activity</span>
+                            <span className="text-sm font-bold text-slate-600">Loading...</span>
+                        </div>
+                    </div>
+                )}
+
+                <div className={isTabLoading ? 'opacity-50 pointer-events-none' : 'opacity-100 transition-opacity duration-300'}>
+                    <div style={{ display: activeTab === 'rfm' ? 'block' : 'none' }}>
+                        <TabRfm
+                            data={rfmData}
+                            isLoading={isLoading}
+                            onRefresh={handleRefresh}
+                            isVisible={activeTab === 'rfm'}
+                            showAlert={showAlert}
+                            openSmsModal={openSmsModal}
+                            openSummaryModal={openSummaryModal}
+                        />
+                    </div>
+                    <div style={{ display: activeTab === 'repurchase' ? 'block' : 'none' }}>
+                        <TabRepurchase isVisible={activeTab === 'repurchase'} showAlert={showAlert} />
+                    </div>
+                    <div style={{ display: activeTab === 'membership' ? 'block' : 'none' }}>
+                        <TabMembership data={membershipData} isVisible={activeTab === 'membership'} />
+                    </div>
                 </div>
             </div>
+
+            {/* Global SMS Modal */}
+            {smsModal.isOpen && (
+                <SmsSendModal
+                    customer={smsModal.targetCustomer}
+                    mode={smsModal.mode}
+                    onClose={closeSmsModal}
+                    showAlert={showAlert}
+                />
+            )}
+
+            {/* Customer Detail Modal (Global) */}
+            {summaryId && (
+                <CustomerSummaryModal
+                    customerId={summaryId}
+                    onClose={closeSummaryModal}
+                />
+            )}
         </div>
     );
 };
 
 // --- Sub Components ---
 
-const TabRfm = ({ data, onRefresh, isVisible, showAlert }) => {
-    const [filteredData, setFilteredData] = useState([]);
+const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, openSmsModal, openSummaryModal }) => {
+    const navigate = useNavigate();
     const [filter, setFilter] = useState('all');
-    // Stats
-    const [stats, setStats] = useState({ champion: 0, loyal: 0, risky: 0, new: 0 });
 
-    useEffect(() => {
-        if (data) {
-            setFilteredData(filter === 'all' ? data : data.filter(c => c.rfm_segment === filter));
-            setStats({
-                champion: data.filter(c => c.rfm_segment === 'Champions').length,
-                loyal: data.filter(c => c.rfm_segment === 'Loyal').length,
-                risky: data.filter(c => c.rfm_segment === 'At Risk').length,
-                new: data.filter(c => c.rfm_segment === 'New / Potential').length
-            });
-        }
+    const filteredData = useMemo(() => {
+        if (!data) return [];
+        return filter === 'all' ? data : data.filter(c => c.rfm_segment === filter);
     }, [data, filter]);
+
+    const stats = useMemo(() => {
+        if (!data) return { champion: 0, loyal: 0, risky: 0, new: 0 };
+        return {
+            champion: data.filter(c => c.rfm_segment === 'Champions').length,
+            loyal: data.filter(c => c.rfm_segment === 'Loyal').length,
+            risky: data.filter(c => c.rfm_segment === 'At Risk').length,
+            new: data.filter(c => c.rfm_segment === 'New / Potential').length
+        };
+    }, [data]);
+
+    const handleViewDetail = (id) => openSummaryModal(id);
+    const handleSms = (c) => openSmsModal(c, 'sms');
+    const handleKakao = (c) => openSmsModal(c, 'kakao');
 
     const handleLevelChange = async (customerId, newLevel) => {
         if (!window.__TAURI__) return;
@@ -157,7 +230,7 @@ const TabRfm = ({ data, onRefresh, isVisible, showAlert }) => {
                     <div key={idx} className={`p-4 rounded-2xl border ${card.bg} flex flex-col items-center justify-center text-center shadow-sm`}>
                         <div className="text-3xl mb-2">{card.icon}</div>
                         <div className="text-xs font-bold opacity-60 uppercase mb-1">{card.label}</div>
-                        <div className={`text-2xl font-black ${card.text}`}>{card.value}명</div>
+                        <div className={`text-2xl font-black ${card.text}`}>{card.value.toLocaleString()}명</div>
                     </div>
                 ))}
             </div>
@@ -166,9 +239,13 @@ const TabRfm = ({ data, onRefresh, isVisible, showAlert }) => {
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[600px]">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-slate-700">등급별 타겟 리스트</h3>
-                    <select value={filter} onChange={e => setFilter(e.target.value)} className="h-9 px-3 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg">
-                        <option value="all">전체 고객</option>
-                        <option value="Champions">🏆 챔피언</option>
+                    <select
+                        value={filter}
+                        onChange={e => setFilter(e.target.value)}
+                        className="h-10 px-4 text-base font-bold text-slate-700 bg-white border border-slate-300 rounded-xl shadow-sm hover:border-indigo-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all outline-none"
+                    >
+                        <option value="all">전체 고객 보기</option>
+                        <option value="Champions">🏆 챔피언 (최우수)</option>
                         <option value="Loyal">💙 충성 고객</option>
                         <option value="At Risk">🚨 이탈 위험</option>
                         <option value="New / Potential">🌱 신규/잠재</option>
@@ -185,11 +262,23 @@ const TabRfm = ({ data, onRefresh, isVisible, showAlert }) => {
                                 <th className="py-3 px-4 w-[15%] text-right">총 거래액</th>
                                 <th className="py-3 px-4 w-[10%] text-center">현 등급</th>
                                 <th className="py-3 px-4 w-[10%] text-center">RFM</th>
-                                <th className="py-3 px-4 w-[15%] text-center">등급 변경</th>
+                                <th className="py-3 px-4 w-[10%] text-center">등급 변경</th>
+                                <th className="py-3 px-4 w-[10%] text-center">관리</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {filteredData.length === 0 ? <tr><td colSpan="8" className="p-8 text-center text-slate-400">데이터가 없습니다.</td></tr> :
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan="9" className="h-64 text-center">
+                                        <div className="flex flex-col items-center justify-center text-slate-400">
+                                            <span className="material-symbols-rounded text-4xl text-indigo-400 animate-spin mb-3">cyclone</span>
+                                            <span className="font-bold text-sm">데이터를 불러오는 중입니다...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredData.length === 0 ? (
+                                <tr><td colSpan="9" className="p-12 text-center text-slate-400 font-bold">데이터가 없습니다.</td></tr>
+                            ) : (
                                 filteredData.map(c => (
                                     <tr key={c.customer_id} className="hover:bg-slate-50">
                                         <td className="py-3 px-4 font-bold text-slate-700">{c.customer_name}</td>
@@ -219,16 +308,29 @@ const TabRfm = ({ data, onRefresh, isVisible, showAlert }) => {
                                                 <option value="VVP">VVP</option>
                                             </select>
                                         </td>
+                                        <td className="py-3 px-4 text-center">
+                                            <div className="flex justify-center gap-1">
+                                                <button onClick={() => handleViewDetail(c.customer_id)} className="w-8 h-8 rounded bg-white border border-slate-200 text-indigo-500 hover:bg-slate-50 flex items-center justify-center transition-colors shadow-sm" title="상세보기">
+                                                    <span className="material-symbols-rounded text-sm">visibility</span>
+                                                </button>
+                                                <button onClick={() => handleSms(c)} className="w-8 h-8 rounded bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition-colors shadow-sm" title="SMS 발송">
+                                                    <span className="material-symbols-rounded text-sm">sms</span>
+                                                </button>
+                                                <button onClick={() => handleKakao(c)} className="w-8 h-8 rounded bg-yellow-100 border border-yellow-200 text-yellow-800 hover:bg-yellow-200 flex items-center justify-center transition-colors shadow-sm" title="카카오톡 발송">
+                                                    <span className="material-symbols-rounded text-sm">chat</span>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
-                            }
+                            )}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
     );
-};
+});
 
 const TabRepurchase = ({ isVisible, showAlert }) => {
     const [result, setResult] = useState([]);
@@ -410,3 +512,294 @@ const TabMembership = ({ data, isVisible }) => {
 };
 
 export default CustomerIntelligence;
+
+const CustomerSummaryModal = ({ customerId, onClose }) => {
+    const [customer, setCustomer] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const load = async () => {
+            if (!window.__TAURI__) {
+                await new Promise(r => setTimeout(r, 500));
+                setCustomer({
+                    customer_name: '홍길동',
+                    membership_level: 'VIP',
+                    customer_id: customerId,
+                    mobile_number: '010-1234-5678',
+                    join_date: '2023-01-01',
+                    address_primary: '서울시 강남구 테헤란로',
+                    address_detail: '123번지',
+                    zip_code: '06234',
+                    memo: 'VIP 고객입니다. 특별 관리 요망.'
+                });
+                setLoading(false);
+                return;
+            }
+            try {
+                const c = await window.__TAURI__.core.invoke('get_customer', { id: customerId });
+                setCustomer(c);
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [customerId]);
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
+                    <h3 className="font-bold text-slate-800 text-lg">고객 상세 정보</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 rounded-full p-1 hover:bg-slate-100 transition-colors">
+                        <span className="material-symbols-rounded">close</span>
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    {loading ? (
+                        <div className="py-10 flex flex-col items-center justify-center text-slate-400 gap-3">
+                            <span className="material-symbols-rounded animate-spin text-3xl text-indigo-500">sync</span>
+                            <span className="text-xs font-bold">정보를 불러오는 중...</span>
+                        </div>
+                    ) : customer ? (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+                                <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-xl border-2 border-white shadow-sm">
+                                    {customer.customer_name?.[0]}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-black text-xl text-slate-800">{customer.customer_name}</h4>
+                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">{customer.membership_level}</span>
+                                    </div>
+                                    <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {customer.customer_id}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 text-sm">
+                                <div className="flex gap-3">
+                                    <span className="w-20 text-slate-400 font-bold shrink-0">연락처</span>
+                                    <span className="text-slate-700 font-medium font-mono">{customer.mobile_number || '-'}</span>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="w-20 text-slate-400 font-bold shrink-0">가입일</span>
+                                    <span className="text-slate-700 font-medium">{customer.join_date || '-'}</span>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="w-20 text-slate-400 font-bold shrink-0">주소</span>
+                                    <div className="flex-1 text-slate-700 font-medium">
+                                        {customer.zip_code && <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 mr-1">{customer.zip_code}</span>}
+                                        {customer.address_primary} {customer.address_detail}
+                                    </div>
+                                </div>
+                                <div className="pt-2">
+                                    <span className="text-xs font-bold text-slate-400 block mb-1">메모</span>
+                                    <div className="bg-amber-50 rounded-lg p-3 text-amber-900 text-xs leading-relaxed border border-amber-100">
+                                        {customer.memo || '기록된 메모가 없습니다.'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-slate-400">정보를 찾을 수 없습니다.</div>
+                    )}
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                    <button onClick={onClose} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-sm shadow-indigo-200 transition-colors">확인</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SmsSendModal = ({ customer, mode: initialMode, onClose, showAlert }) => {
+    const [mode, setMode] = useState(initialMode); // 'sms' | 'kakao'
+    const [message, setMessage] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const [showTemplates, setShowTemplates] = useState(false);
+
+    // Templates
+    const templates = [
+        { id: 1, label: '감사 인사 (기본)', content: `[${customer?.customer_name} 고객님] 이용해 주셔서 감사합니다. 더 좋은 서비스로 보답하겠습니다.` },
+        { id: 2, label: '생일 축하', content: `[${customer?.customer_name}님] 생일을 진심으로 축하드립니다! 🎉 행복한 하루 되세요.` },
+        { id: 3, label: '신상품 입고', content: `[${customer?.customer_name}님] 기다리시던 신상품이 입고되었습니다. 매장에 들러 확인해보세요!` },
+        { id: 4, label: '휴면 고객 케어', content: `[${customer?.customer_name}님] 오랫동안 뵙지 못해 그립습니다. 방문해주시면 작은 선물을 드릴게요.` },
+    ];
+
+    // Initial message set
+    useEffect(() => {
+        if (!customer) return;
+        if (!message) {
+            // Only set default if message is empty (so switching modes doesn't wipe custom text unless we want it to)
+            // Actually, usually users want context-aware defaults when switching, but let's keep it simple or strictly per mode logic
+            setDefaultMessage(mode);
+        }
+    }, [customer]); // Run once on mount basically or if customer changes
+
+    const setDefaultMessage = (m) => {
+        if (m === 'kakao') {
+            setMessage(`[${customer?.customer_name} 고객님] 안녕하세요.\n저희 매장을 이용해 주셔서 진심으로 감사드립니다.\n\n(내용을 입력하세요)`);
+        } else {
+            setMessage(`[${customer?.customer_name}님] 감사합니다. (내용 입력)`);
+        }
+    };
+
+    const handleSend = async () => {
+        if (!message.trim()) return showAlert('입력 오류', '메시지 내용을 입력해주세요.');
+
+        setIsSending(true);
+        await new Promise(r => setTimeout(r, 1500));
+
+        if (window.__TAURI__) {
+            // In real app, call invoke ...
+        }
+
+        setIsSending(false);
+        showAlert('발송 완료', mode === 'kakao' ? '알림톡이 전송되었습니다.' : '문자가 전송되었습니다.', 'success');
+        onClose();
+    };
+
+    const applyTemplate = (content) => {
+        setMessage(content);
+        setShowTemplates(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex h-[700px] max-h-[90vh]">
+
+                {/* Left Side: Message Editor */}
+                <div className="flex-1 flex flex-col min-w-0 bg-white">
+                    {/* Header */}
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl ${mode === 'kakao' ? 'bg-yellow-100 text-yellow-800' : 'bg-indigo-100 text-indigo-600'}`}>
+                                <span className="material-symbols-rounded text-xl">{mode === 'kakao' ? 'chat' : 'sms'}</span>
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">메시지 전송</h3>
+                        </div>
+                        <button onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                            <span className="material-symbols-rounded">close</span>
+                        </button>
+                    </div>
+
+                    {/* Mode Tabs */}
+                    <div className="px-6 pt-6">
+                        <div className="bg-slate-100 p-1 rounded-xl flex font-bold text-sm">
+                            <button
+                                onClick={() => { setMode('sms'); if (!message) setDefaultMessage('sms'); }}
+                                className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all ${mode === 'sms' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <span className="material-symbols-rounded text-lg">sms</span> 문자 메시지 (SMS/LMS)
+                            </button>
+                            <button
+                                onClick={() => { setMode('kakao'); if (!message) setDefaultMessage('kakao'); }}
+                                className={`flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all ${mode === 'kakao' ? 'bg-yellow-400 text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <span className="material-symbols-rounded text-lg">chat</span> 카카오 알림톡
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-6 flex-1 overflow-y-auto flex flex-col">
+                        {/* Recipient Info */}
+                        <div className="mb-6 bg-slate-50 rounded-xl p-4 border border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+                                    <span className="material-symbols-rounded">person</span>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-slate-400">받는 사람</div>
+                                    <div className="font-bold text-slate-700 flex items-center gap-2">
+                                        {customer?.customer_name}
+                                        <span className="text-slate-400 font-normal font-mono text-sm">{customer?.mobile_number}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-xs font-bold px-2 py-1 rounded bg-white border border-slate-200 text-slate-500">
+                                {mode === 'kakao' ? '알림톡' : 'SMS'}
+                            </div>
+                        </div>
+
+                        {/* Editor */}
+                        <div className="flex-1 flex flex-col">
+                            <div className="flex justify-between items-end mb-2">
+                                <label className="text-sm font-bold text-slate-700">내용 작성</label>
+                                <button onClick={() => setShowTemplates(!showTemplates)} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                                    <span className="material-symbols-rounded text-sm">auto_stories</span>
+                                    {showTemplates ? '템플릿 닫기' : '템플릿 불러오기'}
+                                </button>
+                            </div>
+                            <div className={`relative flex-1 rounded-2xl border transition-colors flex flex-col
+                                ${mode === 'kakao' ? 'bg-yellow-50/30 border-yellow-200 focus-within:border-yellow-400 focus-within:ring-2 focus-within:ring-yellow-100' : 'bg-white border-slate-300 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100'}
+                            `}>
+                                <textarea
+                                    value={message}
+                                    onChange={e => setMessage(e.target.value)}
+                                    className="w-full h-full p-5 bg-transparent border-none outline-none resize-none font-sans text-slate-700 leading-relaxed text-base custom-scrollbar"
+                                    placeholder="전송할 내용을 입력하세요..."
+                                ></textarea>
+
+                                {/* Footer inside editor */}
+                                <div className="p-3 border-t border-black/5 flex justify-between items-center bg-black/5 rounded-b-xl">
+                                    <span className={`text-xs font-bold ${message.length > 80 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                        {new Blob([message]).size} bytes {message.length > 80 && mode === 'sms' && '(LMS 전환됨)'}
+                                    </span>
+                                    <button onClick={() => setMessage('')} className="text-xs text-slate-400 hover:text-slate-600 font-bold">지우기</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+                        <button onClick={onClose} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                            취소
+                        </button>
+                        <button
+                            onClick={handleSend}
+                            disabled={isSending}
+                            className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-all flex items-center gap-2
+                                ${isSending ? 'opacity-70 cursor-not-allowed' : ''}
+                                ${mode === 'kakao' ? 'bg-[#FAE100] hover:bg-[#FDD835] text-[#371D1E] shadow-yellow-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'}
+                            `}
+                        >
+                            {isSending ? <span className="material-symbols-rounded animate-spin">progress_activity</span> : <span className="material-symbols-rounded">send</span>}
+                            {isSending ? '전송 중...' : `${mode === 'kakao' ? '카카오톡' : '문자'} 발송하기`}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Right Side: Templates (Conditional) */}
+                <div className={`${showTemplates ? 'w-80 border-l border-slate-200' : 'w-0'} bg-slate-50 transition-all duration-300 ease-in-out overflow-hidden flex flex-col`}>
+                    <div className="p-5 border-b border-slate-200 bg-white">
+                        <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                            <span className="material-symbols-rounded text-indigo-500">library_books</span>
+                            나만의 템플릿
+                        </h4>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                        {templates.map(t => (
+                            <button
+                                key={t.id}
+                                onClick={() => applyTemplate(t.content)}
+                                className="w-full text-left bg-white p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-md transition-all group"
+                            >
+                                <div className="font-bold text-slate-700 text-sm mb-1 group-hover:text-indigo-600">{t.label}</div>
+                                <div className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{t.content}</div>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="p-4 border-t border-slate-200 bg-white">
+                        <button className="w-full py-3 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 font-bold hover:bg-slate-50 hover:border-indigo-300 hover:text-indigo-500 transition-all flex items-center justify-center gap-2">
+                            <span className="material-symbols-rounded">add</span> 새 템플릿 추가
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+};

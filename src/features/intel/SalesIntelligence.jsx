@@ -16,6 +16,19 @@ const SalesIntelligence = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [loadingText, setLoadingText] = useState('데이터 분석 중...');
     const [sharedData, setSharedData] = useState({ trend: [], topProducts: [] });
+    const [isTabLoading, setIsTabLoading] = useState(false);
+
+    const handleTabChange = (tabId) => {
+        if (activeTab === tabId) return;
+        setIsTabLoading(true);
+        // Small delay to allow the spinner to render and the UI thread to breathe
+        // tailored to make it feel "responsive" rather than "frozen"
+        setTimeout(() => {
+            setActiveTab(tabId);
+            // Keep spinner for a tiny bit longer to ensure render is done
+            setTimeout(() => setIsTabLoading(false), 300);
+        }, 50);
+    };
 
     // -- Tabs --
     const tabs = [
@@ -79,7 +92,7 @@ const SalesIntelligence = () => {
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => handleTabChange(tab.id)}
                             className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap
                                 ${activeTab === tab.id ? `border-indigo-600 text-slate-800 bg-indigo-50/50 rounded-t-lg` : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50/50 rounded-t-lg'}
                             `}
@@ -100,23 +113,34 @@ const SalesIntelligence = () => {
                     </div>
                 )}
 
-                <div style={{ display: activeTab === 'advice' ? 'block' : 'none' }}>
-                    <TabAdvice sharedData={sharedData} isVisible={activeTab === 'advice'} showAlert={showAlert} />
-                </div>
-                <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}>
-                    <TabSummary sharedData={sharedData} isVisible={activeTab === 'summary'} />
-                </div>
-                <div style={{ display: activeTab === 'trend' ? 'block' : 'none' }}>
-                    <TabTrend sharedData={sharedData} isVisible={activeTab === 'trend'} />
-                </div>
-                <div style={{ display: activeTab === 'product' ? 'block' : 'none' }}>
-                    <TabProductRegion isVisible={activeTab === 'product'} />
-                </div>
-                <div style={{ display: activeTab === 'forecast' ? 'block' : 'none' }}>
-                    <TabForecast isVisible={activeTab === 'forecast'} showAlert={showAlert} />
-                </div>
-                <div style={{ display: activeTab === 'profit' ? 'block' : 'none' }}>
-                    <TabProfit isVisible={activeTab === 'profit'} />
+                {isTabLoading && (
+                    <div className="absolute inset-0 z-40 bg-white/60 backdrop-blur-[2px] flex items-center justify-center transition-opacity duration-300">
+                        <div className="bg-white p-4 rounded-full shadow-lg flex items-center gap-3">
+                            <span className="material-symbols-rounded w-6 h-6 animate-spin text-indigo-600">progress_activity</span>
+                            <span className="text-sm font-bold text-slate-600">Loading...</span>
+                        </div>
+                    </div>
+                )}
+
+                <div className={isTabLoading ? 'opacity-50 pointer-events-none' : 'opacity-100 transition-opacity duration-300'}>
+                    <div style={{ display: activeTab === 'advice' ? 'block' : 'none' }}>
+                        <TabAdvice sharedData={sharedData} isVisible={activeTab === 'advice'} showAlert={showAlert} />
+                    </div>
+                    <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}>
+                        <TabSummary sharedData={sharedData} isVisible={activeTab === 'summary'} />
+                    </div>
+                    <div style={{ display: activeTab === 'trend' ? 'block' : 'none' }}>
+                        <TabTrend sharedData={sharedData} isVisible={activeTab === 'trend'} />
+                    </div>
+                    <div style={{ display: activeTab === 'product' ? 'block' : 'none' }}>
+                        <TabProductRegion isVisible={activeTab === 'product'} />
+                    </div>
+                    <div style={{ display: activeTab === 'forecast' ? 'block' : 'none' }}>
+                        <TabForecast isVisible={activeTab === 'forecast'} showAlert={showAlert} />
+                    </div>
+                    <div style={{ display: activeTab === 'profit' ? 'block' : 'none' }}>
+                        <TabProfit isVisible={activeTab === 'profit'} />
+                    </div>
                 </div>
             </div>
         </div>
@@ -482,11 +506,11 @@ const TabTrend = ({ sharedData, isVisible }) => {
                                     }
                                     return (
                                         <tr key={row.year} className="hover:bg-slate-50 transition-colors">
-                                            <td className="py-3 px-4 text-center font-bold text-slate-700">{row.year}년</td>
-                                            <td className="py-3 px-4 text-right text-slate-600">{row.record_count.toLocaleString()}건</td>
-                                            <td className="py-3 px-4 text-right text-slate-600">{row.total_quantity.toLocaleString()}개</td>
-                                            <td className="py-3 px-4 text-right font-black text-slate-800">{formatCurrency(row.total_amount)}</td>
-                                            <td className={`py-3 px-4 text-right font-bold ${growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                                            <td className="py-3 px-4 text-center font-bold text-slate-900">{row.year}년</td>
+                                            <td className="py-3 px-4 text-right text-black">{row.record_count.toLocaleString()}건</td>
+                                            <td className="py-3 px-4 text-right text-black">{row.total_quantity.toLocaleString()}개</td>
+                                            <td className="py-3 px-4 text-right font-black text-slate-900">{formatCurrency(row.total_amount)}</td>
+                                            <td className={`py-3 px-4 text-right font-bold ${growth >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
                                                 {growth > 0 && '+'}{growth}%
                                             </td>
                                         </tr>
@@ -602,7 +626,14 @@ const TabProductRegion = ({ isVisible }) => {
                                 <thead className="sticky top-0 bg-white shadow-sm">
                                     <tr className="text-slate-500"><th className="py-2 text-left px-4">품목</th><th className="py-2 text-right px-4">매출</th></tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-50">{products.map(p => <tr key={p.product_id}><td className="py-2 px-4">{p.product_name}</td><td className="py-2 px-4 text-right font-mono">{formatCurrency(p.total_amount)}</td></tr>)}</tbody>
+                                <tbody className="divide-y divide-slate-50">
+                                    {products.map(p => (
+                                        <tr key={p.product_id} className="hover:bg-slate-50">
+                                            <td className="py-2 px-4 text-slate-700 font-bold">{p.product_name}</td>
+                                            <td className="py-2 px-4 text-right font-mono text-slate-900 font-bold">{formatCurrency(p.total_amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
                             </table>
                         </div>
                     </div>
@@ -613,7 +644,14 @@ const TabProductRegion = ({ isVisible }) => {
                                 <thead className="sticky top-0 bg-white shadow-sm">
                                     <tr className="text-slate-500"><th className="py-2 text-left px-4">지역</th><th className="py-2 text-right px-4">매출</th></tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-50">{regions.map((r, i) => <tr key={i}><td className="py-2 px-4">{r.region}</td><td className="py-2 px-4 text-right font-mono">{formatCurrency(r.total_amount)}</td></tr>)}</tbody>
+                                <tbody className="divide-y divide-slate-50">
+                                    {regions.map((r, i) => (
+                                        <tr key={i} className="hover:bg-slate-50">
+                                            <td className="py-2 px-4 text-slate-700 font-bold">{r.region}</td>
+                                            <td className="py-2 px-4 text-right font-mono text-slate-900 font-bold">{formatCurrency(r.total_amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
                             </table>
                         </div>
                     </div>

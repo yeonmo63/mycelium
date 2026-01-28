@@ -34,6 +34,14 @@ import SalesLedger from './features/sales/SalesLedger';
 import SalesPersonalHistory from './features/sales/SalesPersonalHistory';
 import SalesIntelligence from './features/intel/SalesIntelligence';
 import CustomerIntelligence from './features/intel/CustomerIntelligence';
+import ProductAssociation from './features/intel/ProductAssociation';
+import OnlineReputation from './features/marketing/OnlineReputation';
+import RegionAnalysis from './features/intel/RegionAnalysis';
+import ProductSales from './features/product/ProductSales';
+import ExperienceProgram from './features/exp/ExperienceProgram';
+import ExperienceReservation from './features/exp/ExperienceReservation';
+import ExperienceStatus from './features/exp/ExperienceStatus';
+import ExperienceSchedule from './features/exp/ExperienceSchedule';
 import Placeholder from './components/Placeholder';
 
 const router = createBrowserRouter(
@@ -62,15 +70,15 @@ const router = createBrowserRouter(
       <Route path="status/financial-analysis" element={<FinanceAnalysis />} />
       <Route path="intel/sales" element={<SalesIntelligence />} />
       <Route path="intel/customer" element={<CustomerIntelligence />} />
-      <Route path="marketing/association" element={<Placeholder title="상품 연관 분석 (MBA)" />} />
-      <Route path="marketing/orm" element={<Placeholder title="온라인 AI 평판 분석 (ORM)" />} />
-      <Route path="intel/region-analysis" element={<Placeholder title="AI 지역별 매출 히트맵" />} />
-      <Route path="product/sales" element={<Placeholder title="상품별 판매 현황" />} />
+      <Route path="marketing/association" element={<ProductAssociation />} />
+      <Route path="marketing/orm" element={<OnlineReputation />} />
+      <Route path="intel/region-analysis" element={<RegionAnalysis />} />
+      <Route path="product/sales" element={<ProductSales />} />
       <Route path="customer/sms" element={<CustomerSms />} />
-      <Route path="exp/reservation-entry" element={<Placeholder title="체험 예약 접수" />} />
-      <Route path="exp/reservation-status" element={<Placeholder title="체험 예약 현황" />} />
-      <Route path="exp/program-mgmt" element={<Placeholder title="프로그램 설정" />} />
-      <Route path="schedule" element={<Placeholder title="일정 관리" />} />
+      <Route path="exp/reservation-entry" element={<ExperienceReservation />} />
+      <Route path="exp/reservation-status" element={<ExperienceStatus />} />
+      <Route path="exp/program-mgmt" element={<ExperienceProgram />} />
+      <Route path="schedule" element={<ExperienceSchedule />} />
       <Route path="settings/product-list" element={<SettingsProduct />} />
       <Route path="settings/user-list" element={<Placeholder title="사용자 관리" />} />
       <Route path="settings/company-info" element={<Placeholder title="업체 정보" />} />
