@@ -2563,154 +2563,6 @@ async fn get_user_list(state: State<'_, DbPool>) -> Result<Vec<User>, String> {
 }
 
 #[tauri::command]
-async fn create_user(
-    state: State<'_, DbPool>,
-    username: String,
-    password: Option<String>,
-    role: String,
-) -> Result<(), String> {
-    // Hash password if provided
-    let password_hash = if let Some(pwd) = password {
-        Some(hash(pwd, DEFAULT_COST).map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
-
-    sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)")
-        .bind(username)
-        .bind(password_hash)
-        .bind(role)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn update_user(
-    state: State<'_, DbPool>,
-    id: i32,
-    username: String,
-    password: Option<String>,
-    role: String,
-) -> Result<(), String> {
-    if let Some(pwd) = password {
-        // If password is changed, hash it
-        let password_hash = hash(pwd, DEFAULT_COST).map_err(|e| e.to_string())?;
-        sqlx::query("UPDATE users SET username=$1, password_hash=$2, role=$3 WHERE id=$4")
-            .bind(username)
-            .bind(password_hash)
-            .bind(role)
-            .bind(id)
-            .execute(&*state)
-            .await
-            .map_err(|e: sqlx::Error| e.to_string())?;
-    } else {
-        // Just update other fields
-        sqlx::query("UPDATE users SET username=$1, role=$2 WHERE id=$3")
-            .bind(username)
-            .bind(role)
-            .bind(id)
-            .execute(&*state)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn delete_user(state: State<'_, DbPool>, id: i32) -> Result<(), String> {
-    let result = sqlx::query("DELETE FROM users WHERE id = $1 AND username != 'admin'")
-        .bind(id)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
-
-    if result.rows_affected() == 0 {
-        return Err(
-            "사용자를 삭제할 수 없습니다. (존재하지 않거나 'admin' 계정입니다)".to_string(),
-        );
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_company_info(state: State<'_, DbPool>) -> Result<Option<CompanyInfo>, String> {
-    // Assuming singleton row with id=1
-    sqlx::query_as::<_, CompanyInfo>("SELECT * FROM company_info WHERE id = 1")
-        .fetch_optional(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())
-}
-
-#[tauri::command]
-async fn save_company_info(
-    state: State<'_, DbPool>,
-    company_name: String,
-    representative_name: Option<String>,
-    address: Option<String>,
-    business_type: Option<String>,
-    item: Option<String>,
-    phone_number: Option<String>,
-    mobile_number: Option<String>,
-    business_reg_number: Option<String>,
-) -> Result<(), String> {
-    // Check if record exists
-    let existing: Option<(i32,)> = sqlx::query_as("SELECT id FROM company_info LIMIT 1")
-        .fetch_optional(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
-
-    if let Some((id,)) = existing {
-        // UPDATE
-        sqlx::query(
-            "UPDATE company_info SET 
-                company_name = $1, 
-                representative_name = $2, 
-                address = $3,
-                business_type = $4,
-                item = $5,
-                phone_number = $6,
-                mobile_number = $7,
-                business_reg_number = $8,
-                updated_at = NOW()
-             WHERE id = $9",
-        )
-        .bind(&company_name)
-        .bind(&representative_name)
-        .bind(&address)
-        .bind(&business_type)
-        .bind(&item)
-        .bind(&phone_number)
-        .bind(&mobile_number)
-        .bind(&business_reg_number)
-        .bind(id)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
-    } else {
-        // INSERT
-        sqlx::query(
-            "INSERT INTO company_info 
-                (company_name, representative_name, address, business_type, item, phone_number, mobile_number, business_reg_number) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-        )
-        .bind(&company_name)
-        .bind(&representative_name)
-        .bind(&address)
-        .bind(&business_type)
-        .bind(&item)
-        .bind(&phone_number)
-        .bind(&mobile_number)
-        .bind(&business_reg_number)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
-    }
-
-    Ok(())
-}
-#[tauri::command]
 async fn create_product(
     state: State<'_, DbPool>,
     product_name: String,
@@ -3975,21 +3827,6 @@ async fn delete_event(state: State<'_, DbPool>, event_id: String) -> Result<(), 
 }
 
 #[tauri::command]
-async fn verify_admin_password(state: State<'_, DbPool>, password: String) -> Result<bool, String> {
-    let result: Option<(String,)> =
-        sqlx::query_as("SELECT password_hash FROM users WHERE username = 'admin'")
-            .fetch_optional(&*state)
-            .await
-            .map_err(|e: sqlx::Error| e.to_string())?;
-
-    if let Some((hash_str,)) = result {
-        verify(&password, &hash_str).map_err(|e| e.to_string())
-    } else {
-        Err("관리자 계정(admin)을 찾을 수 없습니다.".to_string())
-    }
-}
-
-#[tauri::command]
 async fn login_user(
     state: State<'_, DbPool>,
     username: String,
@@ -4250,10 +4087,10 @@ pub fn run() {
             get_churn_risk_customers,
             get_gemini_api_key_for_ui,
             save_gemini_api_key,
-            save_naver_keys,
-            get_naver_client_id_for_ui,
-            save_sms_config,
             get_sms_config_for_ui,
+            save_sms_config,
+            get_naver_client_id_for_ui,
+            save_naver_keys,
             open_external_url,
             fetch_naver_search,
             get_ai_marketing_proposal,
@@ -4309,12 +4146,21 @@ pub fn run() {
             get_vendor_purchase_ranking,
             trigger_auto_backup,
             get_auto_backups,
+            restore_database,
+            restore_database_sql,
+            delete_backup,
             check_daily_backup,
             save_external_backup_path,
             get_external_backup_path,
             login,
             change_password,
             get_all_users,
+            get_company_info,
+            save_company_info,
+            create_user,
+            update_user,
+            delete_user,
+            verify_admin_password,
             confirm_exit,
         ])
         .run(tauri::generate_context!())
@@ -4400,6 +4246,25 @@ pub struct AutoBackupItem {
     pub created_at: String,
     pub timestamp: i64,
     pub backup_type: String, // "자동" or "일일"
+}
+
+#[tauri::command]
+async fn restore_database_sql(state: State<'_, DbPool>, path: String) -> Result<String, String> {
+    let sql = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+
+    let mut conn = state.acquire().await.map_err(|e| e.to_string())?;
+    sqlx::query(&sql)
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok("복구가 완료되었습니다. 서비스를 다시 시작해 주세요.".to_string())
+}
+
+#[tauri::command]
+async fn delete_backup(path: String) -> Result<(), String> {
+    std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -7899,6 +7764,30 @@ pub struct LoginResponse {
 }
 
 #[tauri::command]
+async fn verify_admin_password(state: State<'_, DbPool>, password: String) -> Result<bool, String> {
+    let user_result = sqlx::query_as::<_, User>(
+        "SELECT id, username, password_hash, role, created_at FROM users WHERE username = 'admin'",
+    )
+    .fetch_optional(&*state)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    match user_result {
+        Some(user) => {
+            if let Some(hash) = &user.password_hash {
+                match verify(&password, hash) {
+                    Ok(is_valid) => Ok(is_valid),
+                    Err(_) => Err("Password verification error".to_string()),
+                }
+            } else {
+                Err("Admin user has no password set".to_string())
+            }
+        }
+        None => Err("Admin user not found".to_string()),
+    }
+}
+
+#[tauri::command]
 async fn login(
     state: State<'_, DbPool>,
     username: String,
@@ -8049,4 +7938,178 @@ async fn get_all_users(state: State<'_, DbPool>) -> Result<Vec<User>, String> {
     .map_err(|e| e.to_string())?;
 
     Ok(users)
+}
+
+#[tauri::command]
+async fn create_user(
+    state: State<'_, DbPool>,
+    username: String,
+    password: Option<String>,
+    role: String,
+) -> Result<(), String> {
+    if username.trim().is_empty() {
+        return Err("아이디를 입력해주세요.".to_string());
+    }
+
+    let password_hash = if let Some(pwd) = password {
+        if pwd.trim().is_empty() {
+            None
+        } else {
+            Some(hash(&pwd, DEFAULT_COST).map_err(|e| e.to_string())?)
+        }
+    } else {
+        None
+    };
+
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)")
+        .bind(username)
+        .bind(password_hash)
+        .bind(role)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_user(
+    state: State<'_, DbPool>,
+    id: i32,
+    username: String,
+    password: Option<String>,
+    role: String,
+) -> Result<(), String> {
+    let password_hash = if let Some(pwd) = password {
+        if pwd.trim().is_empty() {
+            None
+        } else {
+            Some(hash(&pwd, DEFAULT_COST).map_err(|e| e.to_string())?)
+        }
+    } else {
+        None
+    };
+
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    if let Some(hash) = password_hash {
+        sqlx::query("UPDATE users SET username = $1, password_hash = $2, role = $3 WHERE id = $4")
+            .bind(username)
+            .bind(hash)
+            .bind(role)
+            .bind(id)
+            .execute(&*state)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        sqlx::query("UPDATE users SET username = $1, role = $2 WHERE id = $3")
+            .bind(username)
+            .bind(role)
+            .bind(id)
+            .execute(&*state)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_user(state: State<'_, DbPool>, id: i32) -> Result<(), String> {
+    let username: (String,) = sqlx::query_as("SELECT username FROM users WHERE id = $1")
+        .bind(id)
+        .fetch_one(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if username.0 == "admin" {
+        return Err("관리자 계정은 삭제할 수 없습니다.".to_string());
+    }
+
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(id)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_company_info(state: State<'_, DbPool>) -> Result<Option<CompanyInfo>, String> {
+    let row = sqlx::query_as::<_, CompanyInfo>(
+        "SELECT id, company_name, representative_name, phone_number, mobile_number, business_reg_number, registration_date, memo FROM company_info LIMIT 1"
+    )
+    .fetch_optional(&*state)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(row)
+}
+
+#[tauri::command]
+async fn save_company_info(
+    state: State<'_, DbPool>,
+    company_name: String,
+    representative_name: Option<String>,
+    phone_number: Option<String>,
+    mobile_number: Option<String>,
+    business_reg_number: Option<String>,
+    registration_date: Option<String>,
+    memo: Option<String>,
+) -> Result<(), String> {
+    let reg_date = registration_date.and_then(|s| {
+        chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.and_hms_opt(0, 0, 0))
+    });
+
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM company_info")
+        .fetch_one(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if count.0 > 0 {
+        sqlx::query(
+            "UPDATE company_info SET 
+                company_name = $1, 
+                representative_name = $2, 
+                phone_number = $3, 
+                mobile_number = $4, 
+                business_reg_number = $5, 
+                registration_date = $6, 
+                memo = $7,
+                updated_at = CURRENT_TIMESTAMP",
+        )
+        .bind(company_name)
+        .bind(representative_name)
+        .bind(phone_number)
+        .bind(mobile_number)
+        .bind(business_reg_number)
+        .bind(reg_date)
+        .bind(memo)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+    } else {
+        sqlx::query(
+            "INSERT INTO company_info (company_name, representative_name, phone_number, mobile_number, business_reg_number, registration_date, memo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(company_name)
+        .bind(representative_name)
+        .bind(phone_number)
+        .bind(mobile_number)
+        .bind(business_reg_number)
+        .bind(reg_date)
+        .bind(memo)
+        .execute(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }

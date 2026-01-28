@@ -1,16 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { formatCurrency, parseNumber } from '../../utils/common';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
+import { useAdminGuard } from '../../hooks/useAdminGuard';
+import {
+    Search,
+    Plus,
+    Edit2,
+    Trash2,
+    AlertTriangle,
+    Package,
+    Layers,
+    X,
+    CheckCircle2,
+    Lock
+} from 'lucide-react';
+import { formatCurrency } from '../../utils/common';
 
 const SettingsProduct = () => {
     const { showAlert, showConfirm } = useModal();
-    const [products, setProducts] = useState([]);
+    const { isAuthorized, checkAdmin } = useAdminGuard();
+
+    // --- State Management ---
     const [allProducts, setAllProducts] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [tabMode, setTabMode] = useState('product'); // 'product' | 'material'
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [form, setForm] = useState({
-        id: null,
+    const [editingProduct, setEditingProduct] = useState(null);
+    const [formData, setFormData] = useState({
         name: '',
         spec: '',
         price: 0,
@@ -21,26 +40,125 @@ const SettingsProduct = () => {
         materialRatio: 1.0
     });
 
+    // --- Admin Guard Check ---
     useEffect(() => {
-        loadProducts();
+        const init = async () => {
+            const ok = await checkAdmin();
+            if (!ok) {
+                // Return to dashboard or previous page if cancelled or failed
+                window.history.back();
+            }
+        };
+        init();
+    }, []);
+
+    // --- Data Loading ---
+    const loadProducts = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const list = await invoke('get_product_list');
+            setAllProducts(list || []);
+        } catch (err) {
+            console.error("Failed to load products:", err);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
 
     useEffect(() => {
-        filterProducts();
-    }, [searchQuery, tabMode, allProducts]);
+        if (isAuthorized) {
+            loadProducts();
+        }
+    }, [isAuthorized, loadProducts]);
 
-    const loadProducts = async () => {
-        if (!window.__TAURI__) return;
+    // --- Handlers ---
+    const openModal = (product = null) => {
+        if (product) {
+            setEditingProduct(product);
+            setFormData({
+                name: product.product_name,
+                spec: product.specification || '',
+                price: product.unit_price,
+                cost: product.cost_price || 0,
+                safety: product.safety_stock || 10,
+                type: product.item_type || 'product',
+                materialId: product.material_id || null,
+                materialRatio: product.material_ratio || 1.0
+            });
+        } else {
+            setEditingProduct(null);
+            setFormData({
+                name: '',
+                spec: '',
+                price: 0,
+                cost: 0,
+                safety: 10,
+                type: tabMode,
+                materialId: null,
+                materialRatio: 1.0
+            });
+        }
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingProduct(null);
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!formData.name.trim()) {
+            showAlert('필수 입력', '상품명을 입력해주세요.');
+            return;
+        }
+
         try {
-            await window.__TAURI__.core.invoke('init_db_schema');
-            const list = await window.__TAURI__.core.invoke('get_product_list');
-            setAllProducts(list || []);
-        } catch (e) {
-            console.error(e);
+            const payload = {
+                productName: formData.name,
+                specification: formData.spec || null,
+                unitPrice: formData.price,
+                safetyStock: formData.safety,
+                costPrice: formData.cost,
+                materialId: formData.materialId,
+                materialRatio: formData.materialRatio,
+                itemType: formData.type
+            };
+
+            if (editingProduct) {
+                await invoke('update_product', {
+                    productId: editingProduct.product_id,
+                    ...payload,
+                    stockQuantity: null // Keep existing stock
+                });
+            } else {
+                await invoke('create_product', {
+                    ...payload,
+                    stockQuantity: 0
+                });
+            }
+
+            closeModal();
+            loadProducts();
+            window.dispatchEvent(new Event('product-data-changed'));
+        } catch (err) {
+            showAlert('저장 실패', '오류가 발생했습니다: ' + err);
         }
     };
 
-    const filterProducts = () => {
+    const handleDelete = async (p) => {
+        if (!await showConfirm('삭제 확인', `[${p.product_name}] 항목을 정말 삭제하시겠습니까?`)) return;
+        try {
+            await invoke('delete_product', { productId: p.product_id });
+            loadProducts();
+            window.dispatchEvent(new Event('product-data-changed'));
+        } catch (err) {
+            showAlert('삭제 실패', '오류가 발생했습니다: ' + err);
+        }
+    };
+
+    // --- Memoized Values ---
+    const filteredProducts = useMemo(() => {
         let filtered = allProducts;
 
         // Tab filter
@@ -56,225 +174,304 @@ const SettingsProduct = () => {
             filtered = filtered.filter(p => p.product_name.toLowerCase().includes(q));
         }
 
-        setProducts(filtered);
-    };
+        return filtered;
+    }, [allProducts, tabMode, searchQuery]);
 
-    const handleSave = async () => {
-        if (!form.name.trim()) return showAlert("알림", "상품명을 입력해주세요.");
+    const materials = useMemo(() => allProducts.filter(p => p.item_type === 'material'), [allProducts]);
 
-        try {
-            if (window.__TAURI__) {
-                if (form.id) {
-                    await window.__TAURI__.core.invoke('update_product', {
-                        productId: form.id,
-                        productName: form.name,
-                        specification: form.spec || null,
-                        unitPrice: form.price,
-                        stockQuantity: null,
-                        safetyStock: form.safety,
-                        costPrice: form.cost,
-                        materialId: form.materialId,
-                        materialRatio: form.materialRatio,
-                        itemType: form.type
-                    });
-                } else {
-                    await window.__TAURI__.core.invoke('create_product', {
-                        productName: form.name,
-                        specification: form.spec || null,
-                        unitPrice: form.price,
-                        stockQuantity: 0,
-                        safetyStock: form.safety,
-                        costPrice: form.cost,
-                        materialId: form.materialId,
-                        materialRatio: form.materialRatio,
-                        itemType: form.type
-                    });
-                }
-                setIsModalOpen(false);
-                loadProducts();
-                window.dispatchEvent(new Event('product-data-changed'));
-            }
-        } catch (e) {
-            showAlert("오류", "저장 실패: " + e);
-        }
-    };
-
-    const handleDelete = async (p) => {
-        if (!await showConfirm("삭제 확인", `[${p.product_name}] 상품을 정말 삭제하시겠습니까?`)) return;
-        try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_product', { productId: p.product_id });
-                loadProducts();
-                window.dispatchEvent(new Event('product-data-changed'));
-            }
-        } catch (e) {
-            showAlert("오류", "삭제 실패: " + e);
-        }
-    };
-
-    const openModal = (product = null) => {
-        if (product) {
-            setForm({
-                id: product.product_id,
-                name: product.product_name,
-                spec: product.specification || '',
-                price: product.unit_price,
-                cost: product.cost_price || 0,
-                safety: product.safety_stock || 10,
-                type: product.item_type || 'product',
-                materialId: product.material_id || null,
-                materialRatio: product.material_ratio || 1.0
-            });
-        } else {
-            setForm({
-                id: null,
-                name: '',
-                spec: '',
-                price: 0,
-                cost: 0,
-                safety: 10,
-                type: tabMode,
-                materialId: null,
-                materialRatio: 1.0
-            });
-        }
-        setIsModalOpen(true);
-    };
-
-    const materials = allProducts.filter(p => p.item_type === 'material');
+    if (!isAuthorized) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-[#f8fafc]">
+                <div className="text-center animate-pulse">
+                    <Lock size={48} className="mx-auto text-slate-300 mb-4" />
+                    <p className="text-slate-400 font-bold">인증 대기 중...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="sales-v3-container fade-in flex flex-col p-4 h-full bg-slate-50">
+        <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
             {/* Header */}
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 mb-4">
-                <div className="flex justify-between items-center mb-3">
-                    <h2 className="font-bold text-xl">상품/자재 관리</h2>
-                    <button onClick={() => openModal()} className="btn-primary h-9">
-                        <span className="material-symbols-rounded mr-2">add</span> 새 항목 등록
-                    </button>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex gap-2 mb-3">
-                    <button onClick={() => setTabMode('product')} className={`px-4 py-2 rounded font-bold text-sm transition-all ${tabMode === 'product' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        완제품
-                    </button>
-                    <button onClick={() => setTabMode('material')} className={`px-4 py-2 rounded font-bold text-sm transition-all ${tabMode === 'material' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        자재/부원료
-                    </button>
-                </div>
-
-                {/* Search */}
-                <div className="relative">
-                    <span className="material-symbols-rounded absolute left-3 top-2 text-slate-400">search</span>
-                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                        className="input-field pl-10 w-full" placeholder="상품명 검색..." />
+            <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-4">
+                <div className="flex justify-between items-end">
+                    <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                            <span className="w-6 h-1 bg-indigo-600 rounded-full"></span>
+                            <span className="text-[9px] font-black tracking-[0.2em] text-indigo-600 uppercase">System Settings</span>
+                        </div>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                            상품/자재 마스터 <span className="text-slate-300 font-light ml-1 text-xl">Product & Material Master</span>
+                        </h1>
+                    </div>
                 </div>
             </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-auto bg-white rounded-lg shadow-sm border border-slate-200">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-bold sticky top-0">
-                        <tr>
-                            <th className="p-3 w-12 text-center">No</th>
-                            <th className="p-3 w-20 text-center">유형</th>
-                            <th className="p-3 text-left">상품명</th>
-                            <th className="p-3 text-center w-32">규격</th>
-                            <th className="p-3 text-center w-24">안전재고</th>
-                            <th className="p-3 text-right w-28">판매가</th>
-                            <th className="p-3 text-right w-24">재고</th>
-                            <th className="p-3 text-center w-32">관리</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {products.length === 0 ? (
-                            <tr><td colSpan="8" className="p-20 text-center text-slate-400">상품이 없습니다.</td></tr>
-                        ) : (
-                            products.map((p, idx) => {
-                                const isLow = (p.stock_quantity || 0) <= (p.safety_stock || 10);
-                                return (
-                                    <tr key={p.product_id} className="hover:bg-slate-50">
-                                        <td className="p-3 text-center text-slate-400 text-xs">{idx + 1}</td>
-                                        <td className="p-3 text-center">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${p.item_type === 'material' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'
-                                                }`}>{p.item_type === 'material' ? '자재' : '상품'}</span>
-                                        </td>
-                                        <td className="p-3 font-bold text-slate-700">{p.product_name}</td>
-                                        <td className="p-3 text-center text-slate-500 text-xs">{p.specification || '-'}</td>
-                                        <td className="p-3 text-center text-slate-500">{p.safety_stock || 10}</td>
-                                        <td className="p-3 text-right font-mono">{formatCurrency(p.unit_price)}</td>
-                                        <td className={`p-3 text-right font-bold ${isLow ? 'text-red-500' : 'text-slate-600'}`}>
-                                            {p.stock_quantity || 0}
-                                            {isLow && <span className="material-symbols-rounded text-xs ml-1 align-middle">error</span>}
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button onClick={() => openModal(p)} className="text-blue-500 hover:text-blue-700">
-                                                    <span className="material-symbols-rounded text-base">edit</span>
-                                                </button>
-                                                <button onClick={() => handleDelete(p)} className="text-red-400 hover:text-red-600">
-                                                    <span className="material-symbols-rounded text-base">delete</span>
-                                                </button>
-                                            </div>
-                                        </td>
+            {/* Main Content Area */}
+            <div className="flex-1 px-6 lg:px-8 min-[2000px]:px-12 pb-8 overflow-hidden">
+                <div className="flex flex-col gap-6 h-full">
+
+                    {/* Toolbar Card */}
+                    <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 p-6 ring-1 ring-slate-900/5">
+                        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                            {/* Segmented Control */}
+                            <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
+                                <button
+                                    onClick={() => setTabMode('product')}
+                                    className={`flex-1 md:flex-none px-8 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
+                                        ${tabMode === 'product' ? 'bg-white text-indigo-600 shadow-lg shadow-indigo-500/10' : 'text-slate-400 hover:text-slate-600'}
+                                    `}
+                                >
+                                    <Package size={16} /> 완제품 (Product)
+                                </button>
+                                <button
+                                    onClick={() => setTabMode('material')}
+                                    className={`flex-1 md:flex-none px-8 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
+                                        ${tabMode === 'material' ? 'bg-white text-orange-600 shadow-lg shadow-orange-500/10' : 'text-slate-400 hover:text-slate-600'}
+                                    `}
+                                >
+                                    <Layers size={16} /> 자재/부원료 (Material)
+                                </button>
+                            </div>
+
+                            {/* Search & Add */}
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <div className="relative flex-1 md:w-80 group">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-400 transition-colors" size={18} />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="이름으로 검색하세요"
+                                        className="w-full h-12 pl-12 pr-6 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 focus:ring-indigo-500/20"
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => openModal()}
+                                    className={`h-12 px-6 rounded-2xl font-black text-sm flex items-center gap-2 text-white shadow-lg transition-all active:scale-[0.98]
+                                        ${tabMode === 'product' ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-200' : 'bg-orange-500 hover:bg-orange-400 shadow-orange-200'}
+                                    `}
+                                >
+                                    <Plus size={20} /> 새 항목 추가
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Table Card */}
+                    <div className="flex-1 bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 flex flex-col">
+                        <div className="flex-1 overflow-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                                <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur-md border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-20">No.</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-24">유형</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">항목명</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-32">규격</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-32">판매가격</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-24">안전재고</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-24">현재재고</th>
+                                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-32">관리</th>
                                     </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {filteredProducts.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="8" className="py-32 text-center">
+                                                <div className="flex flex-col items-center justify-center gap-3">
+                                                    <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-200">
+                                                        <Search size={32} />
+                                                    </div>
+                                                    <p className="text-slate-400 font-bold tracking-tight">검색 결과가 없습니다</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredProducts.map((p, idx) => {
+                                            const isLow = (p.stock_quantity || 0) <= (p.safety_stock || 10);
+                                            return (
+                                                <tr key={p.product_id} className="group hover:bg-slate-50/50 transition-all">
+                                                    <td className="px-8 py-4 text-center text-xs font-black text-slate-300 group-hover:text-slate-400">{idx + 1}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border
+                                                            ${p.item_type === 'material' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}
+                                                        `}>
+                                                            {p.item_type === 'material' ? '자재' : '상품'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 font-black text-sm text-slate-700">{p.product_name}</td>
+                                                    <td className="px-6 py-4 text-center text-xs font-bold text-slate-400 bg-slate-50/30">{p.specification || '-'}</td>
+                                                    <td className="px-6 py-4 text-right font-black text-sm text-slate-800 tabular-nums">{formatCurrency(p.unit_price)}</td>
+                                                    <td className="px-6 py-4 text-right text-xs font-bold text-slate-400">{p.safety_stock || 10}</td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {isLow && <AlertTriangle size={14} className="text-rose-500" />}
+                                                            <span className={`font-black text-sm tabular-nums ${isLow ? 'text-rose-600 underline underline-offset-4 decoration-rose-200' : 'text-slate-600'}`}>
+                                                                {p.stock_quantity || 0}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-8 py-4">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <button
+                                                                onClick={() => openModal(p)}
+                                                                className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm"
+                                                            >
+                                                                <Edit2 size={16} className="mx-auto" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(p)}
+                                                                className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm"
+                                                            >
+                                                                <Trash2 size={16} className="mx-auto" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="modal flex">
-                    <div className="modal-content w-[500px]">
-                        <h3 className="mb-4">{form.id ? '상품 수정' : `${tabMode === 'material' ? '자재' : '상품'} 등록`}</h3>
-
-                        <div className="space-y-3">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeModal}></div>
+                    <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-slate-900/10">
+                        {/* Modal Header */}
+                        <div className="px-10 py-8 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
                             <div>
-                                <label className="text-xs font-bold text-slate-500 block mb-1">상품명 <span className="text-red-500">*</span></label>
-                                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-field w-full" autoFocus />
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`w-4 h-1 rounded-full ${formData.type === 'material' ? 'bg-orange-500' : 'bg-indigo-600'}`}></span>
+                                    <span className={`text-[10px] font-black uppercase tracking-widest ${formData.type === 'material' ? 'text-orange-500' : 'text-indigo-600'}`}>
+                                        {editingProduct ? 'Update Item' : 'Register New'}
+                                    </span>
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                                    {editingProduct ? '정보 수정' : `${formData.type === 'material' ? '자재' : '상품'} 등록`}
+                                </h3>
+                            </div>
+                            <button onClick={closeModal} className="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-100 hover:text-slate-600 transition-all shadow-sm">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <form onSubmit={handleSave} className="p-10 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Item Name</label>
+                                <input
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="상품 또는 자재 이름을 입력하세요"
+                                    className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                    required
+                                    autoFocus
+                                />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">규격</label>
-                                    <input value={form.spec} onChange={e => setForm({ ...form, spec: e.target.value })} className="input-field w-full" placeholder="ex. 1kg" />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Specification</label>
+                                    <input
+                                        type="text"
+                                        value={formData.spec}
+                                        onChange={(e) => setFormData({ ...formData, spec: e.target.value })}
+                                        placeholder="ex) 1kg, 20봉"
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">안전재고</label>
-                                    <input type="number" value={form.safety} onChange={e => setForm({ ...form, safety: Number(e.target.value) })} className="input-field w-full" />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Safety Stock</label>
+                                    <input
+                                        type="number"
+                                        value={formData.safety}
+                                        onChange={(e) => setFormData({ ...formData, safety: parseInt(e.target.value) })}
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 text-right"
+                                    />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">판매가</label>
-                                    <input type="number" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} className="input-field w-full text-right" />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Sales Price</label>
+                                    <input
+                                        type="number"
+                                        value={formData.price}
+                                        onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) })}
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold font-mono text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 text-right"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">원가</label>
-                                    <input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: Number(e.target.value) })} className="input-field w-full text-right" />
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Cost Price</label>
+                                    <input
+                                        type="number"
+                                        value={formData.cost}
+                                        onChange={(e) => setFormData({ ...formData, cost: parseInt(e.target.value) })}
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold font-mono text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 text-right"
+                                    />
                                 </div>
                             </div>
 
-                            {form.type === 'product' && (
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 block mb-1">연계 자재 (선택)</label>
-                                    <select value={form.materialId || ''} onChange={e => setForm({ ...form, materialId: e.target.value ? Number(e.target.value) : null })} className="input-field w-full">
-                                        <option value="">연동 안함</option>
-                                        {materials.map(m => <option key={m.product_id} value={m.product_id}>{m.product_name} {m.specification && `(${m.specification})`}</option>)}
-                                    </select>
+                            {formData.type === 'product' && (
+                                <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">연계 자재 (Inventory Link)</label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="col-span-2">
+                                            <select
+                                                value={formData.materialId || ''}
+                                                onChange={e => setFormData({ ...formData, materialId: e.target.value ? Number(e.target.value) : null })}
+                                                className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-indigo-500 transition-all ring-1 ring-inset ring-slate-200"
+                                            >
+                                                <option value="">연동 안함</option>
+                                                {materials.map(m => <option key={m.product_id} value={m.product_id}>{m.product_name} {m.specification && `(${m.specification})`}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={formData.materialRatio}
+                                                onChange={e => setFormData({ ...formData, materialRatio: parseFloat(e.target.value) })}
+                                                placeholder="비율"
+                                                className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-indigo-500 transition-all ring-1 ring-inset ring-slate-200 text-right"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-300 font-bold">배</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-3 flex items-center gap-1">
+                                        <AlertTriangle size={12} className="text-amber-500" />
+                                        상품 1개 판매 시 차감될 자재의 배수를 입력하세요
+                                    </p>
                                 </div>
                             )}
-                        </div>
 
-                        <div className="flex gap-2 mt-6">
-                            <button onClick={() => setIsModalOpen(false)} className="btn-secondary flex-1">취소</button>
-                            <button onClick={handleSave} className="btn-primary flex-1">저장</button>
-                        </div>
+                            {/* Footer Buttons */}
+                            <div className="pt-6 flex gap-3 border-t border-slate-100">
+                                <div className="flex-1"></div>
+                                <button
+                                    type="button"
+                                    onClick={closeModal}
+                                    className="h-12 px-8 bg-slate-100 text-slate-600 rounded-xl font-black text-xs hover:bg-slate-200 transition-all"
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    type="submit"
+                                    className={`h-12 px-10 text-white rounded-xl font-black text-xs shadow-lg transition-all flex items-center gap-2
+                                        ${formData.type === 'material' ? 'bg-orange-500 hover:bg-orange-400 shadow-orange-200' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-200'}
+                                    `}
+                                >
+                                    <CheckCircle2 size={16} /> {editingProduct ? '수정 사항 저장' : '등록 완료'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

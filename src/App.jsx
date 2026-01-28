@@ -23,6 +23,11 @@ import FinanceExpense from './features/finance/FinanceExpense';
 import FinanceVendor from './features/finance/FinanceVendor';
 import FinanceAnalysis from './features/finance/FinanceAnalysis';
 import SettingsProduct from './features/settings/SettingsProduct';
+import SettingsUser from './features/settings/SettingsUser';
+import SettingsCompany from './features/settings/SettingsCompany';
+import SettingsApiKeys from './features/settings/SettingsApiKeys';
+import SettingsBackup from './features/settings/SettingsBackup';
+import SettingsDbReset from './features/settings/SettingsDbReset';
 import SalesReception from './features/sales/SalesReception';
 import SalesSpecial from './features/sales/SalesSpecial';
 import SalesOnlineSync from './features/sales/SalesOnlineSync';
@@ -42,6 +47,7 @@ import ExperienceProgram from './features/exp/ExperienceProgram';
 import ExperienceReservation from './features/exp/ExperienceReservation';
 import ExperienceStatus from './features/exp/ExperienceStatus';
 import ExperienceSchedule from './features/exp/ExperienceSchedule';
+import ScheduleMgmt from './features/schedule/ScheduleMgmt';
 import Placeholder from './components/Placeholder';
 
 const router = createBrowserRouter(
@@ -78,14 +84,14 @@ const router = createBrowserRouter(
       <Route path="exp/reservation-entry" element={<ExperienceReservation />} />
       <Route path="exp/reservation-status" element={<ExperienceStatus />} />
       <Route path="exp/program-mgmt" element={<ExperienceProgram />} />
-      <Route path="schedule" element={<ExperienceSchedule />} />
+      <Route path="schedule" element={<ScheduleMgmt />} />
       <Route path="settings/product-list" element={<SettingsProduct />} />
-      <Route path="settings/user-list" element={<Placeholder title="사용자 관리" />} />
-      <Route path="settings/company-info" element={<Placeholder title="업체 정보" />} />
-      <Route path="settings/api-keys" element={<Placeholder title="외부 서비스 연동 설정" />} />
+      <Route path="settings/user-list" element={<SettingsUser />} />
+      <Route path="settings/company-info" element={<SettingsCompany />} />
+      <Route path="settings/api-keys" element={<SettingsApiKeys />} />
       <Route path="settings/template-mgmt" element={<Placeholder title="메시지 템플릿 설정" />} />
-      <Route path="settings/db-backup-restore" element={<Placeholder title="백업 및 복구" />} />
-      <Route path="settings/db-reset" element={<Placeholder title="데이터 초기화" />} />
+      <Route path="settings/db-backup-restore" element={<SettingsBackup />} />
+      <Route path="settings/db-reset" element={<SettingsDbReset />} />
       <Route path="manual" element={<Placeholder title="사용자 메뉴얼" />} />
     </Route>
   )
