@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
+import { useAdminGuard } from '../../hooks/useAdminGuard';
+import { Lock } from 'lucide-react';
 
 const ExperienceProgram = () => {
+    const navigate = useNavigate();
     const { showAlert, showConfirm } = useModal();
+    const { isAuthorized, checkAdmin, isVerifying } = useAdminGuard();
     const [programs, setPrograms] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -28,9 +33,25 @@ const ExperienceProgram = () => {
         }
     }, []);
 
+    const checkRunComp = useRef(false);
     useEffect(() => {
-        loadPrograms();
-    }, [loadPrograms]);
+        if (checkRunComp.current) return;
+        checkRunComp.current = true;
+
+        const init = async () => {
+            const ok = await checkAdmin();
+            if (!ok) {
+                navigate('/');
+            }
+        };
+        init();
+    }, []);
+
+    useEffect(() => {
+        if (isAuthorized) {
+            loadPrograms();
+        }
+    }, [isAuthorized, loadPrograms]);
 
     const handleInputChange = (e) => {
         const { id, value, type, checked } = e.target;
@@ -119,8 +140,28 @@ const ExperienceProgram = () => {
         }
     };
 
+    if (!isAuthorized) {
+        return (
+            <div className="flex h-full items-center justify-center bg-[#f8fafc]">
+                <div className="text-center animate-pulse">
+                    {isVerifying ? (
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+                    ) : (
+                        <Lock size={48} className="mx-auto text-slate-300 mb-4" />
+                    )}
+                    <p className="text-slate-400 font-bold">
+                        {isVerifying ? '인증 확인 중...' : '인증 대기 중...'}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative text-left">
+            {/* Local Modal Root */}
+            <div id="local-modal-root" className="absolute inset-0 z-[9999] pointer-events-none" />
+
             {/* Top Navigation & Action Header */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-1">
                 <div className="flex justify-between items-end mb-4">
@@ -130,7 +171,7 @@ const ExperienceProgram = () => {
                             <span className="text-[9px] font-black tracking-[0.2em] text-sky-600 uppercase">Experience Configuration System</span>
                         </div>
                         <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
-                            프로그램 설정 <span className="text-slate-300 font-light ml-1 text-xl">Management</span>
+                            체험 프로그램 설정 <span className="text-slate-300 font-light ml-1 text-xl">Management</span>
                         </h1>
                     </div>
                 </div>

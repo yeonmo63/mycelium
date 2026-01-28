@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
@@ -17,8 +18,9 @@ import {
 import { formatCurrency } from '../../utils/common';
 
 const SettingsProduct = () => {
+    const navigate = useNavigate();
     const { showAlert, showConfirm } = useModal();
-    const { isAuthorized, checkAdmin } = useAdminGuard();
+    const { isAuthorized, checkAdmin, isVerifying } = useAdminGuard();
 
     // --- State Management ---
     const [allProducts, setAllProducts] = useState([]);
@@ -41,12 +43,16 @@ const SettingsProduct = () => {
     });
 
     // --- Admin Guard Check ---
+    const checkRunComp = React.useRef(false);
     useEffect(() => {
+        if (checkRunComp.current) return;
+        checkRunComp.current = true;
+
         const init = async () => {
             const ok = await checkAdmin();
             if (!ok) {
                 // Return to dashboard or previous page if cancelled or failed
-                window.history.back();
+                navigate('/');
             }
         };
         init();
@@ -181,17 +187,26 @@ const SettingsProduct = () => {
 
     if (!isAuthorized) {
         return (
-            <div className="flex h-screen items-center justify-center bg-[#f8fafc]">
+            <div className="flex h-full items-center justify-center bg-[#f8fafc]">
                 <div className="text-center animate-pulse">
-                    <Lock size={48} className="mx-auto text-slate-300 mb-4" />
-                    <p className="text-slate-400 font-bold">인증 대기 중...</p>
+                    {isVerifying ? (
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+                    ) : (
+                        <Lock size={48} className="mx-auto text-slate-300 mb-4" />
+                    )}
+                    <p className="text-slate-400 font-bold">
+                        {isVerifying ? '인증 확인 중...' : '인증 대기 중...'}
+                    </p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative">
+            {/* Local Modal Root for scoped modals */}
+            <div id="local-modal-root" className="absolute inset-0 z-[9999] pointer-events-none" />
+
             {/* Header */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-4">
                 <div className="flex justify-between items-end">
@@ -236,14 +251,13 @@ const SettingsProduct = () => {
 
                             {/* Search & Add */}
                             <div className="flex items-center gap-3 w-full md:w-auto">
-                                <div className="relative flex-1 md:w-80 group">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-400 transition-colors" size={18} />
+                                <div className="relative flex-1 md:w-80 group text-left">
                                     <input
                                         type="text"
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         placeholder="이름으로 검색하세요"
-                                        className="w-full h-12 pl-12 pr-6 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 focus:ring-indigo-500/20"
+                                        className="w-full h-12 px-6 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 focus:ring-indigo-500/20"
                                     />
                                 </div>
                                 <button
@@ -261,17 +275,17 @@ const SettingsProduct = () => {
                     {/* Table Card */}
                     <div className="flex-1 bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 flex flex-col">
                         <div className="flex-1 overflow-auto custom-scrollbar">
-                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                            <table className="w-full text-left border-collapse">
                                 <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur-md border-b border-slate-100">
                                     <tr>
-                                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-20">No.</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-24">유형</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left">항목명</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-32">규격</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-32">판매가격</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-24">안전재고</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-24">현재재고</th>
-                                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-32">관리</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[5%] min-w-[50px]">No.</th>
+                                        <th className="px-4 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%] min-w-[70px] text-center">유형</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left w-[30%] min-w-[200px]">항목명</th>
+                                        <th className="px-4 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[12%] min-w-[100px]">규격</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-[15%] min-w-[120px]">판매가격</th>
+                                        <th className="px-4 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-[10%] min-w-[80px]">안전재고</th>
+                                        <th className="px-4 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-[10%] min-w-[80px]">현재재고</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[10%] min-w-[100px]">관리</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
@@ -315,15 +329,15 @@ const SettingsProduct = () => {
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => openModal(p)}
-                                                                className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm"
+                                                                className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center"
                                                             >
-                                                                <Edit2 size={16} className="mx-auto" />
+                                                                <span className="material-symbols-rounded text-[20px]">edit</span>
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDelete(p)}
-                                                                className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm"
+                                                                className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm flex items-center justify-center"
                                                             >
-                                                                <Trash2 size={16} className="mx-auto" />
+                                                                <span className="material-symbols-rounded text-[20px]">delete</span>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -340,7 +354,7 @@ const SettingsProduct = () => {
 
             {/* Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div className="absolute inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeModal}></div>
                     <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-slate-900/10">
                         {/* Modal Header */}
@@ -364,7 +378,7 @@ const SettingsProduct = () => {
                         {/* Modal Body */}
                         <form onSubmit={handleSave} className="p-10 space-y-6">
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Item Name</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">항목명 (Item Name)</label>
                                 <input
                                     type="text"
                                     value={formData.name}
@@ -378,7 +392,7 @@ const SettingsProduct = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Specification</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">규격 (Specification)</label>
                                     <input
                                         type="text"
                                         value={formData.spec}
@@ -388,7 +402,7 @@ const SettingsProduct = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Safety Stock</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">안전 재고</label>
                                     <input
                                         type="number"
                                         value={formData.safety}
@@ -400,7 +414,7 @@ const SettingsProduct = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Sales Price</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">판매 가격</label>
                                     <input
                                         type="number"
                                         value={formData.price}
@@ -409,7 +423,7 @@ const SettingsProduct = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Cost Price</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">원가 (Cost Price)</label>
                                     <input
                                         type="number"
                                         value={formData.cost}

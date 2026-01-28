@@ -199,6 +199,79 @@ async fn save_naver_keys(
     Ok(())
 }
 
+fn get_default_templates() -> serde_json::Value {
+    serde_json::json!({
+        "default": [
+            "안녕하세요, ${name}님! 스마트 농장 제니입니다~ 🍄\n항상 저희 농장을 아껴주셔서 감사 인사를 드립니다. 이번에 정말 품질 좋은 버섯이 수확되어 ${name}님이 생각나서 연락드렸어요. 필요하실 때 말씀해 주시면 정성을 다해 챙겨드리겠습니다! 🎁",
+            "[스마트 농장] ${name}님, 오늘 하루도 행복하신가요? 😊\n평소 우수 고객으로 저희 농장과 함께해 주셔서 특별히 감사의 마음을 담아 문자 드립니다. 늘 건강하시고, 조만간 다시 뵐 수 있기를 기대하겠습니다! 💙",
+            "${name}님, 버섯 요리 생각날 때 되지 않으셨나요? 😉\n스마트 농장 제니가 제안드리는 제철 버섯 한 바구니! 지금이 딱 맛과 향이 절정일 때입니다. ${name}님과 같은 우수 고객님께는 더욱 신경 써서 보내드릴게요! 🍄🌱",
+            "띵동~ ${name}님, 스마트 농장 제니입니다! ✨\n저희 농장을 잊고 지내신 건 아니시죠? 오늘 수확한 버섯들이 역대급으로 향이 좋습니다. 건강하고 즐거운 주말 보내세요! 🌻"
+        ],
+        "repurchase": [
+            "[스마트 농장] ${name}님, 버섯 떨어질 때 되지 않으셨나요? 😉\n제니가 AI로 분석해보니 지금쯤 향긋한 버섯 한 번 더 드시면 딱 좋을 시기더라구요! 오늘 주문하시면 최고 품질로 엄선해 보내드리겠습니다. 🍄",
+            "안녕하세요 ${name}님, 스마트 농장 제니입니다! 🌱\n지난번에 드신 버섯은 만족스러우셨나요? 재구매를 고민 중이시라면 지금이 기회입니다! 오늘 수확한 싱싱한 버섯들이 주인을 기다리고 있어요. ✨",
+            "[스마트 농장] ${name}님만을 위한 특별한 제안! 🎁\n주기적으로 저희 농장을 찾아주셔서 감사합니다. 이번에 준비한 버섯 구성이 정말 알차니, 놓치지 마시고 꼭 다시 한 번 맛보셨으면 좋겠어요! 🍄✨"
+        ],
+        "churn": [
+            "[스마트 농장] ${name}님, 오랜만이에요! 제니가 많이 기다렸답니다. 🍄\n저희 농장을 잊으신 건 아니시죠? ${name}님을 위해 정성껏 준비한 특별 혜택이 있으니, 오랜만에 향긋한 버섯 내음 맡으러 오세요! 💙",
+            "안녕하세요 ${name}님, 스마트 농장 제니입니다~ 🌱\n한동안 소식이 없으셔서 걱정했어요. 다시 뵙고 싶은 마음에 작은 성의를 준비했습니다. 궁금하신 점 있으시면 언제든 제니를 찾아주세요! 😊",
+            "[스마트 농장] 띵동! ${name}님을 위한 깜짝 선물이 도착했어요 🎁\n오랜만에 저희 버섯으로 풍성한 식탁을 만들어보시는 건 어떨까요? 항상 최상의 맛과 신선함으로 보답하겠습니다! ✨"
+        ],
+        "shipping_receipt": [
+            "[스마트 농장] 안녕하세요 ${name}님! 🍄\n주문하신 상품의 입금 확인이 늦어지고 있어 안내드립니다. 입금 확인 후 정성껏 포장하여 최대한 빠르게 발송해 드리겠습니다. 감사합니다. 😊"
+        ],
+        "shipping_paid": [
+            "[스마트 농장] 입금 확인 완료! 🍄\n${name}님, 주문하신 상품의 입금이 확인되었습니다. 오늘 중으로 가장 신선한 상품을 골라 정성스럽게 발송해 드릴 예정입니다. 조금만 기다려 주세요! ✨"
+        ],
+        "shipping_done": [
+            "[스마트 농장] 배송 시작 안내! 🚚\n${name}님, 주문하신 상품이 오늘 발송되었습니다. 신선함을 가득 담아 안전하게 전달해 드릴게요! 맛있게 드시고 늘 건강하세요. 🍄💙"
+        ]
+    })
+}
+
+#[tauri::command]
+async fn get_message_templates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let template_path = config_dir.join("templates.json");
+
+    if template_path.exists() {
+        let content = std::fs::read_to_string(&template_path).map_err(|e| e.to_string())?;
+        Ok(serde_json::from_str::<serde_json::Value>(&content)
+            .unwrap_or_else(|_| get_default_templates()))
+    } else {
+        Ok(get_default_templates())
+    }
+}
+
+#[tauri::command]
+async fn save_message_templates(
+    app: tauri::AppHandle,
+    templates: serde_json::Value,
+) -> Result<(), String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    if !config_dir.exists() {
+        std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    }
+    let template_path = config_dir.join("templates.json");
+
+    let content = serde_json::to_string_pretty(&templates).map_err(|e| e.to_string())?;
+    std::fs::write(&template_path, content).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn reset_message_templates(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let template_path = config_dir.join("templates.json");
+
+    if template_path.exists() {
+        let _ = std::fs::remove_file(&template_path);
+    }
+
+    Ok(get_default_templates())
+}
+
 #[tauri::command]
 async fn save_external_backup_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -2890,7 +2963,7 @@ async fn get_repurchase_candidates(
             MAX(s.order_date) as last_order_date,
             MIN(s.order_date) as first_order_date,
             COUNT(*) as total_orders,
-            (MAX(s.order_date) - MIN(s.order_date)) / NULLIF(COUNT(*) - 1, 0) as avg_interval 
+            ((MAX(s.order_date) - MIN(s.order_date)) / NULLIF(COUNT(*) - 1, 0))::INTEGER as avg_interval 
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.customer_id
         WHERE s.status NOT IN ('취소', '반품') AND s.customer_id IS NOT NULL
@@ -2903,7 +2976,7 @@ async fn get_repurchase_candidates(
         mobile as mobile_number,
         last_order_date,
         avg_interval as avg_interval_days,
-        (avg_interval - (CURRENT_DATE - last_order_date)) as predicted_days_remaining,
+        (avg_interval - (CURRENT_DATE - last_order_date))::INTEGER as predicted_days_remaining,
         (SELECT product_name FROM sales s2 WHERE s2.customer_id = os.customer_id ORDER BY order_date DESC LIMIT 1) as last_product,
         total_orders as purchase_count
     FROM OrderStats os
@@ -4146,7 +4219,6 @@ pub fn run() {
             get_vendor_purchase_ranking,
             trigger_auto_backup,
             get_auto_backups,
-            restore_database,
             restore_database_sql,
             delete_backup,
             check_daily_backup,
@@ -4155,13 +4227,9 @@ pub fn run() {
             login,
             change_password,
             get_all_users,
-            get_company_info,
-            save_company_info,
-            create_user,
-            update_user,
-            delete_user,
-            verify_admin_password,
-            confirm_exit,
+            get_message_templates,
+            save_message_templates,
+            reset_message_templates,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -8038,12 +8106,10 @@ async fn delete_user(state: State<'_, DbPool>, id: i32) -> Result<(), String> {
 
 #[tauri::command]
 async fn get_company_info(state: State<'_, DbPool>) -> Result<Option<CompanyInfo>, String> {
-    let row = sqlx::query_as::<_, CompanyInfo>(
-        "SELECT id, company_name, representative_name, phone_number, mobile_number, business_reg_number, registration_date, memo FROM company_info LIMIT 1"
-    )
-    .fetch_optional(&*state)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = sqlx::query_as::<_, CompanyInfo>("SELECT * FROM company_info LIMIT 1")
+        .fetch_optional(&*state)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(row)
 }

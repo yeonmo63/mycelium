@@ -199,6 +199,7 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
 pub struct Sales {
     pub sales_id: String,
     pub customer_id: Option<String>,
+    #[sqlx(default)]
     pub customer_name: Option<String>,
     #[sqlx(default)]
     pub customer_mobile: Option<String>,

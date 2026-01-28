@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
@@ -11,10 +12,23 @@ import {
 } from 'lucide-react';
 
 const SettingsDbReset = () => {
+    const navigate = useNavigate();
     const { showAlert, showConfirm } = useModal();
-    const { isAuthorized, checkAdmin } = useAdminGuard();
+    const { isAuthorized, checkAdmin, isVerifying } = useAdminGuard();
     const [isLoading, setIsLoading] = useState(false);
     const [confirmText, setConfirmText] = useState('');
+
+    const checkRunComp = React.useRef(false);
+    useEffect(() => {
+        if (checkRunComp.current) return;
+        checkRunComp.current = true;
+
+        const init = async () => {
+            const ok = await checkAdmin();
+            if (!ok) navigate('/');
+        };
+        init();
+    }, []);
 
     const handleReset = async () => {
         if (confirmText !== '초기화') {
@@ -41,17 +55,26 @@ const SettingsDbReset = () => {
 
     if (!isAuthorized) {
         return (
-            <div className="flex h-screen items-center justify-center bg-[#f8fafc]">
+            <div className="flex h-full items-center justify-center bg-[#f8fafc]">
                 <div className="text-center animate-pulse">
-                    <Lock size={48} className="mx-auto text-slate-300 mb-4" />
-                    <p className="text-slate-400 font-bold">인증 대기 중...</p>
+                    {isVerifying ? (
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+                    ) : (
+                        <Lock size={48} className="mx-auto text-slate-300 mb-4" />
+                    )}
+                    <p className="text-slate-400 font-bold">
+                        {isVerifying ? '인증 확인 중...' : '인증 대기 중...'}
+                    </p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative">
+            {/* Local Modal Root */}
+            <div id="local-modal-root" className="absolute inset-0 z-[9999] pointer-events-none" />
+
             {/* Header */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-4">
                 <div className="flex justify-between items-end">
@@ -81,7 +104,7 @@ const SettingsDbReset = () => {
 
                     <div className="space-y-6">
                         <div className="text-left space-y-2">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Confirmation Text</label>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">초기화 확인 입력</label>
                             <input
                                 type="text"
                                 value={confirmText}

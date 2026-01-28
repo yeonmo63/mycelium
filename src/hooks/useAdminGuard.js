@@ -4,6 +4,7 @@ import { useModal } from '../contexts/ModalContext';
 
 export const useAdminGuard = () => {
     const [isAuthorized, setIsAuthorized] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
     const { promptAdminPassword, showAlert } = useModal();
 
     const checkAdmin = async () => {
@@ -13,6 +14,7 @@ export const useAdminGuard = () => {
             return false;
         }
 
+        setIsVerifying(true);
         try {
             const isValid = await invoke('verify_admin_password', { password });
             if (isValid) {
@@ -25,8 +27,27 @@ export const useAdminGuard = () => {
         } catch (err) {
             await showAlert('오류', '인증 중 오류가 발생했습니다: ' + err);
             return false;
+        } finally {
+            setIsVerifying(false);
         }
     };
 
-    return { isAuthorized, checkAdmin };
+    const verifyPassword = async (password) => {
+        setIsVerifying(true);
+        try {
+            const isValid = await invoke('verify_admin_password', { password });
+            if (isValid) {
+                setIsAuthorized(true);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error(err);
+            return false;
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    return { isAuthorized, isVerifying, checkAdmin, verifyPassword };
 };

@@ -12,9 +12,23 @@ export const ModalProvider = ({ children }) => {
         setModals(prev => prev.filter(m => m.id !== id));
     }, []);
 
+    const [target, setTarget] = useState(null);
+
+    // Helper to find the best modal root
+    const findModalRoot = useCallback(() => {
+        // Try to find the most specific root (perhaps the one deepest in the DOM or just the last one found)
+        const roots = document.querySelectorAll('#local-modal-root');
+        if (roots.length > 0) {
+            // Pick the last one found, which is likely the one inside the current active component
+            return roots[roots.length - 1];
+        }
+        return document.body;
+    }, []);
+
     const showAlert = useCallback((title, message) => {
         return new Promise((resolve) => {
             const id = Date.now() + Math.random();
+            setTarget(findModalRoot());
             setModals(prev => [...prev, {
                 id,
                 type: 'alert',
@@ -26,11 +40,12 @@ export const ModalProvider = ({ children }) => {
                 }
             }]);
         });
-    }, [closeModal]);
+    }, [closeModal, findModalRoot]);
 
     const showConfirm = useCallback((title, message) => {
         return new Promise((resolve) => {
             const id = Date.now() + Math.random();
+            setTarget(findModalRoot());
             setModals(prev => [...prev, {
                 id,
                 type: 'confirm',
@@ -46,11 +61,12 @@ export const ModalProvider = ({ children }) => {
                 }
             }]);
         });
-    }, [closeModal]);
+    }, [closeModal, findModalRoot]);
 
     const promptAdminPassword = useCallback(() => {
         return new Promise((resolve) => {
             const id = Date.now() + Math.random();
+            setTarget(findModalRoot());
             setModals(prev => [...prev, {
                 id,
                 type: 'password',
@@ -66,20 +82,25 @@ export const ModalProvider = ({ children }) => {
                 }
             }]);
         });
-    }, [closeModal]);
+    }, [closeModal, findModalRoot]);
+
+    useEffect(() => {
+        // Initial setup
+        setTarget(findModalRoot());
+    }, [findModalRoot]);
 
     const contextValue = React.useMemo(() => ({ showConfirm, showAlert, promptAdminPassword }), [showConfirm, showAlert, promptAdminPassword]);
 
     return (
         <ModalContext.Provider value={contextValue}>
             {children}
-            {createPortal(
+            {target && createPortal(
                 <div id="modal-root">
                     {modals.map((modal, index) => (
                         <ModalItem key={modal.id} modal={modal} index={index} />
                     ))}
                 </div>,
-                document.body
+                target
             )}
         </ModalContext.Provider>
     );
@@ -97,7 +118,7 @@ const ModalItem = ({ modal, index }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-auto">
             <div
                 className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
                 style={{ zIndex: 9999 + index }}

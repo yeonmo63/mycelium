@@ -28,6 +28,7 @@ import SettingsCompany from './features/settings/SettingsCompany';
 import SettingsApiKeys from './features/settings/SettingsApiKeys';
 import SettingsBackup from './features/settings/SettingsBackup';
 import SettingsDbReset from './features/settings/SettingsDbReset';
+import SettingsTemplate from './features/settings/SettingsTemplate';
 import SalesReception from './features/sales/SalesReception';
 import SalesSpecial from './features/sales/SalesSpecial';
 import SalesOnlineSync from './features/sales/SalesOnlineSync';
@@ -89,7 +90,7 @@ const router = createBrowserRouter(
       <Route path="settings/user-list" element={<SettingsUser />} />
       <Route path="settings/company-info" element={<SettingsCompany />} />
       <Route path="settings/api-keys" element={<SettingsApiKeys />} />
-      <Route path="settings/template-mgmt" element={<Placeholder title="메시지 템플릿 설정" />} />
+      <Route path="settings/template-mgmt" element={<SettingsTemplate />} />
       <Route path="settings/db-backup-restore" element={<SettingsBackup />} />
       <Route path="settings/db-reset" element={<SettingsDbReset />} />
       <Route path="manual" element={<Placeholder title="사용자 메뉴얼" />} />
@@ -115,12 +116,14 @@ function AppContent() {
     window.addEventListener('app-logout', handleLogout);
 
     const setup = async () => {
-      if (window.appInitialized) return;
-      window.appInitialized = true;
-
       try {
         console.log('App starting setup...');
+        // Force fresh login on every startup
+        sessionStorage.removeItem('isLoggedIn');
+        setIsLoggedIn(false);
+
         const status = await invoke('check_setup_status');
+        console.log('Setup status:', status);
         setIsConfigured(status);
 
         // Remove splash screen from DOM instantly
@@ -144,11 +147,22 @@ function AppContent() {
     };
 
     setup();
+
+    // --- Auto Backup Logic ---
+    let backupInterval;
+    if (isLoggedIn) {
+      // Check every 5 minutes and backup if modified
+      backupInterval = setInterval(() => {
+        invoke('trigger_auto_backup').catch(err => console.error("Auto backup failed:", err));
+      }, 5 * 60 * 1000);
+    }
+
     return () => {
       if (unlisten) unlisten();
+      if (backupInterval) clearInterval(backupInterval);
       window.removeEventListener('app-logout', handleLogout);
     };
-  }, []); // Only run once on mount
+  }, [isLoggedIn]); // Re-run when login status changes
 
   // Premium Initial Loading Screen (React State)
   if (isConfigured === null) {
