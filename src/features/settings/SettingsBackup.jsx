@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
@@ -15,6 +16,9 @@ const SettingsBackup = () => {
     const [backups, setBackups] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [extPath, setExtPath] = useState('');
+    const [backupProgress, setBackupProgress] = useState({ progress: 0, message: '' });
+    const [showProgress, setShowProgress] = useState(false);
+    const [operationType, setOperationType] = useState('backup'); // 'backup' or 'restore'
 
     // --- Admin Guard Check ---
     const checkRunComp = React.useRef(false);
@@ -59,21 +63,45 @@ const SettingsBackup = () => {
             const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
             const defaultName = `backup-${today}.json`;
 
+            console.log('[Backup] Starting backup process...');
             const savePath = await save({
                 filters: [{ name: 'Backup File', extensions: ['json'] }],
                 defaultPath: defaultName
             });
 
-            if (!savePath) return;
+            if (!savePath) {
+                console.log('[Backup] User cancelled file selection');
+                return;
+            }
 
+            console.log('[Backup] Selected path:', savePath);
             setIsLoading(true);
-            const msg = await invoke('backup_database', { path: savePath });
-            await showAlert('백업 완료', msg);
-            loadBackups();
+            setShowProgress(true);
+            setOperationType('backup');
+            setBackupProgress({ progress: 0, message: '백업 준비 중...' });
+
+            // Listen for progress events
+            const unlisten = await listen('backup-progress', (event) => {
+                console.log('[Backup] Progress:', event.payload);
+                setBackupProgress(event.payload);
+            });
+
+            try {
+                const msg = await invoke('backup_database', { path: savePath });
+                console.log('[Backup] Success:', msg);
+                await showAlert('백업 완료', msg);
+                loadBackups();
+            } finally {
+                unlisten();
+            }
         } catch (err) {
-            showAlert('백업 실패', err);
+            console.error('[Backup] Error:', err);
+            const errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+            showAlert('백업 실패', errorMsg);
         } finally {
             setIsLoading(false);
+            setShowProgress(false);
+            setBackupProgress({ progress: 0, message: '' });
         }
     };
 
@@ -94,13 +122,29 @@ const SettingsBackup = () => {
             if (!selected) return;
 
             setIsLoading(true);
-            const msg = await invoke('restore_database', { path: selected });
-            await showAlert('복구 완료', msg);
-            window.location.reload();
+            setShowProgress(true);
+            setOperationType('restore');
+            setBackupProgress({ progress: 0, message: '복구 준비 중...' });
+
+            // Listen for restore progress events
+            const unlisten = await listen('restore-progress', (event) => {
+                console.log('[Restore] Progress:', event.payload);
+                setBackupProgress(event.payload);
+            });
+
+            try {
+                const msg = await invoke('restore_database', { path: selected });
+                await showAlert('복구 완료', msg);
+                window.location.reload();
+            } finally {
+                unlisten();
+            }
         } catch (err) {
             showAlert('복구 실패', err);
         } finally {
             setIsLoading(false);
+            setShowProgress(false);
+            setBackupProgress({ progress: 0, message: '' });
         }
     };
 
@@ -190,6 +234,51 @@ const SettingsBackup = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Progress Overlay */}
+            {showProgress && (
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-[480px] max-w-[90%]">
+                        <div className="text-center mb-6">
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${operationType === 'backup' ? 'bg-indigo-100' : 'bg-purple-100'
+                                }`}>
+                                <span className={`material-symbols-rounded text-4xl animate-pulse ${operationType === 'backup' ? 'text-indigo-600' : 'text-purple-600'
+                                    }`}>
+                                    {operationType === 'backup' ? 'backup' : 'restore'}
+                                </span>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">
+                                {operationType === 'backup' ? '데이터 백업 진행 중' : '데이터 복구 진행 중'}
+                            </h3>
+                            <p className="text-sm text-slate-500">{backupProgress.message}</p>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden mb-3">
+                            <div
+                                className={`absolute top-0 left-0 h-full transition-all duration-300 ease-out ${operationType === 'backup'
+                                    ? 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+                                    : 'bg-gradient-to-r from-purple-500 to-purple-600'
+                                    }`}
+                                style={{ width: `${backupProgress.progress}%` }}
+                            />
+                        </div>
+
+                        {/* Percentage */}
+                        <div className="text-center">
+                            <span className={`text-2xl font-bold ${operationType === 'backup' ? 'text-indigo-600' : 'text-purple-600'
+                                }`}>
+                                {backupProgress.progress}%
+                            </span>
+                            {backupProgress.total > 0 && (
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {backupProgress.processed?.toLocaleString() || 0} / {backupProgress.total?.toLocaleString() || 0} 레코드
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Main Content */}
             <div className="flex-1 px-6 lg:px-8 min-[2000px]:px-12 pb-8 overflow-y-auto custom-scrollbar">
@@ -355,7 +444,7 @@ const SettingsBackup = () => {
                 </div>
             </div>
 
-            <style jsx>{`
+            <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }

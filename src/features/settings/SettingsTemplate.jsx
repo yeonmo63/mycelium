@@ -208,8 +208,8 @@ const SettingsTemplate = () => {
                                             key={scenario.id}
                                             onClick={() => setActiveScenario(scenario.id)}
                                             className={`w-full group flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all text-left ${isActive
-                                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'
-                                                    : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-indigo-600'
+                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'
+                                                : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-indigo-600'
                                                 }`}
                                         >
                                             <div className={`p-2 rounded-xl transition-all ${isActive ? 'bg-white/20' : 'bg-slate-50 group-hover:bg-indigo-50'
@@ -290,7 +290,7 @@ const SettingsTemplate = () => {
                 </div>
             </div>
 
-            <style jsx>{`
+            <style>{`
                 .custom-scrollbar::-webkit-scrollbar {
                     width: 6px;
                 }

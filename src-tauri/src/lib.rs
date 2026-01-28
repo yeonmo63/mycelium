@@ -4254,7 +4254,13 @@ async fn trigger_auto_backup(
         let backup_file_name = format!("auto_backup_{}.sql", timestamp);
         let backup_path = backup_dir.join(&backup_file_name);
 
-        match backup_database(state.clone(), backup_path.to_string_lossy().to_string()).await {
+        match backup_database(
+            app.clone(),
+            state.clone(),
+            backup_path.to_string_lossy().to_string(),
+        )
+        .await
+        {
             Ok(_) => {
                 DB_MODIFIED.store(false, Ordering::Relaxed);
 
@@ -4272,6 +4278,7 @@ async fn trigger_auto_backup(
                                         if ext_dir.exists() {
                                             let ext_backup_path = ext_dir.join(backup_file_name);
                                             let _ = backup_database(
+                                                app.clone(),
                                                 state.clone(),
                                                 ext_backup_path.to_string_lossy().to_string(),
                                             )
@@ -4442,7 +4449,13 @@ async fn check_daily_backup(
 
         // If today's backup doesn't exist, create it
         if !daily_path.exists() {
-            match backup_database(state.clone(), daily_path.to_string_lossy().to_string()).await {
+            match backup_database(
+                app.clone(),
+                state.clone(),
+                daily_path.to_string_lossy().to_string(),
+            )
+            .await
+            {
                 Ok(_) => {
                     // --- External Cloud Backup Branch ---
                     if let Ok(config_dir) = app.path().app_config_dir() {
@@ -4465,6 +4478,7 @@ async fn check_daily_backup(
                                                 let ext_backup_path =
                                                     ext_daily_dir.join(&daily_filename);
                                                 let _ = backup_database(
+                                                    app.clone(),
                                                     state.clone(),
                                                     ext_backup_path.to_string_lossy().to_string(),
                                                 )
@@ -4529,95 +4543,331 @@ struct BackupData {
 }
 
 #[tauri::command]
-async fn backup_database(state: State<'_, DbPool>, path: String) -> Result<String, String> {
+async fn backup_database(
+    app: tauri::AppHandle,
+    state: State<'_, DbPool>,
+    path: String,
+) -> Result<String, String> {
+    use std::io::Write;
+
+    println!("[Backup] Starting database backup to: {}", path);
     let pool = &*state;
 
-    // Fetch data from all tables
-    let users = sqlx::query_as::<_, User>("SELECT * FROM users")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let products = sqlx::query_as::<_, Product>("SELECT * FROM products")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let customers = sqlx::query_as::<_, Customer>("SELECT * FROM customers")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let customer_addresses =
-        sqlx::query_as::<_, CustomerAddress>("SELECT * FROM customer_addresses")
-            .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
-    let sales = sqlx::query_as::<_, Sales>("SELECT * FROM sales")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let events = sqlx::query_as::<_, Event>("SELECT * FROM event")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let schedules = sqlx::query_as::<_, Schedule>("SELECT * FROM schedules")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let company_info = sqlx::query_as::<_, CompanyInfo>("SELECT * FROM company_info")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let expenses = sqlx::query_as::<_, Expense>("SELECT * FROM expenses")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let purchases = sqlx::query_as::<_, Purchase>("SELECT * FROM purchases")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    let inventory_logs = sqlx::query_as::<_, InventoryLog>("SELECT * FROM inventory_logs")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let backup = BackupData {
-        version: "1.0".to_string(),
-        timestamp: chrono::Local::now().to_rfc3339(),
-        users,
-        products,
-        customers,
-        customer_addresses,
-        sales,
-        events,
-        schedules,
-        company_info,
-        expenses,
-        purchases,
-        consultations: vec![],
-        inventory_logs,
+    let emit_progress = |processed: i64, total: i64, message: &str| {
+        let progress = if total > 0 {
+            ((processed as f64 / total as f64) * 100.0) as i32
+        } else {
+            0
+        };
+        let _ = app.emit(
+            "backup-progress",
+            serde_json::json!({
+                "progress": progress,
+                "message": message,
+                "processed": processed,
+                "total": total
+            }),
+        );
     };
 
-    let json = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    emit_progress(0, 1, "데이터 개수 확인 중...");
+    println!("[Backup] Counting records...");
 
-    Ok(format!("백업이 완료되었습니다: {}", path))
+    // Count records
+    let count_users: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count users: {}", e))?;
+    let count_products: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM products")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count products: {}", e))?;
+    let count_customers: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM customers")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count customers: {}", e))?;
+    let count_addresses: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM customer_addresses")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count customer_addresses: {}", e))?;
+    let count_sales: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count sales: {}", e))?;
+    let count_events: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM event")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count events: {}", e))?;
+    let count_schedules: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM schedules")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count schedules: {}", e))?;
+    let count_company: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM company_info")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count company_info: {}", e))?;
+    let count_expenses: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM expenses")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count expenses: {}", e))?;
+    let count_purchases: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM purchases")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count purchases: {}", e))?;
+    let count_inventory: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM inventory_logs")
+        .fetch_one(pool)
+        .await
+        .map_err(|e| format!("Failed to count inventory_logs: {}", e))?;
+
+    let total_records = count_users.0
+        + count_products.0
+        + count_customers.0
+        + count_addresses.0
+        + count_sales.0
+        + count_events.0
+        + count_schedules.0
+        + count_company.0
+        + count_expenses.0
+        + count_purchases.0
+        + count_inventory.0;
+
+    println!(
+        "[Backup] Total records: {} (sales: {})",
+        total_records, count_sales.0
+    );
+
+    let mut processed = 0i64;
+    let batch_size = 10000i64; // Process 10k records at a time
+
+    // Open file for writing
+    let mut file =
+        std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
+
+    // Write JSON header
+    writeln!(file, "{{").map_err(|e| e.to_string())?;
+    writeln!(file, "  \"version\": \"1.0\",").map_err(|e| e.to_string())?;
+    writeln!(
+        file,
+        "  \"timestamp\": \"{}\",",
+        chrono::Local::now().to_rfc3339()
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Helper macro for batch processing table data
+    macro_rules! batch_table {
+        ($table:expr, $type:ty, $query:expr, $field:expr, $msg:expr, $count:expr) => {{
+            emit_progress(processed, total_records, $msg);
+            write!(file, "  \"{}\": [", $field).map_err(|e| e.to_string())?;
+
+            let mut offset = 0i64;
+            let mut first_record = true;
+
+            while offset < $count {
+                let limit = batch_size.min($count - offset);
+                let query = format!("{} LIMIT {} OFFSET {}", $query, limit, offset);
+
+                let batch: Vec<$type> =
+                    sqlx::query_as(&query).fetch_all(pool).await.map_err(|e| {
+                        format!("Failed to fetch {} (offset {}): {}", $table, offset, e)
+                    })?;
+
+                for record in batch {
+                    if !first_record {
+                        write!(file, ",").map_err(|e| e.to_string())?;
+                    }
+                    first_record = false;
+
+                    let json = serde_json::to_string(&record).map_err(|e| e.to_string())?;
+                    write!(file, "\n    {}", json).map_err(|e| e.to_string())?;
+
+                    processed += 1;
+                }
+
+                offset += limit;
+                emit_progress(
+                    processed,
+                    total_records,
+                    &format!("{} ({}/{})", $msg, processed, total_records),
+                );
+            }
+
+            writeln!(file, "\n  ],").map_err(|e| e.to_string())?;
+        }};
+    }
+
+    // Process each table in batches
+    batch_table!(
+        "users",
+        User,
+        "SELECT * FROM users",
+        "users",
+        "사용자 정보 백업 중",
+        count_users.0
+    );
+    batch_table!(
+        "products",
+        Product,
+        "SELECT * FROM products",
+        "products",
+        "상품 정보 백업 중",
+        count_products.0
+    );
+    batch_table!(
+        "customers",
+        Customer,
+        "SELECT * FROM customers",
+        "customers",
+        "고객 정보 백업 중",
+        count_customers.0
+    );
+    batch_table!(
+        "customer_addresses",
+        CustomerAddress,
+        "SELECT * FROM customer_addresses",
+        "customer_addresses",
+        "배송지 정보 백업 중",
+        count_addresses.0
+    );
+    batch_table!(
+        "sales",
+        Sales,
+        "SELECT * FROM sales",
+        "sales",
+        "판매 내역 백업 중",
+        count_sales.0
+    );
+    batch_table!(
+        "event",
+        Event,
+        "SELECT * FROM event",
+        "events",
+        "행사 정보 백업 중",
+        count_events.0
+    );
+    batch_table!(
+        "schedules",
+        Schedule,
+        "SELECT * FROM schedules",
+        "schedules",
+        "일정 정보 백업 중",
+        count_schedules.0
+    );
+    batch_table!(
+        "company_info",
+        CompanyInfo,
+        "SELECT * FROM company_info",
+        "company_info",
+        "회사 정보 백업 중",
+        count_company.0
+    );
+    batch_table!(
+        "expenses",
+        Expense,
+        "SELECT * FROM expenses",
+        "expenses",
+        "지출 내역 백업 중",
+        count_expenses.0
+    );
+    batch_table!(
+        "purchases",
+        Purchase,
+        "SELECT * FROM purchases",
+        "purchases",
+        "구매 내역 백업 중",
+        count_purchases.0
+    );
+    batch_table!(
+        "inventory_logs",
+        InventoryLog,
+        "SELECT * FROM inventory_logs",
+        "inventory_logs",
+        "재고 로그 백업 중",
+        count_inventory.0
+    );
+
+    // Write consultations (empty) and close JSON
+    writeln!(file, "  \"consultations\": []").map_err(|e| e.to_string())?;
+    writeln!(file, "}}").map_err(|e| e.to_string())?;
+
+    emit_progress(total_records, total_records, "백업 완료!");
+    let success_msg = format!("백업이 완료되었습니다: {} ({} 레코드)", path, total_records);
+    println!("[Backup] {}", success_msg);
+    Ok(success_msg)
 }
 
 #[tauri::command]
-async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<String, String> {
+async fn restore_database(
+    app: tauri::AppHandle,
+    state: State<'_, DbPool>,
+    path: String,
+) -> Result<String, String> {
+    println!("[Restore] Starting database restore from: {}", path);
     let pool = &*state;
 
+    // Progress tracking based on actual record counts
+    let emit_progress = |processed: i64, total: i64, message: &str| {
+        let progress = if total > 0 {
+            ((processed as f64 / total as f64) * 100.0) as i32
+        } else {
+            0
+        };
+        let _ = app.emit(
+            "restore-progress",
+            serde_json::json!({
+                "progress": progress,
+                "message": message,
+                "processed": processed,
+                "total": total
+            }),
+        );
+    };
+
+    emit_progress(0, 1, "백업 파일 읽는 중...");
     let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let backup: BackupData = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+
+    // Calculate total records to restore
+    let total_records = backup.users.len() as i64
+        + backup.company_info.len() as i64
+        + backup.products.len() as i64
+        + backup.customers.len() as i64
+        + backup.customer_addresses.len() as i64
+        + backup.events.len() as i64
+        + backup.sales.len() as i64
+        + backup.schedules.len() as i64
+        + backup.expenses.len() as i64
+        + backup.purchases.len() as i64
+        + backup.inventory_logs.len() as i64;
+
+    println!(
+        "[Restore] Total records to restore: {} (users: {}, company: {}, products: {}, customers: {}, addresses: {}, events: {}, sales: {}, schedules: {}, expenses: {}, purchases: {}, inventory: {})",
+        total_records,
+        backup.users.len(),
+        backup.company_info.len(),
+        backup.products.len(),
+        backup.customers.len(),
+        backup.customer_addresses.len(),
+        backup.events.len(),
+        backup.sales.len(),
+        backup.schedules.len(),
+        backup.expenses.len(),
+        backup.purchases.len(),
+        backup.inventory_logs.len()
+    );
+
+    let mut processed = 0i64;
 
     // Start Transaction
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
 
+    emit_progress(processed, total_records, "기존 데이터 삭제 중...");
     // Truncate tables (Cascading)
     sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, inventory_logs RESTART IDENTITY CASCADE")
         .execute(&mut *tx)
         .await
         .map_err(|e| format!("Truncate failed: {}", e))?;
 
+    emit_progress(processed, total_records, "사용자 정보 복구 중...");
     // Insert Users
     for u in backup.users {
         sqlx::query(
@@ -4630,15 +4880,19 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         .execute(&mut *tx)
         .await
         .map_err(|e| format!("Restore users failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "회사 정보 복구 중...");
     // Insert Company Info
     for c in backup.company_info {
         sqlx::query("INSERT INTO company_info (company_name, representative_name, business_reg_number, phone_number, address) VALUES ($1, $2, $3, $4, $5)")
             .bind(c.company_name).bind(c.representative_name).bind(c.business_reg_number).bind(c.phone_number).bind(c.address)
             .execute(&mut *tx).await.map_err(|e| format!("Restore company_info failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "상품 정보 복구 중...");
     // Insert Products
     for p in backup.products {
         sqlx::query(
@@ -4649,8 +4903,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
          .bind(p.product_id).bind(p.product_name).bind(p.specification).bind(p.unit_price)
          .bind(p.stock_quantity).bind(p.safety_stock).bind(p.material_id).bind(p.material_ratio).bind(p.item_type)
          .execute(&mut *tx).await.map_err(|e| format!("Restore products failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "고객 정보 복구 중...");
     // Insert Customers
     for c in backup.customers {
         sqlx::query(
@@ -4663,8 +4919,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         .bind(c.pref_product_type).bind(c.pref_package_type).bind(c.family_type).bind(c.health_concern).bind(c.sub_interest).bind(c.purchase_cycle)
         .bind(c.memo).bind(c.join_date).bind(c.created_at)
         .execute(&mut *tx).await.map_err(|e| format!("Restore customers failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "배송지 정보 복구 중...");
     // Insert Customer Addresses
     for ca in backup.customer_addresses {
         sqlx::query(
@@ -4674,8 +4932,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         .bind(ca.customer_id).bind(ca.address_alias).bind(ca.recipient_name).bind(ca.mobile_number)
         .bind(ca.zip_code).bind(ca.address_primary).bind(ca.address_detail).bind(ca.is_default).bind(ca.shipping_memo).bind(ca.created_at)
         .execute(&mut *tx).await.map_err(|e| format!("Restore customer_addresses failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "행사 정보 복구 중...");
     // Insert Events
     for e in backup.events {
         sqlx::query(
@@ -4685,8 +4945,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         .bind(e.event_id).bind(e.event_name).bind(e.organizer).bind(e.manager_name).bind(e.manager_contact)
         .bind(e.location_address).bind(e.location_detail).bind(e.start_date).bind(e.end_date).bind(e.memo)
         .execute(&mut *tx).await.map_err(|e| format!("Restore events failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "판매 내역 복구 중...");
     // Insert Sales
     for s in backup.sales {
         sqlx::query(
@@ -4697,8 +4959,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         .bind(s.quantity).bind(s.total_amount).bind(s.status).bind(s.order_date).bind(s.memo)
         .bind(s.shipping_name).bind(s.shipping_zip_code).bind(s.shipping_address_primary).bind(s.shipping_address_detail).bind(s.shipping_mobile_number).bind(s.shipping_date).bind(s.courier_name).bind(s.tracking_number)
         .execute(&mut *tx).await.map_err(|e| format!("Restore sales failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "일정 정보 복구 중...");
     // Insert Schedules
     for s in backup.schedules {
         sqlx::query(
@@ -4706,8 +4970,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
         )
         .bind(s.title).bind(s.start_time).bind(s.end_time).bind(s.description)
         .execute(&mut *tx).await.map_err(|e| format!("Restore schedules failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "지출 내역 복구 중...");
     // Insert Expenses
     for e in backup.expenses {
         sqlx::query(
@@ -4715,8 +4981,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
          )
          .bind(e.expense_date).bind(e.category).bind(e.memo).bind(e.amount).bind(e.payment_method)
          .execute(&mut *tx).await.map_err(|e| format!("Restore expenses failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "구매 내역 복구 중...");
     // Insert Purchases
     for p in backup.purchases {
         sqlx::query(
@@ -4724,8 +4992,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
          )
          .bind(p.purchase_date).bind(p.vendor_id).bind(p.item_name).bind(p.quantity).bind(p.unit_price).bind(p.total_amount).bind(p.memo).bind(p.inventory_synced).bind(p.material_item_id)
          .execute(&mut *tx).await.map_err(|e| format!("Restore purchases failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "재고 로그 복구 중...");
     // Insert Inventory Logs
     for l in backup.inventory_logs {
         sqlx::query(
@@ -4733,8 +5003,10 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
          )
          .bind(l.product_name).bind(l.specification).bind(l.change_type).bind(l.change_quantity).bind(l.current_stock).bind(l.reference_id).bind(l.memo).bind(l.created_at)
          .execute(&mut *tx).await.map_err(|e| format!("Restore inventory_logs failed: {}", e))?;
+        processed += 1;
     }
 
+    emit_progress(processed, total_records, "시퀀스 재설정 중...");
     // Fix Sequence IDs
     let sequences = vec![
         "products_product_id_seq",
@@ -4778,9 +5050,14 @@ async fn restore_database(state: State<'_, DbPool>, path: String) -> Result<Stri
             .map_err(|e| format!("Seq reset failed {}: {}", seq, e))?;
     }
 
+    emit_progress(total_records, total_records, "변경사항 저장 중...");
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    Ok("데이터 복구가 완료되었습니다. (재시작 권장)".to_string())
+    emit_progress(total_records, total_records, "복구 완료!");
+    Ok(format!(
+        "데이터 복구가 완료되었습니다: {} 레코드 (재시작 권장)",
+        total_records
+    ))
 }
 
 #[tauri::command]

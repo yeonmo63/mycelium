@@ -79,18 +79,9 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
     // Execute setup block
     let _ = sqlx::raw_sql(base_setup).execute(pool).await;
 
-    // 1. Check if tables exist before running full schema
-    let table_exists: (bool,) = sqlx::query_as(
-        "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')",
-    )
-    .fetch_one(pool)
-    .await
-    .unwrap_or((false,));
-
-    if !table_exists.0 {
-        let schema = include_str!("schema.sql");
-        let _ = sqlx::raw_sql(schema).execute(pool).await;
-    }
+    // 1. Ensure all tables exist (Idempotent Schema Init)
+    let schema = include_str!("schema.sql");
+    let _ = sqlx::raw_sql(schema).execute(pool).await;
 
     // 2. Initial Seeds
     let user_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
@@ -213,18 +204,30 @@ pub struct Sales {
     pub unit_price: i32,
     pub quantity: i32,
     pub total_amount: i32,
+    #[sqlx(default)]
     pub discount_rate: Option<i32>,
+    #[sqlx(default)]
     pub courier_name: Option<String>,
+    #[sqlx(default)]
     pub tracking_number: Option<String>,
+    #[sqlx(default)]
     pub memo: Option<String>,
 
+    #[sqlx(default)]
     pub shipping_name: Option<String>,
+    #[sqlx(default)]
     pub shipping_zip_code: Option<String>,
+    #[sqlx(default)]
     pub shipping_address_primary: Option<String>,
+    #[sqlx(default)]
     pub shipping_address_detail: Option<String>,
+    #[sqlx(default)]
     pub shipping_mobile_number: Option<String>,
+    #[sqlx(default)]
     pub shipping_date: Option<NaiveDate>,
+    #[sqlx(default)]
     pub paid_amount: Option<i32>,
+    #[sqlx(default)]
     pub payment_status: Option<String>,
 }
 
@@ -265,22 +268,36 @@ pub struct Customer {
     pub address_detail: Option<String>,
 
     // CRM Fields
+    #[sqlx(default)]
     pub anniversary_date: Option<NaiveDate>,
+    #[sqlx(default)]
     pub anniversary_type: Option<String>,
+    #[sqlx(default)]
     pub marketing_consent: Option<bool>,
+    #[sqlx(default)]
     pub acquisition_channel: Option<String>,
 
     // Preferences
+    #[sqlx(default)]
     pub pref_product_type: Option<String>,
+    #[sqlx(default)]
     pub pref_package_type: Option<String>,
+    #[sqlx(default)]
     pub family_type: Option<String>,
+    #[sqlx(default)]
     pub health_concern: Option<String>,
+    #[sqlx(default)]
     pub sub_interest: Option<bool>,
+    #[sqlx(default)]
     pub purchase_cycle: Option<String>,
 
+    #[sqlx(default)]
     pub memo: Option<String>,
+    #[sqlx(default)]
     pub current_balance: Option<i32>,
+    #[sqlx(default)]
     pub join_date: Option<NaiveDate>,
+    #[sqlx(default)]
     pub created_at: Option<NaiveDateTime>,
 }
 
@@ -367,11 +384,17 @@ pub struct Product {
     pub product_name: String,
     pub specification: Option<String>,
     pub unit_price: i32,
+    #[sqlx(default)]
     pub stock_quantity: Option<i32>,
+    #[sqlx(default)]
     pub safety_stock: Option<i32>,
+    #[sqlx(default)]
     pub cost_price: Option<i32>,
+    #[sqlx(default)]
     pub material_id: Option<i32>,
+    #[sqlx(default)]
     pub material_ratio: Option<f64>,
+    #[sqlx(default)]
     pub item_type: Option<String>,
 }
 

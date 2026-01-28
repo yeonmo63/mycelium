@@ -118,7 +118,7 @@ function AppContent() {
     const setup = async () => {
       try {
         console.log('App starting setup...');
-        // Force fresh login on every startup
+        // Force fresh login on every startup - only once on mount
         sessionStorage.removeItem('isLoggedIn');
         setIsLoggedIn(false);
 
@@ -130,7 +130,7 @@ function AppContent() {
         const htmlLoading = document.querySelector('.app-loading');
         if (htmlLoading) {
           htmlLoading.style.opacity = '0';
-          setTimeout(() => htmlLoading.remove(), 400); // Wait only for the CSS transition
+          setTimeout(() => htmlLoading.remove(), 400);
         }
 
         unlisten = await listen('window_close_requested', async () => {
@@ -147,8 +147,14 @@ function AppContent() {
     };
 
     setup();
+    return () => {
+      if (unlisten) unlisten();
+      window.removeEventListener('app-logout', handleLogout);
+    };
+  }, []); // Revert to empty array to run only once on mount
 
-    // --- Auto Backup Logic ---
+  // --- Auto Backup Logic (Separated) ---
+  useEffect(() => {
     let backupInterval;
     if (isLoggedIn) {
       // Check every 5 minutes and backup if modified
@@ -156,13 +162,11 @@ function AppContent() {
         invoke('trigger_auto_backup').catch(err => console.error("Auto backup failed:", err));
       }, 5 * 60 * 1000);
     }
-
     return () => {
-      if (unlisten) unlisten();
       if (backupInterval) clearInterval(backupInterval);
-      window.removeEventListener('app-logout', handleLogout);
     };
-  }, [isLoggedIn]); // Re-run when login status changes
+  }, [isLoggedIn]);
+
 
   // Premium Initial Loading Screen (React State)
   if (isConfigured === null) {
