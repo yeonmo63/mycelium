@@ -5,6 +5,7 @@ import { Chart, registerables } from 'chart.js';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 Chart.register(...registerables);
 
@@ -241,7 +242,7 @@ const Dashboard = () => {
             const prompt = `당신은 'CS 매니저'의 마케팅 전문가입니다. 
 고객: ${customer.customer_name}, 마지막 상품: ${customer.last_product}, 예상 주기 도달.
 재구매 유도 문구를 친절하게 작성해주세요.`;
-            const draft = await invoke('call_gemini_ai', { prompt });
+            const draft = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
             if (await showConfirm("AI 추천 문구", draft + "\n\n이 문구를 복사하고 전송 화면으로 이동할까요?")) {
                 navigator.clipboard.writeText(draft);
                 window.__SMS_DRAFT_CONTENT__ = draft;
@@ -249,7 +250,10 @@ const Dashboard = () => {
                 navigate('/customer/sms');
             }
         } catch (e) {
-            showAlert("오류", "문구 생성 실패: " + e);
+            // Error already handled by invokeAI if it's a quota error
+            if (!e.message?.includes('AI_QUOTA_EXCEEDED')) {
+                showAlert("오류", "문구 생성 실패: " + e);
+            }
         }
     };
 

@@ -1041,6 +1041,22 @@ async fn call_gemini_ai_internal(api_key: &str, prompt: &str) -> Result<String, 
         } else {
             let status = resp.status();
             let error_text = resp.text().await.unwrap_or_default();
+
+            // Check for quota/rate limit errors with user-friendly messages
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                return Err("AI_QUOTA_EXCEEDED: Gemini AI 사용 한도를 초과했습니다.\n\n일일 무료 한도가 소진되었거나, 분당 요청 제한에 도달했습니다.\n잠시 후 다시 시도하거나, API 키 설정에서 유료 플랜으로 업그레이드하세요.".to_string());
+            }
+
+            if status == reqwest::StatusCode::FORBIDDEN {
+                // Check if error message contains quota-related keywords
+                if error_text.contains("quota")
+                    || error_text.contains("limit")
+                    || error_text.contains("exceeded")
+                {
+                    return Err("AI_QUOTA_EXCEEDED: Gemini AI 할당량이 초과되었습니다.\n\nAPI 키의 사용 한도가 소진되었습니다.\nGoogle AI Studio에서 사용량을 확인하거나, 새로운 API 키를 발급받으세요.".to_string());
+                }
+            }
+
             errors.push(format!(
                 "API Error ({}): {} - {}",
                 model, status, error_text
