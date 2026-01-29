@@ -26,7 +26,7 @@ use sqlx::ConnectOptions;
 use sqlx::Connection;
 use sqlx::FromRow;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use tauri::{Emitter, Manager, State};
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
@@ -4899,32 +4899,33 @@ async fn backup_database_internal(
     let mut processed = 0i64;
 
     let file = std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
-    let mut encoder = GzEncoder::new(file, Compression::default());
+    let encoder = GzEncoder::new(file, Compression::fast());
+    let mut writer = BufWriter::with_capacity(1024 * 1024, encoder);
 
-    writeln!(encoder, "{{").map_err(|e| e.to_string())?;
-    writeln!(encoder, "  \"version\": \"2.1\",").map_err(|e| e.to_string())?;
+    writeln!(writer, "{{").map_err(|e| e.to_string())?;
+    writeln!(writer, "  \"version\": \"2.1\",").map_err(|e| e.to_string())?;
     writeln!(
-        encoder,
+        writer,
         "  \"timestamp\": \"{}\",",
         chrono::Local::now().to_rfc3339()
     )
     .map_err(|e| e.to_string())?;
-    writeln!(encoder, "  \"is_incremental\": {},", since.is_some()).map_err(|e| e.to_string())?;
+    writeln!(writer, "  \"is_incremental\": {},", since.is_some()).map_err(|e| e.to_string())?;
     if let Some(s) = since {
         writeln!(
-            encoder,
+            writer,
             "  \"since\": \"{}\",",
             s.format("%Y-%m-%dT%H:%M:%S")
         )
         .map_err(|e| e.to_string())?;
     } else {
-        writeln!(encoder, "  \"since\": null,").map_err(|e| e.to_string())?;
+        writeln!(writer, "  \"since\": null,").map_err(|e| e.to_string())?;
     }
 
     macro_rules! batch_table_internal {
         ($table:expr, $type:ty, $query:expr, $field:expr, $msg:expr, $count:expr, $time_col:expr) => {{
             emit_progress(processed, total_records, $msg);
-            write!(encoder, "  \"{}\": [", $field).map_err(|e| e.to_string())?;
+            write!(writer, "  \"{}\": [", $field).map_err(|e| e.to_string())?;
             let mut first_record = true;
             let base_query = if let Some(s) = since {
                 format!(
@@ -4944,15 +4945,15 @@ async fn backup_database_internal(
                 let record = record.map_err(|e| format!("Fetch from {} failed: {}", $table, e))?;
 
                 if !first_record {
-                    write!(encoder, ",").map_err(|e| e.to_string())?;
+                    write!(writer, ",").map_err(|e| e.to_string())?;
                 }
                 first_record = false;
 
-                let json = serde_json::to_string(&record).map_err(|e| e.to_string())?;
-                write!(encoder, "\n    {}", json).map_err(|e| e.to_string())?;
+                write!(writer, "\n    ").map_err(|e| e.to_string())?;
+                serde_json::to_writer(&mut writer, &record).map_err(|e| e.to_string())?;
                 processed += 1;
 
-                if processed % 100 == 0 {
+                if processed % 10000 == 0 {
                     emit_progress(
                         processed,
                         total_records,
@@ -4961,7 +4962,7 @@ async fn backup_database_internal(
                 }
             }
             emit_progress(processed, total_records, $msg);
-            writeln!(encoder, "\n  ],").map_err(|e| e.to_string())?;
+            writeln!(writer, "\n  ],").map_err(|e| e.to_string())?;
         }};
     }
 
@@ -5095,11 +5096,16 @@ async fn backup_database_internal(
             "deleted_at"
         );
     } else {
-        write!(encoder, "  \"deletions\": []").map_err(|e| e.to_string())?;
+        write!(writer, "  \"deletions\": []").map_err(|e| e.to_string())?;
     }
 
-    writeln!(encoder, "  \"backup_complete\": true").map_err(|e| e.to_string())?;
-    writeln!(encoder, "}}").map_err(|e| e.to_string())?;
+    writeln!(writer, "  \"backup_complete\": true").map_err(|e| e.to_string())?;
+    writeln!(writer, "}}").map_err(|e| e.to_string())?;
+
+    // Flush the buffer and finish compression
+    let encoder = writer
+        .into_inner()
+        .map_err(|e| format!("Failed to flush buffer: {}", e))?;
     encoder
         .finish()
         .map_err(|e| format!("Failed to finish compression: {}", e))?;
