@@ -1,0 +1,21 @@
+﻿cargo :     Blocking waitin
+g for file lock on build di
+rectory
+At line:1 char:1
++ cargo check --manifest-pa
+th src-tauri/Cargo.toml --m
+essage-format=sho ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (     
+   Blocking wa...build d   
+ irectory:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+    Finished `dev` profile 
+[unoptimized + debuginfo] t
+arget(s) in 1m 23s

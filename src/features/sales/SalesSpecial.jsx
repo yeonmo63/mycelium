@@ -294,8 +294,8 @@ const SalesSpecial = () => {
                             <span className="w-6 h-1 bg-indigo-600 rounded-full"></span>
                             <span className="text-[9px] font-black tracking-[0.2em] text-indigo-600 uppercase">Special Event Sales</span>
                         </div>
-                        <h1 className="text-3xl font-bold text-slate-700 tracking-tight" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
-                            특판 행사 접수 <span className="text-slate-400 font-normal ml-2 text-xl">Event Sales</span>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                            특판 행사 접수 <span className="text-slate-300 font-light ml-1 text-xl">Event Sales</span>
                         </h1>
                     </div>
                 </div>

@@ -1,0 +1,637 @@
+﻿cargo : warning: unused imp
+ort: `BufReader`
+At line:1 char:1
++ cargo check --manifest-pa
+th src-tauri/Cargo.toml > w
+arnings.txt 2>&1; ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (war  
+  ning: unused import: `   
+ BufReader`:String) [],    
+ RemoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+  --> src\lib.rs:29:24
+   |
+29 | use std::io::{BufRead,
+ BufReader, BufWriter, Read
+, Write};
+   |                       
+ ^^^^^^^^^
+   |
+   = note: `#[warn(unused_i
+mports)]` (part of `#[warn(
+unused)]`) on by default
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5238 | /     restore_table!
+("users", User, "사용자 정보 복구 
+중", u, t, {
+5239 | |         sqlx::quer
+y("INSERT INTO users (id, u
+sername, password_hash, rol
+e, created_at, updated_at) 
+VALUES ($1, $2, $3, $4, $5,
+ $6) ON CON...
+5240 | |             .bind(
+u.id).bind(u.username).bind
+(u.password_hash).bind(u.ro
+le).bind(u.created_at).bind
+(u.updated_at)
+5241 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5242 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: `#[warn(unused
+_mut)]` (part of `#[warn(un
+used)]`) on by default
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5245 | /     restore_table!
+("products", Product, "상품 정
+보 복구 중", p, t, {
+5246 | |         sqlx::quer
+y("INSERT INTO products (pr
+oduct_id, product_name, spe
+cification, unit_price, sto
+ck_quantity, safety_stock, 
+cost_price,...
+5247 | |              VALUE
+S ($1,$2,$3,$4,$5,$6,$7,$8,
+$9,$10,$11) 
+5248 | |              ON CO
+NFLICT (product_id) DO UPDA
+TE SET product_name=EXCLUDE
+D.product_name, updated_at=
+EXCLUDED.updated_at")
+5249 | |             .bind(
+p.product_id).bind(p.produc
+t_name).bind(p.specificatio
+n).bind(p.unit_price).bind(
+p.stock_quantity).bind(p.sa
+fety_stock)...
+5250 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5251 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5254 | /     restore_table!
+("customers", Customer, "고객
+ 정보 복구 중", c, t, {
+5255 | |         sqlx::quer
+y("INSERT INTO customers (c
+ustomer_id, customer_name, 
+mobile_number, membership_l
+evel, phone_number, email, 
+zip_code, a...
+5256 | |              VALUE
+S ($1,$2,$3,$4,$5,$6,$7,$8,
+$9,$10,$11,$12,$13,$14,$15,
+$16,$17,$18,$19,$20,$21,$22
+,$23,$24) 
+5257 | |              ON CO
+NFLICT (customer_id) DO UPD
+ATE SET customer_name=EXCLU
+DED.customer_name, updated_
+at=EXCLUDED.updated_at")
+5258 | |             .bind(
+c.customer_id).bind(c.custo
+mer_name).bind(c.mobile_num
+ber).bind(c.membership_leve
+l).bind(c.phone_number).bin
+d(c.email)....
+5259 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5260 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5263 | /     restore_table!
+(
+5264 | |         "customer_
+addresses",
+5265 | |         CustomerAd
+dress,
+5266 | |         "배송지 정보 복구
+ 중",
+...    |
+5276 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5279 | /     restore_table!
+("sales", Sales, "판매 내역 복구 
+중", s, t, {
+5280 | |         sqlx::quer
+y("INSERT INTO sales (sales
+_id, customer_id, customer_
+name, customer_mobile, cust
+omer_address, status, order
+_date, prod...
+5281 | |              VALUE
+S ($1,$2,$3,$4,$5,$6,$7,$8,
+$9,$10,$11,$12,$13,$14,$15,
+$16,$17,$18,$19,$20,$21,$22
+,$23,$24,$25) 
+5282 | |              ON CO
+NFLICT (sales_id) DO UPDATE
+ SET status=EXCLUDED.status
+, updated_at=EXCLUDED.updat
+ed_at")
+5283 | |             .bind(
+&s.sales_id).bind(&s.custom
+er_id).bind(&s.customer_nam
+e).bind(&s.customer_mobile)
+.bind(&s.customer_address).
+bind(&s.sta...
+5284 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5285 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5288 | /     restore_table!
+("events", Event, "행사 정보 복구
+ 중", e, t, {
+5289 | |         sqlx::quer
+y("INSERT INTO event (event
+_id, event_name, organizer,
+ manager_name, manager_cont
+act, location_address, loca
+tion_detail...
+5290 | |             .bind(
+e.event_id).bind(e.event_na
+me).bind(e.organizer).bind(
+e.manager_name).bind(e.mana
+ger_contact).bind(e.locatio
+n_address)....
+5291 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5292 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5295 | /     restore_table!
+("schedules", Schedule, "일정
+ 정보 복구 중", s, t, {
+5296 | |         sqlx::quer
+y("INSERT INTO schedules (s
+chedule_id, title, descript
+ion, start_time, end_time, 
+status, created_at, updated
+_at) VALUES...
+5297 | |             .bind(
+s.schedule_id).bind(s.title
+).bind(s.description).bind(
+s.start_time).bind(s.end_ti
+me).bind(s.status).bind(s.c
+reated_at)....
+5298 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5299 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5302 | /     restore_table!
+(
+5303 | |         "company_i
+nfo",
+5304 | |         CompanyInf
+o,
+5305 | |         "회사 정보 복구 
+중",
+...    |
+5313 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5316 | /     restore_table!
+("expenses", Expense, "지출 내
+역 복구 중", e, t, {
+5317 | |         sqlx::quer
+y("INSERT INTO expenses (ex
+pense_id, expense_date, cat
+egory, memo, amount, paymen
+t_method, created_at, updat
+ed_at) VALU...
+5318 | |             .bind(
+e.expense_id).bind(e.expens
+e_date).bind(e.category).bi
+nd(e.memo).bind(e.amount).b
+ind(e.payment_method).bind(
+e.created_a...
+5319 | |             .execu
+te(&mut **t).await.map_err(
+|e| e.to_string())?;
+5320 | |     });
+     | |______- in this mac
+ro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5323 | /     restore_table!
+(
+5324 | |         "purchases
+",
+5325 | |         PurchaseBa
+ckup,
+5326 | |         "구매 내역 복구 
+중",
+...    |
+5334 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5337 | /     restore_table!
+(
+5338 | |         "consultat
+ions",
+5339 | |         Consultati
+on,
+5340 | |         "상담 내역 복구 
+중",
+...    |
+5348 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5351 | /     restore_table!
+(
+5352 | |         "sales_cla
+ims",
+5353 | |         SalesClaim
+,
+5354 | |         "클레임 내역 복구
+ 중",
+...    |
+5362 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5365 | /     restore_table!
+(
+5366 | |         "inventory
+_logs",
+5367 | |         InventoryL
+og,
+5368 | |         "재고 로그 복구 
+중",
+...    |
+5376 | |     );
+     | |_____- in this macr
+o invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: variable does not 
+need to be mutable
+    --> src\lib.rs:5217:21
+     |
+5217 |                   le
+t mut de = serde_json::Dese
+rializer::from_reader(&mut 
+reader);
+     |                     
+  ----^^
+     |                     
+  |
+     |                     
+  help: remove this `mut`
+...
+5380 | /         restore_ta
+ble!("deletions", DeletionL
+og, "삭제 이력 반영 중", d, t, {
+5381 | |             let id
+_col = match d.table_name.a
+s_str() {
+5382 | |                 "s
+ales" => "sales_id",
+5383 | |                 "p
+roducts" => "product_id",
+...    |
+5394 | |             .ok();
+5395 | |         });
+     | |__________- in this
+ macro invocation
+     |
+     = note: this warning o
+riginates in the macro `res
+tore_table` (in Nightly bui
+lds, run with -Z macro-back
+trace for more info)
+
+warning: unused variable: `
+file`
+    --> src\lib.rs:5159:13
+     |
+5159 |         let file = s
+td::fs::File::open(&path).m
+ap_err(|e| e.to_string())?;
+     |             ^^^^ hel
+p: if this is intentional, 
+prefix it with an underscor
+e: `_file`
+     |
+     = note: `#[warn(unused
+_variables)]` (part of `#[w
+arn(unused)]`) on by defaul
+t
+
+warning: struct `BackupData
+` is never constructed
+    --> src\lib.rs:4600:8
+     |
+4600 | struct BackupData {
+     |        ^^^^^^^^^^
+     |
+     = note: `#[warn(dead_c
+ode)]` (part of `#[warn(unu
+sed)]`) on by default
+
+warning: `csi-manager` (lib
+) generated 17 warnings (ru
+n `cargo fix --lib -p csi-m
+anager` to apply 16 suggest
+ions)
+    Finished `dev` profile 
+[unoptimized + debuginfo] t
+arget(s) in 1.57s

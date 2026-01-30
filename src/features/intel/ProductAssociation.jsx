@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as d3 from 'd3';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 /**
  * ProductAssociation.jsx
@@ -254,16 +255,11 @@ const ProductAssociation = () => {
                 };
             } else {
                 setAiLoadingStep('최적의 마케팅 전략 수립 중...');
-                proposal = await window.__TAURI__.core.invoke('get_ai_marketing_proposal', { p1, p2 });
+                proposal = await invokeAI(showAlert, 'get_ai_marketing_proposal', { p1, p2 });
             }
             setAiResult(proposal);
         } catch (e) {
             console.error("AI Promo Error:", e);
-            if (e.toString().includes('429') || e.toString().includes('Quota')) {
-                showAlert("오류", "AI 서버 사용량이 많아 분석을 진행할 수 없습니다. 잠시 후 다시 시도해주세요.");
-            } else {
-                showAlert("오류", "AI 분석 실패: " + e);
-            }
             setShowStrategyModal(false);
         } finally {
             setIsAiLoading(false);
@@ -283,18 +279,14 @@ const ProductAssociation = () => {
                 await new Promise(r => setTimeout(r, 1500));
                 detail = "### 1. 목표 설정\n\n이번 캠페인의 목표는...\n\n### 2. 실행 방안\n\n- **소셜 미디어**: 인스타그램 릴스를 활용하여...\n- **매장 디스플레이**: 입구 쪽에 배치하여...\n\n| 구분 | 내용 | 일정 |\n|---|---|---|\n| 기획 | 패키지 디자인 | 1주차 |\n| 실행 | 프로모션 시작 | 2주차 |";
             } else {
-                detail = await window.__TAURI__.core.invoke('get_ai_detailed_plan', {
+                detail = await invokeAI(showAlert, 'get_ai_detailed_plan', {
                     planType, p1, p2, strategyTitle
                 });
             }
             setDetailContent(parseMarkdown(detail));
         } catch (e) {
             console.error("Detailed Plan Error:", e);
-            if (e.toString().includes('429')) {
-                setDetailContent(<div className="text-orange-600 font-bold p-4">AI 서버 사용량이 많아 상세 계획을 생성할 수 없습니다.</div>);
-            } else {
-                setDetailContent(<div className="text-red-600 p-4">분석 실패: {e}</div>);
-            }
+            setDetailContent(<div className="text-red-600 p-4">분석 실패: {e}</div>);
         } finally {
             setIsDetailLoading(false);
         }

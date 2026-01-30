@@ -776,12 +776,12 @@ const SalesReception = () => {
                                         className="w-48 h-10 rounded-lg border-slate-200 bg-white text-[14px] font-bold text-slate-900 shadow-sm focus:ring-2 focus:ring-indigo-500 px-3 py-1 transition-all"
                                     >
                                         <option value="basic">고객 주소</option>
-                                        <option value="new">직접 입력</option>
                                         {addresses.map(a => (
-                                            <option key={a.address_id} value={`addr_${a.address_id} `}>
+                                            <option key={a.address_id} value={`addr_${a.address_id}`}>
                                                 {a.is_default ? '기본 배송지' : (a.address_alias || a.address_primary)}
                                             </option>
                                         ))}
+                                        <option value="new">직접 입력</option>
                                     </select>
                                 </div>
                             </div>

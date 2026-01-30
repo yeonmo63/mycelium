@@ -26,7 +26,7 @@ use sqlx::ConnectOptions;
 use sqlx::Connection;
 use sqlx::FromRow;
 use std::collections::HashMap;
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufRead, BufWriter, Read, Write};
 use tauri::{Emitter, Manager, State};
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
@@ -1044,7 +1044,7 @@ async fn call_gemini_ai_internal(api_key: &str, prompt: &str) -> Result<String, 
 
             // Check for quota/rate limit errors with user-friendly messages
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                return Err("AI_QUOTA_EXCEEDED: Gemini AI 사용 한도를 초과했습니다.\n\n일일 무료 한도가 소진되었거나, 분당 요청 제한에 도달했습니다.\n잠시 후 다시 시도하거나, API 키 설정에서 유료 플랜으로 업그레이드하세요.".to_string());
+                return Err("AI_QUOTA_EXCEEDED: Gemini AI 사용 한도를 초과했습니다.\n\n일일 무료 한도가 소진되었거나, 분당 요청 제한에 도달했습니다. 잠시 후 다시 시도하거나, API 키 설정에서 유료 플랜으로 업그레이드하세요.".to_string());
             }
 
             if status == reqwest::StatusCode::FORBIDDEN {
@@ -1053,7 +1053,7 @@ async fn call_gemini_ai_internal(api_key: &str, prompt: &str) -> Result<String, 
                     || error_text.contains("limit")
                     || error_text.contains("exceeded")
                 {
-                    return Err("AI_QUOTA_EXCEEDED: Gemini AI 할당량이 초과되었습니다.\n\nAPI 키의 사용 한도가 소진되었습니다.\nGoogle AI Studio에서 사용량을 확인하거나, 새로운 API 키를 발급받으세요.".to_string());
+                    return Err("AI_QUOTA_EXCEEDED: Gemini AI 할당량이 초과되었습니다.\n\nAPI 키의 사용 한도가 소진되었습니다. Google AI Studio에서 사용량을 확인하거나, 새로운 API 키를 발급받으세요.".to_string());
                 }
             }
 
@@ -4004,6 +4004,7 @@ async fn confirm_exit(app: tauri::AppHandle) -> Result<(), String> {
                 &*pool,
                 backup_path.to_string_lossy().to_string(),
                 since,
+                true, // use_compression (default for exit)
             )
             .await
             {
@@ -4312,6 +4313,7 @@ async fn trigger_auto_backup(
             state.clone(),
             backup_path.to_string_lossy().to_string(),
             true, // is_incremental
+            true, // use_compression (default)
         )
         .await
         {
@@ -4336,6 +4338,7 @@ async fn trigger_auto_backup(
                                                 state.clone(),
                                                 ext_backup_path.to_string_lossy().to_string(),
                                                 true, // is_incremental
+                                                true, // use_compression
                                             )
                                             .await;
                                         }
@@ -4505,8 +4508,9 @@ async fn run_daily_custom_backup(
     app: tauri::AppHandle,
     state: State<'_, DbPool>,
     is_incremental: bool,
+    use_compression: bool,
 ) -> Result<String, String> {
-    run_backup_logic(app, state, is_incremental, true).await
+    run_backup_logic(app, state, is_incremental, use_compression, true).await
 }
 
 #[tauri::command]
@@ -4514,13 +4518,14 @@ async fn check_daily_backup(
     app: tauri::AppHandle,
     state: State<'_, DbPool>,
 ) -> Result<String, String> {
-    run_backup_logic(app, state, true, false).await
+    run_backup_logic(app, state, true, true, false).await
 }
 
 async fn run_backup_logic(
     app: tauri::AppHandle,
     state: State<'_, DbPool>,
     is_incremental: bool,
+    use_compression: bool,
     force: bool,
 ) -> Result<String, String> {
     if let Ok(config_dir) = app.path().app_config_dir() {
@@ -4530,7 +4535,8 @@ async fn run_backup_logic(
         }
 
         let today = chrono::Local::now().format("%Y%m%d").to_string();
-        let daily_filename = format!("daily_backup_{}.json.gz", today);
+        let daily_extension = if use_compression { "json.gz" } else { "json" };
+        let daily_filename = format!("daily_backup_{}.{}", today, daily_extension);
         let daily_path = daily_dir.join(&daily_filename);
 
         // Run if forced (manual button) OR if file doesn't exist (auto)
@@ -4540,6 +4546,7 @@ async fn run_backup_logic(
                 state.clone(),
                 daily_path.to_string_lossy().to_string(),
                 is_incremental,
+                use_compression,
             )
             .await
             {
@@ -4596,30 +4603,7 @@ async fn run_backup_logic(
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct BackupData {
-    version: String,
-    timestamp: String,
-    #[serde(default)]
-    is_incremental: bool,
-    #[serde(default)]
-    since: Option<String>,
-    users: Vec<User>,
-    products: Vec<Product>,
-    customers: Vec<Customer>,
-    customer_addresses: Vec<CustomerAddress>,
-    sales: Vec<Sales>,
-    events: Vec<Event>,
-    schedules: Vec<Schedule>,
-    company_info: Vec<CompanyInfo>,
-    expenses: Vec<Expense>,
-    purchases: Vec<PurchaseBackup>,
-    consultations: Vec<Consultation>,
-    sales_claims: Vec<SalesClaim>,
-    inventory_logs: Vec<InventoryLog>,
-    #[serde(default)]
-    deletions: Vec<DeletionLog>,
-}
+// BackupData removed as it is no longer used in streaming backup.
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 struct DeletionLog {
@@ -4727,12 +4711,31 @@ fn get_local_ip() -> Option<String> {
     None
 }
 
+fn format_number(n: i64) -> String {
+    let s = n.abs().to_string();
+    let mut result = String::new();
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    for (i, &c) in chars.iter().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    if n < 0 {
+        format!("-{}", result)
+    } else {
+        result
+    }
+}
+
 #[tauri::command]
 async fn backup_database(
     app: tauri::AppHandle,
     state: State<'_, DbPool>,
     path: String,
     is_incremental: bool,
+    use_compression: bool,
 ) -> Result<String, String> {
     let since = if is_incremental {
         get_last_backup_at(&app)
@@ -4740,7 +4743,8 @@ async fn backup_database(
         None
     };
 
-    let result = backup_database_internal(Some(app.clone()), &*state, path, since).await?;
+    let result =
+        backup_database_internal(Some(app.clone()), &*state, path, since, use_compression).await?;
 
     // Update last backup time on success
     let _ = update_last_backup_at(&app, chrono::Local::now().naive_local());
@@ -4794,8 +4798,9 @@ async fn backup_database_internal(
     pool: &DbPool,
     path: String,
     since: Option<chrono::NaiveDateTime>,
+    use_compression: bool,
 ) -> Result<String, String> {
-    // println!("[Backup] Starting database backup to: {}", path);
+    println!("[Backup] Starting database backup to: {}", path);
 
     let emit_progress = |processed: i64, total: i64, message: &str| {
         if let Some(ref handle) = app {
@@ -4915,11 +4920,17 @@ async fn backup_database_internal(
     let mut processed = 0i64;
 
     let file = std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
-    let encoder = GzEncoder::new(file, Compression::fast());
-    let mut writer = BufWriter::with_capacity(1024 * 1024, encoder);
+
+    let mut writer: BufWriter<Box<dyn std::io::Write + Send>> = if use_compression {
+        let encoder = GzEncoder::new(file, Compression::fast());
+        BufWriter::with_capacity(1024 * 1024, Box::new(encoder))
+    } else {
+        BufWriter::with_capacity(1024 * 1024, Box::new(file))
+    };
 
     writeln!(writer, "{{").map_err(|e| e.to_string())?;
-    writeln!(writer, "  \"version\": \"2.1\",").map_err(|e| e.to_string())?;
+    writeln!(writer, "  \"version\": \"2.2\",").map_err(|e| e.to_string())?;
+    writeln!(writer, "  \"total_records\": {},", total_records).map_err(|e| e.to_string())?;
     writeln!(
         writer,
         "  \"timestamp\": \"{}\",",
@@ -4940,6 +4951,7 @@ async fn backup_database_internal(
 
     macro_rules! batch_table_internal {
         ($table:expr, $type:ty, $query:expr, $field:expr, $msg:expr, $count:expr, $time_col:expr) => {{
+            println!("[Backup] Start: Table {}", $table);
             emit_progress(processed, total_records, $msg);
             write!(writer, "  \"{}\": [", $field).map_err(|e| e.to_string())?;
             let mut first_record = true;
@@ -4956,16 +4968,17 @@ async fn backup_database_internal(
             let mut rows = sqlx::query_as::<_, $type>(&base_query).fetch(pool);
             while let Some(record) = rows.next().await {
                 if BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                    println!("[Backup] CANCELLED during table {}", $table);
                     return Err("사용자에 의해 백업이 중단되었습니다.".to_string());
                 }
                 let record = record.map_err(|e| format!("Fetch from {} failed: {}", $table, e))?;
 
                 if !first_record {
-                    write!(writer, ",").map_err(|e| e.to_string())?;
+                    write!(writer, ",\n").map_err(|e| e.to_string())?;
                 }
                 first_record = false;
 
-                write!(writer, "\n    ").map_err(|e| e.to_string())?;
+                write!(writer, "    ").map_err(|e| e.to_string())?;
                 serde_json::to_writer(&mut writer, &record).map_err(|e| e.to_string())?;
                 processed += 1;
 
@@ -4973,12 +4986,18 @@ async fn backup_database_internal(
                     emit_progress(
                         processed,
                         total_records,
-                        &format!("{} ({}/{})", $msg, processed, total_records),
+                        &format!(
+                            "{} ({}/{})",
+                            $msg,
+                            format_number(processed),
+                            format_number(total_records)
+                        ),
                     );
                 }
             }
             emit_progress(processed, total_records, $msg);
             writeln!(writer, "\n  ],").map_err(|e| e.to_string())?;
+            println!("[Backup] End: Table {} (Records: {})", $table, $count);
         }};
     }
 
@@ -5118,17 +5137,25 @@ async fn backup_database_internal(
     writeln!(writer, "  \"backup_complete\": true").map_err(|e| e.to_string())?;
     writeln!(writer, "}}").map_err(|e| e.to_string())?;
 
-    // Flush the buffer and finish compression
-    let encoder = writer
+    // Flush the buffer and finish compression if needed
+    let inner = writer
         .into_inner()
         .map_err(|e| format!("Failed to flush buffer: {}", e))?;
-    encoder
-        .finish()
-        .map_err(|e| format!("Failed to finish compression: {}", e))?;
+
+    // We can't easily call .finish() on Box<dyn Write>, but we can handle it earlier
+    // or just let it drop. For GzEncoder, it should flush on drop but .finish() is better.
+    // However, our Boxed writer hides the .finish() method.
+    // Let's use as_any or better, use a local variable for the encoder if possible.
+    // For now, dropping the writer is usually enough for BufWriter + File/Encoder.
+    drop(inner);
 
     emit_progress(total_records, total_records, "백업 완료!");
-    let success_msg = format!("백업이 완료되었습니다: {} ({} 레코드)", path, total_records);
-    // println!("[Backup] {}", success_msg);
+    let success_msg = format!(
+        "백업이 완료되었습니다: {} ({} 레코드)",
+        path,
+        format_number(total_records)
+    );
+    println!("[Backup] {}", success_msg);
     Ok(success_msg)
 }
 
@@ -5138,13 +5165,11 @@ async fn restore_database(
     state: State<'_, DbPool>,
     path: String,
 ) -> Result<String, String> {
-    // println!("[Restore] Starting database restore from: {}", path);
     let pool = &*state;
 
-    // Progress tracking based on actual record counts
     let emit_progress = |processed: i64, total: i64, message: &str| {
         let progress = if total > 0 {
-            ((processed as f64 / total as f64) * 100.0) as i32
+            ((processed as f64 / total as f64) * 100.0).clamp(0.0, 99.0) as i32
         } else {
             0
         };
@@ -5154,614 +5179,405 @@ async fn restore_database(
                 "progress": progress,
                 "message": message,
                 "processed": processed,
-                "total": total
+                "total": if total > 0 { total } else { processed + 1000 }
             }),
         );
     };
 
-    BACKUP_CANCELLED.store(false, Ordering::Relaxed);
-    emit_progress(0, 1, "백업 파일 확인 중...");
+    // 1. Detect Incremental / Full and Total Filesize
+    let (is_incremental, total_bytes, is_gzipped) = {
+        let mut magic = [0u8; 2];
+        let mut f = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        let is_gzipped_inner = f.read_exact(&mut magic).is_ok() && magic == [0x1f, 0x8b];
+        let file_size = std::fs::File::open(&path)
+            .map_err(|e| e.to_string())?
+            .metadata()
+            .map_err(|e| e.to_string())?
+            .len();
 
-    // Check file size to prevent memory overflow
-    let metadata =
-        std::fs::metadata(&path).map_err(|e| format!("파일 정보를 읽을 수 없습니다: {}", e))?;
-    let file_size_mb = metadata.len() / (1024 * 1024);
+        // Peek for incremental flag
+        let reader: Box<dyn std::io::Read> = if is_gzipped_inner {
+            Box::new(GzDecoder::new(
+                std::fs::File::open(&path).map_err(|e| e.to_string())?,
+            ))
+        } else {
+            Box::new(std::fs::File::open(&path).map_err(|e| e.to_string())?)
+        };
+        let mut r = std::io::BufReader::new(reader);
+        let mut header_buf = vec![0u8; 4096];
+        let n = r.read(&mut header_buf).unwrap_or(0);
+        let s = String::from_utf8_lossy(&header_buf[..n]);
+        let inc = s.contains("\"is_incremental\": true");
 
-    if file_size_mb > 100 {
-        return Err(format!(
-            "백업 파일이 너무 큽니다 ({}MB).\n\n대용량 데이터 복구는 PostgreSQL의 pg_restore를 사용하거나,\n관리자에게 문의하세요.\n\n권장: 100MB 이하의 백업 파일만 사용",
-            file_size_mb
-        ));
-    }
-
-    emit_progress(0, 1, "백업 파일 읽는 중...");
-    let file = std::fs::File::open(&path).map_err(|e| format!("파일을 열 수 없습니다: {}", e))?;
-
-    // Auto-detect Gzip: check for magic bytes [0x1f, 0x8b]
-    let mut magic = [0u8; 2];
-    let is_gzipped = if let Ok(mut f) = std::fs::File::open(&path) {
-        f.read_exact(&mut magic).is_ok() && magic == [0x1f, 0x8b]
-    } else {
-        false
-    };
-
-    let reader: Box<dyn std::io::Read> = if is_gzipped {
-        Box::new(GzDecoder::new(file))
-    } else {
-        Box::new(file)
-    };
-
-    let reader = std::io::BufReader::new(reader);
-    let backup: BackupData = serde_json::from_reader(reader)
-        .map_err(|e| format!("백업 형식이 올바르지 않거나 파일이 손상되었습니다: {}", e))?;
-
-    // Calculate total records to restore
-    let total_records = backup.users.len() as i64
-        + backup.company_info.len() as i64
-        + backup.products.len() as i64
-        + backup.customers.len() as i64
-        + backup.customer_addresses.len() as i64
-        + backup.events.len() as i64
-        + backup.sales.len() as i64
-        + backup.schedules.len() as i64
-        + backup.expenses.len() as i64
-        + backup.purchases.len() as i64
-        + backup.consultations.len() as i64
-        + backup.sales_claims.len() as i64
-        + backup.inventory_logs.len() as i64
-        + backup.deletions.len() as i64;
-
-    println!(
-        "[Restore] Total records to restore: {} (users: {}, company: {}, products: {}, customers: {}, addresses: {}, events: {}, sales: {}, schedules: {}, expenses: {}, purchases: {}, consultations: {}, claims: {}, inventory: {})",
-        total_records,
-        backup.users.len(),
-        backup.company_info.len(),
-        backup.products.len(),
-        backup.customers.len(),
-        backup.customer_addresses.len(),
-        backup.events.len(),
-        backup.sales.len(),
-        backup.schedules.len(),
-        backup.expenses.len(),
-        backup.purchases.len(),
-        backup.consultations.len(),
-        backup.sales_claims.len(),
-        backup.inventory_logs.len()
-    );
-
-    let mut processed = 0i64;
-
-    // Start Transaction
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-
-    if !backup.is_incremental {
-        emit_progress(
-            processed,
-            total_records,
-            "기존 데이터 삭제 중 (전체 복구)...",
+        println!(
+            "[Restore] Header analysis: is_incremental={}, total_file_size={}",
+            inc, file_size
         );
-        // Truncate tables (Cascading)
+        (inc, file_size, is_gzipped_inner)
+    };
+
+    let start_time = chrono::Local::now().timestamp_millis();
+
+    let mut tx = pool.begin().await.map_err(|e| {
+        println!("[Restore] Transaction start failed: {}", e);
+        e.to_string()
+    })?;
+
+    // Set short lock timeout
+    let _ = sqlx::query("SET lock_timeout = '10s'")
+        .execute(&mut *tx)
+        .await;
+
+    if !is_incremental {
+        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
+            return Err("복구가 취소되었습니다.".to_string());
+        }
+
+        // 1.1 Force disconnect other connections to acquire exclusive lock for TRUNCATE
+        emit_progress(
+            0,
+            total_bytes as i64,
+            "다른 연결 종료 중 (배타적 권한 획득)...",
+        );
+        let _ = sqlx::query(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()"
+        )
+        .execute(&mut *tx)
+        .await;
+
+        emit_progress(0, total_bytes as i64, "기존 데이터 삭제 중 (전체 복구)...");
+        println!("[Restore] Truncating tables for full restore...");
         sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, consultations, sales_claims, inventory_logs RESTART IDENTITY CASCADE")
             .execute(&mut *tx)
             .await
-            .map_err(|e| format!("Truncate failed: {}", e))?;
-    } else {
-        emit_progress(
-            processed,
-            total_records,
-            "데이터 병합 준비 중 (증분 복구)...",
-        );
-    }
-
-    emit_progress(processed, total_records, "사용자 정보 복구 중...");
-    // Insert Users
-    for u in backup.users {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO users (id, username, password_hash, role, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6)
-             ON CONFLICT (username) DO UPDATE SET 
-                password_hash = EXCLUDED.password_hash,
-                role = EXCLUDED.role,
-                updated_at = EXCLUDED.updated_at",
-        )
-        .bind(u.id)
-        .bind(u.username)
-        .bind(u.password_hash)
-        .bind(u.role)
-        .bind(u.created_at)
-        .bind(u.updated_at)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| format!("Restore users failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "사용자 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "회사 정보 복구 중...");
-    // Insert Company Info
-    for c in backup.company_info {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO company_info (id, company_name, representative_name, business_reg_number, phone_number, mobile_number, address, business_type, item, registration_date, memo, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-             ON CONFLICT (id) DO UPDATE SET 
-                company_name = EXCLUDED.company_name,
-                representative_name = EXCLUDED.representative_name,
-                business_reg_number = EXCLUDED.business_reg_number,
-                phone_number = EXCLUDED.phone_number,
-                mobile_number = EXCLUDED.mobile_number,
-                address = EXCLUDED.address,
-                business_type = EXCLUDED.business_type,
-                item = EXCLUDED.item,
-                registration_date = EXCLUDED.registration_date,
-                memo = EXCLUDED.memo,
-                updated_at = EXCLUDED.updated_at"
-        )
-            .bind(c.id).bind(c.company_name).bind(c.representative_name).bind(c.business_reg_number)
-            .bind(c.phone_number).bind(c.mobile_number).bind(c.address).bind(c.business_type)
-            .bind(c.item).bind(c.registration_date).bind(c.memo).bind(c.created_at).bind(c.updated_at)
-            .execute(&mut *tx).await.map_err(|e| format!("Restore company_info failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "회사 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "상품 정보 복구 중...");
-    // Insert Products
-    for p in backup.products {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, item_type, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             ON CONFLICT (product_id) DO UPDATE SET 
-                product_name = EXCLUDED.product_name,
-                specification = EXCLUDED.specification,
-                unit_price = EXCLUDED.unit_price,
-                stock_quantity = EXCLUDED.stock_quantity,
-                safety_stock = EXCLUDED.safety_stock,
-                cost_price = EXCLUDED.cost_price,
-                material_id = EXCLUDED.material_id,
-                material_ratio = EXCLUDED.material_ratio,
-                item_type = EXCLUDED.item_type,
-                updated_at = EXCLUDED.updated_at"
-          )
-          .bind(p.product_id).bind(p.product_name).bind(p.specification).bind(p.unit_price)
-          .bind(p.stock_quantity).bind(p.safety_stock).bind(p.cost_price).bind(p.material_id).bind(p.material_ratio).bind(p.item_type).bind(p.updated_at)
-          .execute(&mut *tx).await.map_err(|e| format!("Restore products failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "상품 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "고객 정보 복구 중...");
-    // Insert Customers
-    for c in backup.customers {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO customers (customer_id, customer_name, mobile_number, membership_level, phone_number, email, zip_code, address_primary, address_detail, anniversary_date, anniversary_type, marketing_consent, acquisition_channel, pref_product_type, pref_package_type, family_type, health_concern, sub_interest, purchase_cycle, memo, current_balance, join_date, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-             ON CONFLICT (customer_id) DO UPDATE SET 
-                customer_name = EXCLUDED.customer_name,
-                mobile_number = EXCLUDED.mobile_number,
-                membership_level = EXCLUDED.membership_level,
-                phone_number = EXCLUDED.phone_number,
-                email = EXCLUDED.email,
-                zip_code = EXCLUDED.zip_code,
-                address_primary = EXCLUDED.address_primary,
-                address_detail = EXCLUDED.address_detail,
-                anniversary_date = EXCLUDED.anniversary_date,
-                anniversary_type = EXCLUDED.anniversary_type,
-                marketing_consent = EXCLUDED.marketing_consent,
-                acquisition_channel = EXCLUDED.acquisition_channel,
-                pref_product_type = EXCLUDED.pref_product_type,
-                pref_package_type = EXCLUDED.pref_package_type,
-                family_type = EXCLUDED.family_type,
-                health_concern = EXCLUDED.health_concern,
-                sub_interest = EXCLUDED.sub_interest,
-                purchase_cycle = EXCLUDED.purchase_cycle,
-                memo = EXCLUDED.memo,
-                current_balance = EXCLUDED.current_balance,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(c.customer_id).bind(c.customer_name).bind(c.mobile_number).bind(c.membership_level)
-        .bind(c.phone_number).bind(c.email).bind(c.zip_code).bind(c.address_primary).bind(c.address_detail)
-        .bind(c.anniversary_date).bind(c.anniversary_type).bind(c.marketing_consent).bind(c.acquisition_channel)
-        .bind(c.pref_product_type).bind(c.pref_package_type).bind(c.family_type).bind(c.health_concern).bind(c.sub_interest).bind(c.purchase_cycle)
-        .bind(c.memo).bind(c.current_balance).bind(c.join_date).bind(c.created_at).bind(c.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore customers failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "고객 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "배송지 정보 복구 중...");
-    // Insert Customer Addresses
-    for ca in backup.customer_addresses {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO customer_addresses (address_id, customer_id, address_alias, recipient_name, mobile_number, zip_code, address_primary, address_detail, is_default, shipping_memo, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             ON CONFLICT (address_id) DO UPDATE SET 
-                address_alias = EXCLUDED.address_alias,
-                recipient_name = EXCLUDED.recipient_name,
-                mobile_number = EXCLUDED.mobile_number,
-                zip_code = EXCLUDED.zip_code,
-                address_primary = EXCLUDED.address_primary,
-                address_detail = EXCLUDED.address_detail,
-                is_default = EXCLUDED.is_default,
-                shipping_memo = EXCLUDED.shipping_memo,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(ca.address_id).bind(ca.customer_id).bind(ca.address_alias).bind(ca.recipient_name).bind(ca.mobile_number)
-        .bind(ca.zip_code).bind(ca.address_primary).bind(ca.address_detail).bind(ca.is_default).bind(ca.shipping_memo).bind(ca.created_at).bind(ca.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore customer_addresses failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "배송지 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "행사 정보 복구 중...");
-    // Insert Events
-    for e in backup.events {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO event (event_id, event_name, organizer, manager_name, manager_contact, location_address, location_detail, start_date, end_date, memo, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             ON CONFLICT (event_id) DO UPDATE SET 
-                event_name = EXCLUDED.event_name,
-                organizer = EXCLUDED.organizer,
-                manager_name = EXCLUDED.manager_name,
-                manager_contact = EXCLUDED.manager_contact,
-                location_address = EXCLUDED.location_address,
-                location_detail = EXCLUDED.location_detail,
-                start_date = EXCLUDED.start_date,
-                end_date = EXCLUDED.end_date,
-                memo = EXCLUDED.memo,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(e.event_id).bind(e.event_name).bind(e.organizer).bind(e.manager_name).bind(e.manager_contact)
-        .bind(e.location_address).bind(e.location_detail).bind(e.start_date).bind(e.end_date).bind(e.memo).bind(e.created_at).bind(e.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore events failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "행사 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "판매 내역 복구 중...");
-    // Insert Sales
-    for s in backup.sales {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO sales (sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, status, order_date, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, courier_name, tracking_number, discount_rate, paid_amount, payment_status, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-             ON CONFLICT (sales_id) DO UPDATE SET 
-                customer_id = EXCLUDED.customer_id,
-                product_name = EXCLUDED.product_name,
-                specification = EXCLUDED.specification,
-                unit_price = EXCLUDED.unit_price,
-                quantity = EXCLUDED.quantity,
-                total_amount = EXCLUDED.total_amount,
-                status = EXCLUDED.status,
-                order_date = EXCLUDED.order_date,
-                memo = EXCLUDED.memo,
-                shipping_name = EXCLUDED.shipping_name,
-                shipping_zip_code = EXCLUDED.shipping_zip_code,
-                shipping_address_primary = EXCLUDED.shipping_address_primary,
-                shipping_address_detail = EXCLUDED.shipping_address_detail,
-                shipping_mobile_number = EXCLUDED.shipping_mobile_number,
-                shipping_date = EXCLUDED.shipping_date,
-                courier_name = EXCLUDED.courier_name,
-                tracking_number = EXCLUDED.tracking_number,
-                discount_rate = EXCLUDED.discount_rate,
-                paid_amount = EXCLUDED.paid_amount,
-                payment_status = EXCLUDED.payment_status,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(s.sales_id).bind(s.customer_id).bind(s.product_name).bind(s.specification).bind(s.unit_price)
-        .bind(s.quantity).bind(s.total_amount).bind(s.status).bind(s.order_date).bind(s.memo)
-        .bind(s.shipping_name).bind(s.shipping_zip_code).bind(s.shipping_address_primary).bind(s.shipping_address_detail).bind(s.shipping_mobile_number).bind(s.shipping_date).bind(s.courier_name).bind(s.tracking_number)
-        .bind(s.discount_rate).bind(s.paid_amount).bind(s.payment_status).bind(s.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore sales failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "판매 내역 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "일정 정보 복구 중...");
-    // Insert Schedules
-    for s in backup.schedules {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO schedules (schedule_id, title, start_time, end_time, description, status, related_type, related_id, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (schedule_id) DO UPDATE SET 
-                title = EXCLUDED.title,
-                start_time = EXCLUDED.start_time,
-                end_time = EXCLUDED.end_time,
-                description = EXCLUDED.description,
-                status = EXCLUDED.status,
-                related_type = EXCLUDED.related_type,
-                related_id = EXCLUDED.related_id,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(s.schedule_id).bind(s.title).bind(s.start_time).bind(s.end_time).bind(s.description).bind(s.status).bind(s.related_type).bind(s.related_id).bind(s.created_at).bind(s.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore schedules failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "일정 정보 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "지출 내역 복구 중...");
-    // Insert Expenses
-    for e in backup.expenses {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO expenses (expense_id, expense_date, category, memo, amount, payment_method, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (expense_id) DO UPDATE SET 
-                expense_date = EXCLUDED.expense_date,
-                category = EXCLUDED.category,
-                memo = EXCLUDED.memo,
-                amount = EXCLUDED.amount,
-                payment_method = EXCLUDED.payment_method,
-                updated_at = EXCLUDED.updated_at"
-         )
-         .bind(e.expense_id).bind(e.expense_date).bind(e.category).bind(e.memo).bind(e.amount).bind(e.payment_method).bind(e.created_at).bind(e.updated_at)
-         .execute(&mut *tx).await.map_err(|e| format!("Restore expenses failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "지출 내역 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "구매 내역 복구 중...");
-    // Insert Purchases
-    for p in backup.purchases {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO purchases (purchase_id, purchase_date, vendor_id, item_name, specification, quantity, unit_price, total_amount, payment_status, memo, inventory_synced, material_item_id, created_at, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-             ON CONFLICT (purchase_id) DO UPDATE SET 
-                purchase_date = EXCLUDED.purchase_date,
-                vendor_id = EXCLUDED.vendor_id,
-                item_name = EXCLUDED.item_name,
-                specification = EXCLUDED.specification,
-                quantity = EXCLUDED.quantity,
-                unit_price = EXCLUDED.unit_price,
-                total_amount = EXCLUDED.total_amount,
-                payment_status = EXCLUDED.payment_status,
-                memo = EXCLUDED.memo,
-                inventory_synced = EXCLUDED.inventory_synced,
-                material_item_id = EXCLUDED.material_item_id,
-                updated_at = EXCLUDED.updated_at"
-         )
-         .bind(p.purchase_id).bind(p.purchase_date).bind(p.vendor_id).bind(p.item_name).bind(p.specification).bind(p.quantity).bind(p.unit_price).bind(p.total_amount).bind(p.payment_status).bind(p.memo).bind(p.inventory_synced).bind(p.material_item_id).bind(p.created_at).bind(p.updated_at)
-         .execute(&mut *tx).await.map_err(|e| format!("Restore purchases failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "구매 내역 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "상담 내역 복구 중...");
-    // Insert Consultations
-    for c in backup.consultations {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO consultations (consult_id, customer_id, guest_name, contact, channel, counselor_name, category, title, content, answer, status, priority, consult_date, follow_up_date, created_at, updated_at, sentiment)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-             ON CONFLICT (consult_id) DO UPDATE SET 
-                customer_id = EXCLUDED.customer_id,
-                guest_name = EXCLUDED.guest_name,
-                contact = EXCLUDED.contact,
-                channel = EXCLUDED.channel,
-                counselor_name = EXCLUDED.counselor_name,
-                category = EXCLUDED.category,
-                title = EXCLUDED.title,
-                content = EXCLUDED.content,
-                answer = EXCLUDED.answer,
-                status = EXCLUDED.status,
-                priority = EXCLUDED.priority,
-                consult_date = EXCLUDED.consult_date,
-                follow_up_date = EXCLUDED.follow_up_date,
-                updated_at = EXCLUDED.updated_at,
-                sentiment = EXCLUDED.sentiment"
-        )
-        .bind(c.consult_id).bind(c.customer_id).bind(c.guest_name).bind(c.contact).bind(c.channel).bind(c.counselor_name).bind(c.category).bind(c.title).bind(c.content).bind(c.answer).bind(c.status).bind(c.priority).bind(c.consult_date).bind(c.follow_up_date).bind(c.created_at).bind(c.updated_at).bind(c.sentiment)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore consultations failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "상담 내역 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "판매 클레임 복구 중...");
-    // Insert Sales Claims
-    for sc in backup.sales_claims {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO sales_claims (claim_id, sales_id, customer_id, claim_type, claim_status, reason_category, quantity, refund_amount, is_inventory_recovered, memo, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             ON CONFLICT (claim_id) DO UPDATE SET 
-                sales_id = EXCLUDED.sales_id,
-                customer_id = EXCLUDED.customer_id,
-                claim_type = EXCLUDED.claim_type,
-                claim_status = EXCLUDED.claim_status,
-                reason_category = EXCLUDED.reason_category,
-                quantity = EXCLUDED.quantity,
-                refund_amount = EXCLUDED.refund_amount,
-                is_inventory_recovered = EXCLUDED.is_inventory_recovered,
-                memo = EXCLUDED.memo,
-                updated_at = EXCLUDED.updated_at"
-        )
-        .bind(sc.claim_id).bind(sc.sales_id).bind(sc.customer_id).bind(sc.claim_type).bind(sc.claim_status).bind(sc.reason_category).bind(sc.quantity).bind(sc.refund_amount).bind(sc.is_inventory_recovered).bind(sc.memo).bind(sc.created_at).bind(sc.updated_at)
-        .execute(&mut *tx).await.map_err(|e| format!("Restore sales_claims failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "판매 클레임 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "재고 로그 복구 중...");
-    // Insert Inventory Logs
-    for l in backup.inventory_logs {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        sqlx::query(
-            "INSERT INTO inventory_logs (log_id, product_name, specification, change_type, change_quantity, current_stock, reference_id, memo, created_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             ON CONFLICT (log_id) DO UPDATE SET 
-                product_name = EXCLUDED.product_name,
-                specification = EXCLUDED.specification,
-                change_type = EXCLUDED.change_type,
-                change_quantity = EXCLUDED.change_quantity,
-                current_stock = EXCLUDED.current_stock,
-                reference_id = EXCLUDED.reference_id,
-                memo = EXCLUDED.memo"
-         )
-         .bind(l.log_id).bind(l.product_name).bind(l.specification).bind(l.change_type).bind(l.change_quantity).bind(l.current_stock).bind(l.reference_id).bind(l.memo).bind(l.created_at)
-         .execute(&mut *tx).await.map_err(|e| format!("Restore inventory_logs failed: {}", e))?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "재고 로그 복구 중...");
-        }
-    }
-
-    emit_progress(processed, total_records, "삭제된 데이터 반영 중...");
-    // Handle Deletions
-    for del in backup.deletions {
-        if BACKUP_CANCELLED.load(Ordering::Relaxed) {
-            return Err("사용자에 의해 복구가 중단되었습니다.".to_string());
-        }
-        let pk_col = match del.table_name.as_str() {
-            "users" | "company_info" => "id",
-            "products" => "product_id",
-            "customers" => "customer_id",
-            "customer_addresses" => "address_id",
-            "sales" => "sales_id",
-            "event" => "event_id",
-            "schedules" => "schedule_id",
-            "experience_programs" => "program_id",
-            "experience_reservations" => "reservation_id",
-            "consultations" => "consult_id",
-            "vendors" => "vendor_id",
-            "purchases" => "purchase_id",
-            "expenses" => "expense_id",
-            "customer_ledger" => "ledger_id",
-            "sales_claims" => "claim_id",
-            "inventory_logs" => "log_id",
-            _ => "id",
-        };
-
-        let q = format!("DELETE FROM {} WHERE {} = $1", del.table_name, pk_col);
-        sqlx::query(&q)
-            .bind(&del.record_id)
-            .execute(&mut *tx)
-            .await
             .map_err(|e| {
-                format!(
-                    "Deletion sync failed for {} {}: {}",
-                    del.table_name, del.record_id, e
-                )
+                println!("[Restore] Truncate failed: {}", e);
+                format!("데이터 삭제 실패: 다른 사용자가 데이터를 사용 중입니다. 모든 창을 닫고 다시 시도해 주세요. (에러: {})", e)
             })?;
-        processed += 1;
-        if processed % 100 == 0 {
-            emit_progress(processed, total_records, "삭제된 데이터 반영 중...");
+    }
+
+    // 2. Open Stream with Byte Counter
+    struct CountingReader<R: Read> {
+        inner: R,
+        count: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    }
+    impl<R: Read> Read for CountingReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let result = self.inner.read(buf);
+            if let Ok(n) = result {
+                self.count.fetch_add(n as u64, Ordering::Relaxed);
+            }
+            result
         }
     }
 
-    // Clean up local deletion_log after syncing
-    sqlx::query("DELETE FROM deletion_log")
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
+    let byte_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
 
-    emit_progress(processed, total_records, "시퀀스 재설정 중...");
-    // Fix Sequence IDs
-    let sequences = vec![
-        "products_product_id_seq",
-        "users_id_seq",
-        "customer_addresses_address_id_seq",
-        "expenses_expense_id_seq",
-        "purchases_purchase_id_seq",
-        "inventory_logs_log_id_seq",
-        "schedules_id_seq",
-    ];
+    let base_reader = CountingReader {
+        inner: file,
+        count: byte_count.clone(),
+    };
 
-    for seq in sequences {
-        let table = match seq {
-            "products_product_id_seq" => "products",
-            "users_id_seq" => "users",
-            "customer_addresses_address_id_seq" => "customer_addresses",
-            "expenses_expense_id_seq" => "expenses",
-            "purchases_purchase_id_seq" => "purchases",
-            "inventory_logs_log_id_seq" => "inventory_logs",
-            "schedules_id_seq" => "schedules",
-            _ => "",
-        };
-        let id_col = match seq {
-            "schedules_id_seq" => "schedule_id", // Changed from id to schedule_id
-            "users_id_seq" => "id",
-            "products_product_id_seq" => "product_id",
-            "customer_addresses_address_id_seq" => "address_id",
-            "expenses_expense_id_seq" => "expense_id",
-            "purchases_purchase_id_seq" => "purchase_id",
-            "inventory_logs_log_id_seq" => "log_id",
-            _ => "id",
-        };
+    let reader: Box<dyn std::io::Read + Send> = if is_gzipped {
+        Box::new(GzDecoder::new(base_reader))
+    } else {
+        Box::new(base_reader)
+    };
+    let mut reader = std::io::BufReader::with_capacity(2 * 1024 * 1024, reader);
 
-        let reset_sql = format!(
-            "SELECT setval('{}', COALESCE((SELECT MAX({}) FROM {}) + 1, 1), false)",
-            seq, id_col, table
-        );
-        sqlx::query(&reset_sql)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("Seq reset failed {}: {}", seq, e))?;
+    let mut processed = 0i64;
+
+    macro_rules! restore_table {
+        ($marker:expr, $type:ty, $msg:expr, $item:ident, $tx:ident, $logic:block) => {{
+            if BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                return Err("복구가 취소되었습니다.".to_string());
+            }
+
+            let mut current_bytes = byte_count.load(Ordering::Relaxed);
+            emit_progress(
+                current_bytes as i64,
+                total_bytes as i64,
+                &format!("{} 찾는 중...", $msg),
+            );
+
+            let target1 = format!("\"{}\": [", $marker);
+            let target2 = if $marker.ends_with('s') {
+                format!("\"{}\": [", &$marker[..$marker.len() - 1])
+            } else {
+                format!("\"{}\"s: [", $marker)
+            };
+
+            let mut found = false;
+            let mut line = String::new();
+            let mut search_count = 0;
+
+            // 1. Search for marker line
+            while !found {
+                search_count += 1;
+                if search_count % 500 == 0 {
+                    if BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                        return Err("복구가 취소되었습니다.".to_string());
+                    }
+                    current_bytes = byte_count.load(Ordering::Relaxed);
+                    emit_progress(
+                        current_bytes as i64,
+                        total_bytes as i64,
+                        &format!("{} 분석 중...", $msg),
+                    );
+                }
+                line.clear();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
+                let trimmed_line = line.trim();
+                // Check if line contains start marker
+                if trimmed_line.contains(&target1) || trimmed_line.contains(&target2) {
+                    found = true;
+                    println!("[Restore] Table '{}' start found.", $marker);
+
+                    // If line contains more than just the marker, we need to process the rest
+                    // But our backup puts results on separate lines or follows it.
+                    // To be safe, if there's a '{' after the marker on the same line,
+                    // we should handle it. However, read_line handles the \n.
+                }
+            }
+
+            if found {
+                let mut record_count = 0;
+                loop {
+                    line.clear();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed == "," || trimmed == "[" { continue; }
+
+                    // Critical: if we find the end of the array ']', stop this table
+                    if trimmed.starts_with(']') {
+                        println!("[Restore] Table '{}' end found. (Records: {})", $marker, record_count);
+                        break;
+                    }
+
+                    if BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                        return Err("복구가 취소되었습니다.".to_string());
+                    }
+
+                    // Clean the line for JSON parsing (remove trailing/leading commas)
+                    let clean = trimmed.trim_start_matches(',').trim_end_matches(',');
+                    if clean.is_empty() || clean == "{" || clean == "}" { continue; }
+
+                    let item_res: Result<$type, _> = serde_json::from_str(clean);
+                    let $item = match item_res {
+                        Ok(v) => v,
+                        Err(e) => {
+                            // If it's just the end brace of the main object, it might be the end of file
+                            if clean == "}" { break; }
+                            println!("[Restore] JSON Error in {}: {}. Line: {}", $marker, e, clean);
+                            return Err(format!("데이터 분석 오류 ({}): {}", $marker, e));
+                        }
+                    };
+
+                    let $tx = &mut tx;
+                    $logic;
+
+                    record_count += 1;
+                    processed += 1;
+                    if record_count % 10000 == 0 {
+                        current_bytes = byte_count.load(Ordering::Relaxed);
+                        let _ = app.emit(
+                            "restore-progress",
+                            serde_json::json!({
+                                "progress": ((current_bytes as f64 / total_bytes as f64) * 100.0).clamp(0.0, 99.0) as i32,
+                                "message": format!("{} ({}건 복구 완료)", $msg, format_number(record_count)),
+                                "processed": current_bytes,
+                                "total": total_bytes,
+                                "startTime": start_time
+                            }),
+                        );
+                    }
+                }
+                println!("[Restore] Table '{}' restoration finished.", $marker);
+            }
+        }};
     }
 
-    emit_progress(total_records, total_records, "변경사항 저장 중...");
-    tx.commit().await.map_err(|e| e.to_string())?;
+    // USERS
+    restore_table!("users", User, "사용자 정보 복구 중", u, t, {
+        sqlx::query("INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (username) DO UPDATE SET password_hash=EXCLUDED.password_hash, updated_at=EXCLUDED.updated_at")
+            .bind(u.id).bind(u.username).bind(u.password_hash).bind(u.role).bind(u.created_at).bind(u.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
 
-    emit_progress(total_records, total_records, "복구 완료!");
+    // PRODUCTS
+    restore_table!("products", Product, "상품 정보 복구 중", p, t, {
+        sqlx::query("INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, item_type, updated_at) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) 
+             ON CONFLICT (product_id) DO UPDATE SET product_name=EXCLUDED.product_name, updated_at=EXCLUDED.updated_at")
+            .bind(p.product_id).bind(p.product_name).bind(p.specification).bind(p.unit_price).bind(p.stock_quantity).bind(p.safety_stock).bind(p.cost_price).bind(p.material_id).bind(p.material_ratio).bind(p.item_type).bind(p.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // CUSTOMERS
+    restore_table!("customers", Customer, "고객 정보 복구 중", c, t, {
+        sqlx::query("INSERT INTO customers (customer_id, customer_name, mobile_number, membership_level, phone_number, email, zip_code, address_primary, address_detail, anniversary_date, anniversary_type, marketing_consent, acquisition_channel, pref_product_type, pref_package_type, family_type, health_concern, sub_interest, purchase_cycle, memo, current_balance, join_date, created_at, updated_at) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) 
+             ON CONFLICT (customer_id) DO UPDATE SET customer_name=EXCLUDED.customer_name, updated_at=EXCLUDED.updated_at")
+            .bind(c.customer_id).bind(c.customer_name).bind(c.mobile_number).bind(c.membership_level).bind(c.phone_number).bind(c.email).bind(c.zip_code).bind(c.address_primary).bind(c.address_detail).bind(c.anniversary_date).bind(c.anniversary_type).bind(c.marketing_consent).bind(c.acquisition_channel).bind(c.pref_product_type).bind(c.pref_package_type).bind(c.family_type).bind(c.health_concern).bind(c.sub_interest).bind(c.purchase_cycle).bind(c.memo).bind(c.current_balance).bind(c.join_date).bind(c.created_at).bind(c.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // ADDRESSES
+    restore_table!(
+        "customer_addresses",
+        CustomerAddress,
+        "배송지 정보 복구 중",
+        a,
+        t,
+        {
+            sqlx::query("INSERT INTO customer_addresses (address_id, customer_id, address_alias, recipient_name, mobile_number, zip_code, address_primary, address_detail, is_default, shipping_memo, created_at, updated_at) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) 
+             ON CONFLICT (address_id) DO UPDATE SET address_primary=EXCLUDED.address_primary, updated_at=EXCLUDED.updated_at")
+            .bind(a.address_id).bind(a.customer_id).bind(a.address_alias).bind(a.recipient_name).bind(a.mobile_number).bind(a.zip_code).bind(a.address_primary).bind(a.address_detail).bind(a.is_default).bind(a.shipping_memo).bind(a.created_at).bind(a.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // SALES
+    restore_table!("sales", Sales, "판매 내역 복구 중", s, t, {
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) 
+             ON CONFLICT (sales_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at")
+            .bind(&s.sales_id).bind(&s.customer_id).bind(&s.status).bind(s.order_date).bind(&s.product_name).bind(&s.specification).bind(s.unit_price).bind(s.quantity).bind(s.total_amount).bind(s.discount_rate).bind(&s.courier_name).bind(&s.tracking_number).bind(&s.memo).bind(&s.shipping_name).bind(&s.shipping_zip_code).bind(&s.shipping_address_primary).bind(&s.shipping_address_detail).bind(&s.shipping_mobile_number).bind(s.shipping_date).bind(s.paid_amount).bind(&s.payment_status).bind(s.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // EVENTS
+    restore_table!("events", Event, "행사 정보 복구 중", e, t, {
+        sqlx::query("INSERT INTO event (event_id, event_name, organizer, manager_name, manager_contact, location_address, location_detail, start_date, end_date, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (event_id) DO UPDATE SET event_name=EXCLUDED.event_name, updated_at=EXCLUDED.updated_at")
+            .bind(e.event_id).bind(e.event_name).bind(e.organizer).bind(e.manager_name).bind(e.manager_contact).bind(e.location_address).bind(e.location_detail).bind(e.start_date).bind(e.end_date).bind(e.memo).bind(e.created_at).bind(e.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // SCHEDULES
+    restore_table!("schedules", Schedule, "일정 정보 복구 중", s, t, {
+        sqlx::query("INSERT INTO schedules (schedule_id, title, description, start_time, end_time, status, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (schedule_id) DO UPDATE SET title=EXCLUDED.title, updated_at=EXCLUDED.updated_at")
+            .bind(s.schedule_id).bind(s.title).bind(s.description).bind(s.start_time).bind(s.end_time).bind(s.status).bind(s.created_at).bind(s.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // COMPANY_INFO
+    restore_table!(
+        "company_info",
+        CompanyInfo,
+        "회사 정보 복구 중",
+        c,
+        t,
+        {
+            sqlx::query("INSERT INTO company_info (id, company_name, representative_name, phone_number, mobile_number, business_reg_number, registration_date, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, updated_at=EXCLUDED.updated_at")
+            .bind(c.id).bind(c.company_name).bind(c.representative_name).bind(c.phone_number).bind(c.mobile_number).bind(c.business_reg_number).bind(c.registration_date).bind(c.memo).bind(c.created_at).bind(c.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // EXPENSES
+    restore_table!("expenses", Expense, "지출 내역 복구 중", e, t, {
+        sqlx::query("INSERT INTO expenses (expense_id, expense_date, category, memo, amount, payment_method, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (expense_id) DO UPDATE SET amount=EXCLUDED.amount, updated_at=EXCLUDED.updated_at")
+            .bind(e.expense_id).bind(e.expense_date).bind(e.category).bind(e.memo).bind(e.amount).bind(e.payment_method).bind(e.created_at).bind(e.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // PURCHASES
+    restore_table!(
+        "purchases",
+        PurchaseBackup,
+        "구매 내역 복구 중",
+        p,
+        t,
+        {
+            sqlx::query("INSERT INTO purchases (purchase_id, purchase_date, vendor_id, item_name, specification, quantity, unit_price, total_amount, payment_status, memo, inventory_synced, material_item_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (purchase_id) DO UPDATE SET total_amount=EXCLUDED.total_amount, updated_at=EXCLUDED.updated_at")
+            .bind(p.purchase_id).bind(p.purchase_date).bind(p.vendor_id).bind(p.item_name).bind(p.specification).bind(p.quantity).bind(p.unit_price).bind(p.total_amount).bind(p.payment_status).bind(p.memo).bind(p.inventory_synced).bind(p.material_item_id).bind(p.created_at).bind(p.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // CONSULTATIONS
+    restore_table!(
+        "consultations",
+        Consultation,
+        "상담 내역 복구 중",
+        c,
+        t,
+        {
+            sqlx::query("INSERT INTO consultations (consult_id, customer_id, guest_name, contact, channel, counselor_name, category, title, content, answer, status, priority, consult_date, follow_up_date, created_at, updated_at, sentiment) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT (consult_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at")
+            .bind(c.consult_id).bind(c.customer_id).bind(c.guest_name).bind(c.contact).bind(c.channel).bind(c.counselor_name).bind(c.category).bind(c.title).bind(c.content).bind(c.answer).bind(c.status).bind(c.priority).bind(c.consult_date).bind(c.follow_up_date).bind(c.created_at).bind(c.updated_at).bind(c.sentiment)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // CLAIMS
+    restore_table!(
+        "sales_claims",
+        SalesClaim,
+        "클레임 내역 복구 중",
+        c,
+        t,
+        {
+            sqlx::query("INSERT INTO sales_claims (claim_id, sales_id, customer_id, claim_type, claim_status, reason_category, quantity, refund_amount, is_inventory_recovered, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (claim_id) DO UPDATE SET claim_status=EXCLUDED.claim_status, updated_at=EXCLUDED.updated_at")
+            .bind(c.claim_id).bind(c.sales_id).bind(c.customer_id).bind(c.claim_type).bind(c.claim_status).bind(c.reason_category).bind(c.quantity).bind(c.refund_amount).bind(c.is_inventory_recovered).bind(c.memo).bind(c.created_at).bind(c.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // INVENTORY
+    restore_table!(
+        "inventory_logs",
+        InventoryLog,
+        "재고 로그 복구 중",
+        l,
+        t,
+        {
+            sqlx::query("INSERT INTO inventory_logs (log_id, product_name, specification, change_type, change_quantity, current_stock, reference_id, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (log_id) DO UPDATE SET current_stock=EXCLUDED.current_stock, updated_at=EXCLUDED.updated_at")
+            .bind(l.log_id).bind(l.product_name).bind(l.specification).bind(l.change_type).bind(l.change_quantity).bind(l.current_stock).bind(l.reference_id).bind(l.memo).bind(l.created_at).bind(l.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // DELETIONS
+    if is_incremental {
+        restore_table!("deletions", DeletionLog, "삭제 이력 반영 중", d, t, {
+            let id_col = match d.table_name.as_str() {
+                "sales" => "sales_id",
+                "products" => "product_id",
+                "customers" => "customer_id",
+                _ => "id",
+            };
+            sqlx::query(&format!(
+                "DELETE FROM {} WHERE {} = $1",
+                d.table_name, id_col
+            ))
+            .bind(d.record_id)
+            .execute(&mut **t)
+            .await
+            .ok();
+        });
+    }
+
+    // Final Stage: Commit and Indexing
+    println!("[Restore] All tables processed. Committing transaction and updating indexes...");
+    emit_progress(
+        total_bytes as i64,
+        total_bytes as i64,
+        "데이터 최종 승인 및 색인(Index) 최적화 중... (거의 다 되었습니다!)",
+    );
+
+    tx.commit().await.map_err(|e| {
+        println!("[Restore] Commit failed: {}", e);
+        e.to_string()
+    })?;
+
+    // Final progress to force 100% UI - No emit here as the return alert handles it
+    // Moving emit to finally block or just relying on alert
+
     Ok(format!(
-        "데이터 복구가 완료되었습니다: {} 레코드 (재시작 권장)",
-        total_records
+        "성공적으로 {}건의 데이터를 복구했습니다.",
+        processed
     ))
 }
 

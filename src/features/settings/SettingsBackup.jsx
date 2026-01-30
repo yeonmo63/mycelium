@@ -7,6 +7,29 @@ import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import { Lock } from 'lucide-react';
 
+// --- Utilities ---
+const formatBytes = (bytes, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+const calculateETA = (startTime, progress) => {
+    if (!startTime || progress <= 0 || progress >= 100) return '계산 중...';
+    const now = Date.now();
+    const elapsed = now - startTime;
+    const remaining = (elapsed / progress) * (100 - progress);
+
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+
+    if (minutes > 0) return `${minutes}분 ${seconds}초`;
+    return `${seconds}초`;
+};
+
 const SettingsBackup = () => {
     const navigate = useNavigate();
     const { showAlert, showConfirm } = useModal();
@@ -21,6 +44,7 @@ const SettingsBackup = () => {
     const [showProgress, setShowProgress] = useState(false);
     const [operationType, setOperationType] = useState('backup'); // 'backup' or 'restore'
     const [isIncremental, setIsIncremental] = useState(true);
+    const [useCompression, setUseCompression] = useState(true);
     const [backupStatus, setBackupStatus] = useState(null);
 
     // --- Admin Guard Check ---
@@ -120,15 +144,16 @@ const SettingsBackup = () => {
             setIsLoading(true);
             setShowProgress(true);
             setOperationType('backup');
-            setBackupProgress({ progress: 0, message: '백업 엔진 가동 중...' });
+            setBackupProgress({ progress: 0, message: '백업 엔진 가동 중...', startTime: Date.now() });
 
             const unlisten = await listen('backup-progress', (event) => {
-                setBackupProgress(event.payload);
+                setBackupProgress(prev => ({ ...event.payload, startTime: prev.startTime }));
             });
 
             try {
                 const msg = await invoke('run_daily_custom_backup', {
-                    isIncremental: isIncremental
+                    isIncremental: isIncremental,
+                    useCompression: useCompression
                 });
                 await showAlert('백업 완료', `성공적으로 백업 및 마감이 완료되었습니다.\n${msg}`);
                 loadBackups();
@@ -179,7 +204,8 @@ const SettingsBackup = () => {
                 await showAlert('복구 완료', `${msg}\n\n확인을 누르면 애플리케이션이 재시작됩니다.`);
 
                 // Reload after user confirms
-                window.location.reload();
+                // Redirect to root and reload after user confirms
+                window.location.href = '/';
             } finally {
                 unlisten();
             }
@@ -250,7 +276,7 @@ const SettingsBackup = () => {
             try {
                 const msg = await invoke('restore_database', { path: item.path });
                 await showAlert('복구 완료', msg);
-                window.location.reload();
+                window.location.href = '/';
             } finally {
                 unlisten();
             }
@@ -375,18 +401,31 @@ const SettingsBackup = () => {
                                     />
                                 </div>
 
-                                {/* Percentage */}
+                                {/* Percentage & ETA */}
                                 <div className="text-center mb-8">
-                                    <span className={`text-2xl font-bold ${operationType === 'backup' ? 'text-indigo-600' :
+                                    <span className={`text-4xl font-black ${operationType === 'backup' ? 'text-indigo-600' :
                                         operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
-                                        }`}>
+                                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                                         {backupProgress.progress}%
                                     </span>
-                                    {backupProgress.total > 0 && (
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            {backupProgress.processed?.toLocaleString() || 0} / {backupProgress.total?.toLocaleString() || 0} 레코드
-                                        </p>
-                                    )}
+                                    <div className="flex flex-col gap-1 mt-3">
+                                        {backupProgress.total > 0 && (
+                                            <p className="text-[13px] text-slate-500 font-bold bg-slate-50 py-1.5 px-4 rounded-full inline-block mx-auto border border-slate-100">
+                                                {operationType === 'restore'
+                                                    ? `${formatBytes(backupProgress.processed)} / ${formatBytes(backupProgress.total)}`
+                                                    : `${backupProgress.processed?.toLocaleString() || 0} / ${backupProgress.total?.toLocaleString() || 0} 레코드`
+                                                }
+                                            </p>
+                                        )}
+                                        {backupProgress.startTime && backupProgress.progress > 0 && backupProgress.progress < 100 && (
+                                            <div className="flex items-center justify-center gap-1.5 text-indigo-500 mt-1">
+                                                <span className="material-symbols-rounded text-sm">schedule</span>
+                                                <span className="text-[12px] font-black uppercase tracking-wider">
+                                                    남은 시간: {calculateETA(backupProgress.startTime, backupProgress.progress)}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Cancel Button */}
@@ -482,6 +521,25 @@ const SettingsBackup = () => {
                                             </div>
                                         </label>
                                     </div>
+                                </div>
+
+                                {/* Compression Toggle */}
+                                <div className="bg-white/10 p-5 rounded-2xl border border-white/10 shadow-inner -mt-2">
+                                    <label className="flex items-center justify-between cursor-pointer group">
+                                        <div className="flex flex-col text-left">
+                                            <span className="text-white font-bold text-sm tracking-tight opacity-90">백업 압축 (Gzip)</span>
+                                            <span className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-1">파일 용량 대폭 절감</span>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={useCompression}
+                                                onChange={() => setUseCompression(!useCompression)}
+                                            />
+                                            <div className="w-11 h-6 bg-white/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500 shadow-inner"></div>
+                                        </div>
+                                    </label>
                                 </div>
 
                                 <button

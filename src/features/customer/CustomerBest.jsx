@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { formatCurrency, copyToClipboard } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import dayjs from 'dayjs';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerBest = () => {
     const { showAlert, showConfirm } = useModal();
@@ -144,14 +145,11 @@ const CustomerBest = () => {
         setAiModalOpen(true);
         setIsAiLoading(true);
         try {
-            const data = await window.__TAURI__.core.invoke('get_customer_ai_insight', { customerId: cid });
+            const data = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId: cid });
             setAiData(data);
         } catch (e) {
             console.error(e);
-            // Handle quota limit specifically if possible, otherwise generic error
-            if (String(e).includes('429') || String(e).includes('Quota')) {
-                showAlert("알림", "AI 서버 사용량이 많아 통찰 분석을 진행할 수 없습니다.\n잠시 후 다시 시도해주세요.");
-            } else {
+            if (e.message !== 'AI_QUOTA_EXCEEDED') {
                 showAlert("오류", "AI 분석 실패: " + e);
             }
             setAiModalOpen(false);

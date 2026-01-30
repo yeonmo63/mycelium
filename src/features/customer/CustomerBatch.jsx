@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../../contexts/ModalContext';
-import { formatPhoneNumber } from '../../utils/common';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerBatch = () => {
     const { showAlert, showConfirm } = useModal();
@@ -173,15 +173,12 @@ const CustomerBatch = () => {
         setAiInsight(null);
 
         try {
-            const insight = await window.__TAURI__.core.invoke('get_customer_ai_insight', { customerId });
+            const insight = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId });
             setAiInsight(insight);
         } catch (e) {
-            const errStr = String(e);
-            if (errStr.includes('429') || errStr.includes('Quota')) {
-                setAiInsight({ error: "AI 서버 사용량이 많아 분석할 수 없습니다. 잠시 후 다시 시도해주세요." });
-            } else {
-                setAiInsight({ error: "분석 실패: " + errStr });
-            }
+            console.error(e);
+            // invokeAI handles the quota error alert, but we might want to show a message in the modal too
+            setAiInsight({ error: String(e) });
         } finally {
             setIsLoadingAi(false);
         }

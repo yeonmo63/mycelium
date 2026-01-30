@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 Chart.register(...registerables);
 
@@ -197,11 +198,10 @@ const TabAdvice = ({ sharedData, isVisible, showAlert }) => {
 2. '${themeLabels[selectedTheme]}' 테마에 맞춘 실행 가능한 3가지 액션 플랜
 3. 전문적이고 따뜻한 어조, 마크다운 형식 활용 (소제목, 불렛포인트)`;
 
-            const result = await window.__TAURI__.core.invoke('call_gemini_ai', { prompt });
+            const result = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
             setReport(result);
         } catch (e) {
             console.error(e);
-            showAlert('분석 실패', e.toString());
         } finally {
             setIsGenerating(false);
         }
@@ -693,14 +693,14 @@ const TabForecast = ({ isVisible, showAlert }) => {
         if (!window.__TAURI__) return;
         setIsAnalyzing(true);
         try {
-            const res = await window.__TAURI__.core.invoke('get_ai_demand_forecast', {
+            const res = await invokeAI(showAlert, 'get_ai_demand_forecast', {
                 productName: selectedProduct === 'ALL' ? null : selectedProduct,
                 forecastDays: Number(duration)
             });
             setResult(res);
             renderChart(res);
         } catch (e) {
-            showAlert('예측 실패', String(e));
+            console.error(e);
         } finally {
             setIsAnalyzing(false);
         }

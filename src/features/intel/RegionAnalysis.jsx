@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
 import { useModal } from '../../contexts/ModalContext';
 import { formatCurrency } from '../../utils/common';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 /**
  * RegionAnalysis.jsx
@@ -216,7 +217,7 @@ const RegionAnalysis = () => {
                 어조는 전문적이지만 친절하게(해요체) 작성해주세요.
             `;
 
-            const result = await window.__TAURI__.core.invoke('call_gemini_ai', { prompt });
+            const result = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
             setAiInsight(result);
 
         } catch (e) {

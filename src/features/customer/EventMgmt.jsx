@@ -176,19 +176,20 @@ const EventMgmt = () => {
                         <table className="w-full text-sm border-collapse table-fixed">
                             <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-200 shadow-sm">
                                 <tr>
-                                    <th className="px-5 py-4 w-[6%] text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">No</th>
-                                    <th className="px-5 py-4 w-[24%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">행사명</th>
-                                    <th className="px-5 py-4 w-[16%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">주최사</th>
-                                    <th className="px-5 py-4 w-[12%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">담당자</th>
-                                    <th className="px-5 py-4 w-[20%] text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">기간</th>
-                                    <th className="px-5 py-4 w-[22%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">메모</th>
+                                    <th className="px-5 py-4 w-[5%] text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">No</th>
+                                    <th className="px-5 py-4 w-[20%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">행사명</th>
+                                    <th className="px-5 py-4 w-[14%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">주최사</th>
+                                    <th className="px-5 py-4 w-[10%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">담당자</th>
+                                    <th className="px-5 py-4 w-[15%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">장소</th>
+                                    <th className="px-5 py-4 w-[18%] text-center text-[10px] font-black uppercase text-slate-400 tracking-wider">기간</th>
+                                    <th className="px-5 py-4 w-[18%] text-left text-[10px] font-black uppercase text-slate-400 tracking-wider">메모</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {isLoading ? (
-                                    <tr><td colSpan="6" className="p-10 text-center"><span className="material-symbols-rounded spin text-slate-400 text-2xl">sync</span></td></tr>
+                                    <tr><td colSpan="7" className="p-10 text-center"><span className="material-symbols-rounded spin text-slate-400 text-2xl">sync</span></td></tr>
                                 ) : events.length === 0 ? (
-                                    <tr><td colSpan="6" className="p-10 text-center text-slate-400">등록된 행사가 없습니다.</td></tr>
+                                    <tr><td colSpan="7" className="p-10 text-center text-slate-400">등록된 행사가 없습니다.</td></tr>
                                 ) : (
                                     events.map(ev => (
                                         <tr key={ev.event_id} onClick={() => handleOpenModal(ev)} className="hover:bg-blue-50/40 cursor-pointer transition-colors group">
@@ -196,6 +197,7 @@ const EventMgmt = () => {
                                             <td className="px-5 py-4 font-bold text-slate-700 truncate" title={ev.event_name}>{ev.event_name}</td>
                                             <td className="px-5 py-4 text-slate-600 truncate" title={ev.organizer}>{ev.organizer || '-'}</td>
                                             <td className="px-5 py-4 text-slate-600 truncate" title={ev.manager_name}>{ev.manager_name || '-'}</td>
+                                            <td className="px-5 py-4 text-slate-600 truncate" title={ev.location_address}>{ev.location_address || '-'}</td>
                                             <td className="px-5 py-4 text-center">
                                                 <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-xs font-bold border border-blue-100">
                                                     {ev.start_date || '-'} ~ {ev.end_date || '-'}

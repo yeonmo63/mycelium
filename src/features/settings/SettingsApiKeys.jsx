@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import {
     Cpu,
@@ -85,6 +86,27 @@ const SettingsApiKeys = () => {
             await showAlert('저장 완료', 'Gemini API 키가 저장되었습니다.');
         } catch (err) {
             showAlert('저장 실패', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleTestGemini = async () => {
+        if (!formData.gemini_api_key) {
+            showAlert('알림', '테스트할 API 키를 먼저 입력해주세요.');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const res = await invokeAI(showAlert, 'test_gemini_connection', { key: formData.gemini_api_key });
+            if (res === 'OK') {
+                showAlert('성공', 'Gemini AI 연결에 성공했습니다!');
+            } else {
+                showAlert('결과', `응답: ${res}`);
+            }
+        } catch (err) {
+            console.error(err);
+            // invokeAI handles the quota error alert
         } finally {
             setIsLoading(false);
         }
@@ -179,13 +201,22 @@ const SettingsApiKeys = () => {
                                     <p className="text-[11px] font-bold text-slate-400">데이터 분석 및 마케팅 제안 AI 엔진</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={handleSaveGemini}
-                                disabled={isLoading}
-                                className="h-10 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all active:scale-[0.95]"
-                            >
-                                <Save size={14} /> 저장
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleTestGemini}
+                                    disabled={isLoading}
+                                    className="h-10 px-5 bg-white border border-indigo-200 text-indigo-600 rounded-xl font-black text-xs flex items-center gap-2 transition-all active:scale-[0.95]"
+                                >
+                                    <span className="material-symbols-rounded text-sm">check_circle</span> 연결 테스트
+                                </button>
+                                <button
+                                    onClick={handleSaveGemini}
+                                    disabled={isLoading}
+                                    className="h-10 px-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all active:scale-[0.95]"
+                                >
+                                    <Save size={14} /> 저장
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-3">

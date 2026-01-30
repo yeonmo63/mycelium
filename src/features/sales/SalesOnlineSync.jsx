@@ -399,22 +399,21 @@ const SalesOnlineSync = () => {
         <div className="h-full flex flex-col relative overflow-hidden">
             {/* Header Title */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-1 shrink-0">
-                <div className="flex justify-between items-end mb-4">
-                    <div>
+                <div className="flex justify-center items-center mb-4">
+                    <div className="inline-flex flex-col items-start">
                         <div className="flex items-center gap-2 mb-0.5">
                             <span className="w-6 h-1 bg-teal-500 rounded-full"></span>
                             <span className="text-[9px] font-black tracking-[0.2em] text-teal-600 uppercase">Smart Store Integration</span>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
-                            쇼핑몰 주문 연동 <span className="text-slate-300 font-light ml-1 text-xl">Smart Sync</span>
-                        </h1>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>쇼핑몰 주문 연동 <span className="text-slate-300 font-light ml-1 text-xl">Smart Sync</span></h1>
                     </div>
                 </div>
             </div>
 
+
             {/* Upload Step */}
             {step === 'upload' && (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 pb-20">
+                <div className="flex-1 flex flex-col items-center pt-10 px-8 pb-20">
                     <div className="w-[600px] bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100/50 text-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-teal-400 via-emerald-400 to-green-400"></div>
 

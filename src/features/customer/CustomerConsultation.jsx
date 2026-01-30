@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerConsultation = () => {
     const { showAlert, showConfirm } = useModal();
@@ -51,12 +52,10 @@ const CustomerConsultation = () => {
         if (!window.__TAURI__) return;
         try {
             setIsAiLoading(true);
-            const summary = await window.__TAURI__.core.invoke('get_pending_consultations_summary');
+            const summary = await invokeAI(showAlert, 'get_pending_consultations_summary');
             showAlert('AI 상담 브리핑', summary); // Or better: use a custom rich modal if available
         } catch (e) {
-            const errStr = String(e);
-            if (errStr.includes('429')) showAlert('안내', 'AI 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
-            else showAlert('오류', '브리핑 생성 실패: ' + errStr);
+            console.error(e);
         } finally {
             setIsAiLoading(false);
         }
@@ -140,7 +139,7 @@ const CustomerConsultation = () => {
         if (!editData) return;
         setIsAiLoading(true);
         try {
-            const advice = await window.__TAURI__.core.invoke('get_consultation_ai_advisor', {
+            const advice = await invokeAI(showAlert, 'get_consultation_ai_advisor', {
                 customerId: editData.customer_id || null, // Note: backend assumes string or option? Check type. Mostly String or Option<String>
                 category: editData.category,
                 title: editData.title,
@@ -148,9 +147,7 @@ const CustomerConsultation = () => {
             });
             setAiAdvisor(advice);
         } catch (e) {
-            const errStr = String(e);
-            if (errStr.includes('429')) showAlert('안내', 'AI 할당량 초과. 잠시 후 사용해주세요.');
-            else showAlert('오류', 'AI 조언 실패: ' + errStr);
+            console.error(e);
         } finally {
             setIsAiLoading(false);
         }
@@ -160,12 +157,12 @@ const CustomerConsultation = () => {
         if (!editData?.customer_id) return;
         setIsAiLoading(true);
         try {
-            const briefing = await window.__TAURI__.core.invoke('get_consultation_briefing', {
+            const briefing = await invokeAI(showAlert, 'get_consultation_briefing', {
                 customerId: editData.customer_id
             });
             setAiBriefing(briefing);
         } catch (e) {
-            showAlert('오류', '브리핑 실패: ' + e);
+            console.error(e);
         } finally {
             setIsAiLoading(false);
         }

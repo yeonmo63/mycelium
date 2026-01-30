@@ -344,7 +344,7 @@ const SalesShipping = () => {
                             <span className="w-6 h-1 bg-emerald-500 rounded-full"></span>
                             <span className="text-[9px] font-black tracking-[0.2em] text-emerald-600 uppercase">Logistics System</span>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter">배송 관리 <span className="text-slate-300 font-light ml-1 text-xl">Shipping</span></h1>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>배송 관리 <span className="text-slate-300 font-light ml-1 text-xl">Shipping</span></h1>
                     </div>
                     <button onClick={() => setShowGuide(!showGuide)} className="no-print flex items-center gap-1 text-slate-400 hover:text-emerald-600 transition-colors text-xs font-bold bg-white px-3 py-1.5 rounded-full border border-slate-100 hover:border-emerald-200 shadow-sm">
                         <span className="material-symbols-rounded text-lg">help</span>

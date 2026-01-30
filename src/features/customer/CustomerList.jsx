@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { formatPhoneNumber, formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 /**
  * CustomerList.jsx
@@ -453,9 +454,13 @@ const CustomerList = () => {
                             if (!customer) return;
                             setIsProcessing(true);
                             try {
-                                const res = await window.__TAURI__.core.invoke('get_customer_ai_insight', { customerId: customer.customer_id });
+                                const res = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId: customer.customer_id });
                                 setAiInsight(res); setIsAiModalOpen(true);
-                            } catch (e) { showAlert("오류", "AI 분석 실패"); }
+                            } catch (e) {
+                                if (e.message !== 'AI_QUOTA_EXCEEDED') {
+                                    showAlert("오류", "AI 분석 실패: " + e);
+                                }
+                            }
                             finally { setIsProcessing(false); }
                         }}
                         disabled={!customer || isProcessing}

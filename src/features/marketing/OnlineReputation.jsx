@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useModal } from '../../contexts/ModalContext';
+import { invokeAI } from '../../utils/aiErrorHandler';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 /**
@@ -103,7 +104,7 @@ const OnlineReputation = () => {
 
             // 3. AI Analysis
             setLoadingStep("Gemini AI가 소셜 평판과 키워드를 분석 중입니다...");
-            const analysis = await window.__TAURI__.core.invoke('analyze_online_sentiment', { mentions: mentionsForAi });
+            const analysis = await invokeAI(showAlert, 'analyze_online_sentiment', { mentions: mentionsForAi });
 
             // Process Result
             const processedMentions = (analysis.analyzed_mentions || []).map((am, idx) => {
@@ -129,12 +130,6 @@ const OnlineReputation = () => {
 
         } catch (e) {
             console.error("Analysis Error:", e);
-            const errMsg = e.toString();
-            if (errMsg.includes("429") || errMsg.includes("Quota")) {
-                showAlert("오류", "AI 서버 사용량이 많아 분석을 진행할 수 없습니다. 잠시 후 다시 시도해주세요.");
-            } else {
-                showAlert("분석 실패", `${e.toString()}\n(API 키와 인터넷 연결을 확인해주세요)`);
-            }
         } finally {
             setIsLoading(false);
         }

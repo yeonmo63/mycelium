@@ -215,11 +215,10 @@ const Dashboard = () => {
     const handleAIBriefing = async () => {
         try {
             setAiBriefingContent("AI가 어제와 오늘의 운영 데이터를 정밀 분석하여 일일 리포트를 생성하고 있습니다...");
-            const content = await invoke('get_morning_briefing');
+            const content = await invokeAI(showAlert, 'get_morning_briefing');
             setAiBriefingContent(content);
         } catch (e) {
             console.error(e);
-            showAlert("오류", "AI 브리핑 생성에 실패했습니다: " + e);
             setAiBriefingContent(null);
         }
     };
@@ -228,11 +227,10 @@ const Dashboard = () => {
         e.stopPropagation();
         try {
             setAiBriefingContent("미처리 상담 내역을 분석하여 시급도와 대응 전략을 요약하고 있습니다...");
-            const summary = await invoke('get_pending_consultations_summary');
+            const summary = await invokeAI(showAlert, 'get_pending_consultations_summary');
             setAiBriefingContent(summary);
         } catch (e) {
             console.error(e);
-            showAlert("오류", "상담 브리핑 생성에 실패했습니다: " + e);
             setAiBriefingContent(null);
         }
     };
