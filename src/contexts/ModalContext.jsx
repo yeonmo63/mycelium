@@ -63,6 +63,24 @@ export const ModalProvider = ({ children }) => {
         });
     }, [closeModal, findModalRoot]);
 
+    const showChoice = useCallback((title, message, options = []) => {
+        return new Promise((resolve) => {
+            const id = Date.now() + Math.random();
+            setTarget(findModalRoot());
+            setModals(prev => [...prev, {
+                id,
+                type: 'choice',
+                title,
+                message,
+                options, // e.g. [{ label: 'Yes', value: 'yes', primary: true }, { label: 'No', value: 'no' }]
+                onSelect: (value) => {
+                    resolve(value);
+                    closeModal(id);
+                }
+            }]);
+        });
+    }, [closeModal, findModalRoot]);
+
     const promptAdminPassword = useCallback(() => {
         return new Promise((resolve) => {
             const id = Date.now() + Math.random();
@@ -89,7 +107,7 @@ export const ModalProvider = ({ children }) => {
         setTarget(findModalRoot());
     }, [findModalRoot]);
 
-    const contextValue = React.useMemo(() => ({ showConfirm, showAlert, promptAdminPassword }), [showConfirm, showAlert, promptAdminPassword]);
+    const contextValue = React.useMemo(() => ({ showConfirm, showChoice, showAlert, promptAdminPassword }), [showConfirm, showChoice, showAlert, promptAdminPassword]);
 
     return (
         <ModalContext.Provider value={contextValue}>
@@ -161,7 +179,7 @@ const ModalItem = ({ modal, index }) => {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[40px] rounded-full pointer-events-none"></div>
 
                 <h3 className="text-xl font-bold text-white mb-2 relative z-10">{modal.title}</h3>
-                <p className="text-slate-300 mb-6 leading-relaxed relative z-10 whitespace-pre-line">{modal.message}</p>
+                <p className="text-slate-300 mb-6 leading-relaxed relative z-10 whitespace-pre-line break-all">{modal.message}</p>
 
                 {modal.type === 'password' && (
                     <div className="mb-8 relative z-10">
@@ -181,20 +199,41 @@ const ModalItem = ({ modal, index }) => {
                 )}
 
                 <div className="flex gap-3 justify-end relative z-10">
-                    {(modal.type === 'confirm' || modal.type === 'password') && (
-                        <button
-                            onClick={modal.onCancel}
-                            className="px-5 py-2.5 rounded-xl text-slate-400 font-bold hover:bg-slate-800 hover:text-white transition-colors"
-                        >
-                            취소
-                        </button>
+                    {modal.type === 'choice' ? (
+                        <div className="flex flex-wrap gap-2 justify-end w-full">
+                            {modal.options.map((opt, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => modal.onSelect(opt.value)}
+                                    className={`px-5 py-2.5 rounded-xl font-bold transition-all active:scale-[0.98] ${opt.primary
+                                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/20 hover:brightness-110'
+                                        : opt.danger
+                                            ? 'bg-rose-600/20 text-rose-500 border border-rose-500/50 hover:bg-rose-600 hover:text-white'
+                                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <>
+                            {(modal.type === 'confirm' || modal.type === 'password') && (
+                                <button
+                                    onClick={modal.onCancel}
+                                    className="px-5 py-2.5 rounded-xl text-slate-400 font-bold hover:bg-slate-800 hover:text-white transition-colors"
+                                >
+                                    취소
+                                </button>
+                            )}
+                            <button
+                                onClick={handleConfirm}
+                                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/20 hover:brightness-110 active:scale-[0.98] transition-all"
+                            >
+                                확인
+                            </button>
+                        </>
                     )}
-                    <button
-                        onClick={handleConfirm}
-                        className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/20 hover:brightness-110 active:scale-[0.98] transition-all"
-                    >
-                        확인
-                    </button>
                 </div>
             </div>
         </div>

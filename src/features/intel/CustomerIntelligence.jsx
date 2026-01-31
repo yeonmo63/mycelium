@@ -11,6 +11,13 @@ const CustomerIntelligence = () => {
     const [activeTab, setActiveTab] = useState('rfm');
     const [isLoading, setIsLoading] = useState(true);
     const [loadingText, setLoadingText] = useState('고객 데이터를 분석 중입니다...');
+    const [isGlobalProcessing, setIsGlobalProcessing] = useState(false);
+    const [globalLoadingText, setGlobalLoadingText] = useState('');
+
+    const toggleProcessing = (loading, text = '분석 수행 중...') => {
+        setIsGlobalProcessing(loading);
+        setGlobalLoadingText(text);
+    };
 
     // Shared Data
     const [rfmData, setRfmData] = useState([]);
@@ -76,85 +83,106 @@ const CustomerIntelligence = () => {
     }, [loadSharedData]);
 
     return (
-        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
-            {/* Header Area */}
-            <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4 shrink-0">
-                <div className="flex justify-between items-end">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="w-6 h-1 bg-rose-500 rounded-full"></span>
-                            <span className="text-[9px] font-black tracking-[0.2em] text-rose-500 uppercase">AI Customer Center</span>
-                        </div>
-                        <h1 className="text-3xl font-black text-slate-700 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
-                            AI 고객 성장 센터 <span className="text-slate-300 font-light ml-1 text-xl">Customer Intelligence</span>
-                        </h1>
-                        <p className="text-slate-400 text-sm mt-1 flex items-center gap-1">
-                            <span className="material-symbols-rounded text-sm">support_agent</span>
-                            AI가 고객의 생애 주기를 분석하고 맞춤형 성장 전략을 제안합니다.
-                        </p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => window.location.reload()} className="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all flex items-center gap-2 text-sm shadow-sm">
-                            <span className="material-symbols-rounded text-lg">refresh</span> 새로고침
-                        </button>
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative">
+            {/* Global Loading Overlays */}
+            {isLoading && (
+                <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center animate-in zoom-in-95 duration-500 text-center px-6">
+                        <span className="material-symbols-rounded text-6xl text-rose-500 animate-spin">cyclone</span>
+                        <div className="mt-6 text-xl font-black text-slate-700">{loadingText}</div>
+                        <p className="text-slate-400 text-sm mt-2">고객 집단별 최적의 커뮤니케이션 전략을 수립 중입니다.</p>
                     </div>
                 </div>
+            )}
 
-                {/* Tab Navigation */}
-                <div className="flex items-center gap-1 mt-6 border-b border-slate-200 overflow-x-auto custom-scrollbar">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => handleTabChange(tab.id)}
-                            className={`px-5 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap rounded-t-lg
+            {isGlobalProcessing && (
+                <div className="absolute inset-0 z-[90] bg-slate-900/5 backdrop-blur-[1px] flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center gap-4 bg-white/90 backdrop-blur-md p-10 rounded-[2.5rem] shadow-2xl shadow-rose-200/40 border border-white/50 animate-in zoom-in-95 duration-300">
+                        <div className="relative">
+                            <span className="material-symbols-rounded text-7xl text-rose-500 animate-spin">progress_activity</span>
+                            <span className="material-symbols-rounded text-3xl text-rose-300 absolute inset-0 flex items-center justify-center">psychology</span>
+                        </div>
+                        <div className="flex flex-col items-center text-center">
+                            <span className="text-xl font-black text-slate-800">{globalLoadingText}</span>
+                            <span className="text-sm text-slate-500 mt-2">안전한 데이터 처리를 위해 잠시만 기다려 주세요.<br />분석이 완료되면 리스트가 자동으로 업데이트됩니다.</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isTabLoading && (
+                <div className="absolute inset-0 z-[80] bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
+                    <div className="bg-white/90 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-xl flex items-center gap-4 border border-slate-100">
+                        <span className="material-symbols-rounded text-2xl animate-spin text-rose-500">sync</span>
+                        <span className="text-base font-bold text-slate-700">분석 화면 전환 중...</span>
+                    </div>
+                </div>
+            )}
+
+            <div className={(isLoading || isGlobalProcessing || isTabLoading) ? 'opacity-70 blur-[0.5px] pointer-events-none transition-all duration-300 flex flex-col h-full' : 'flex flex-col h-full transition-all duration-300'}>
+                {/* Header Area */}
+                <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4 shrink-0">
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="w-6 h-1 bg-rose-500 rounded-full"></span>
+                                <span className="text-[9px] font-black tracking-[0.2em] text-rose-500 uppercase">AI Customer Center</span>
+                            </div>
+                            <h1 className="text-3xl font-black text-slate-700 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                                AI 고객 성장 센터 <span className="text-slate-300 font-light ml-1 text-xl">Customer Intelligence</span>
+                            </h1>
+                            <p className="text-slate-400 text-sm mt-1 flex items-center gap-1">
+                                <span className="material-symbols-rounded text-sm">support_agent</span>
+                                AI가 고객의 생애 주기를 분석하고 맞춤형 성장 전략을 제안합니다.
+                            </p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => window.location.reload()} className="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all flex items-center gap-2 text-sm shadow-sm">
+                                <span className="material-symbols-rounded text-lg">refresh</span> 새로고침
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Tab Navigation */}
+                    <div className="flex items-center gap-1 mt-6 border-b border-slate-200 overflow-x-auto custom-scrollbar">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => handleTabChange(tab.id)}
+                                className={`px-5 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all whitespace-nowrap rounded-t-lg
                                 ${activeTab === tab.id
-                                    ? `border-current ${tab.color.replace('text-', 'border-')} ${tab.color} bg-white shadow-sm`
-                                    : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                                }
+                                        ? `border-current ${tab.color.replace('text-', 'border-')} ${tab.color} bg-white shadow-sm`
+                                        : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                                    }
                             `}
-                        >
-                            <span className={`material-symbols-rounded text-lg`}>{tab.icon}</span>
-                            {tab.label}
-                        </button>
-                    ))}
+                            >
+                                <span className={`material-symbols-rounded text-lg`}>{tab.icon}</span>
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0 custom-scrollbar relative">
-                {isLoading && (
-                    <div className="absolute inset-0 z-50 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center">
-                        <span className="material-symbols-rounded text-4xl text-rose-500 animate-spin">cyclone</span>
-                        <div className="mt-4 text-slate-600 font-bold">{loadingText}</div>
-                    </div>
-                )}
-
-                {isTabLoading && (
-                    <div className="absolute inset-0 z-40 bg-white/60 backdrop-blur-[2px] flex items-center justify-center transition-opacity duration-300">
-                        <div className="bg-white p-4 rounded-full shadow-lg flex items-center gap-3">
-                            <span className="material-symbols-rounded w-6 h-6 animate-spin text-rose-500">progress_activity</span>
-                            <span className="text-sm font-bold text-slate-600">Loading...</span>
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0 custom-scrollbar relative">
+                    <div>
+                        <div style={{ display: activeTab === 'rfm' ? 'block' : 'none' }}>
+                            <TabRfm
+                                data={rfmData}
+                                isLoading={isLoading}
+                                onRefresh={handleRefresh}
+                                isVisible={activeTab === 'rfm'}
+                                showAlert={showAlert}
+                                openSmsModal={openSmsModal}
+                                openSummaryModal={openSummaryModal}
+                            />
                         </div>
-                    </div>
-                )}
-
-                <div className={isTabLoading ? 'opacity-50 pointer-events-none' : 'opacity-100 transition-opacity duration-300'}>
-                    <div style={{ display: activeTab === 'rfm' ? 'block' : 'none' }}>
-                        <TabRfm
-                            data={rfmData}
-                            isLoading={isLoading}
-                            onRefresh={handleRefresh}
-                            isVisible={activeTab === 'rfm'}
-                            showAlert={showAlert}
-                            openSmsModal={openSmsModal}
-                            openSummaryModal={openSummaryModal}
-                        />
-                    </div>
-                    <div style={{ display: activeTab === 'repurchase' ? 'block' : 'none' }}>
-                        <TabRepurchase isVisible={activeTab === 'repurchase'} showAlert={showAlert} />
-                    </div>
-                    <div style={{ display: activeTab === 'membership' ? 'block' : 'none' }}>
-                        <TabMembership data={membershipData} isVisible={activeTab === 'membership'} />
+                        <div style={{ display: activeTab === 'repurchase' ? 'block' : 'none' }}>
+                            <TabRepurchase isVisible={activeTab === 'repurchase'} showAlert={showAlert} toggleProcessing={toggleProcessing} />
+                        </div>
+                        <div style={{ display: activeTab === 'membership' ? 'block' : 'none' }}>
+                            <TabMembership data={membershipData} isVisible={activeTab === 'membership'} />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -332,14 +360,13 @@ const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, o
     );
 });
 
-const TabRepurchase = ({ isVisible, showAlert }) => {
+const TabRepurchase = ({ isVisible, showAlert, toggleProcessing }) => {
     const [result, setResult] = useState([]);
     const [hasRun, setHasRun] = useState(false);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     const runAnalysis = async () => {
         if (!window.__TAURI__) return;
-        setIsAnalyzing(true);
+        toggleProcessing(true, 'AI가 고객 구매 패턴과 재구매 주기를 심층 분석 중입니다...');
         try {
             await new Promise(r => setTimeout(r, 1000)); // Fake nice delay
             const res = await window.__TAURI__.core.invoke('get_ai_repurchase_analysis', {});
@@ -349,7 +376,7 @@ const TabRepurchase = ({ isVisible, showAlert }) => {
             console.error(e);
             showAlert('분석 실패', e.toString());
         } finally {
-            setIsAnalyzing(false);
+            toggleProcessing(false);
         }
     };
 
@@ -357,11 +384,6 @@ const TabRepurchase = ({ isVisible, showAlert }) => {
         <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 border-l-[6px] border-rose-500 shadow-sm flex flex-col md:flex-row gap-6">
                 <div className="shrink-0 relative">
-                    {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/70 rounded-full flex items-center justify-center z-10">
-                            <span className="material-symbols-rounded text-rose-500 animate-spin">refresh</span>
-                        </div>
-                    )}
                     <div className="w-16 h-16 rounded-full bg-rose-50 border-2 border-rose-100 overflow-hidden">
                         <img src="https://api.dicebear.com/7.x/bottts/svg?seed=jenny" alt="AI" className="w-full h-full" />
                     </div>

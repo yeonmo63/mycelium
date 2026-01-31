@@ -18,6 +18,13 @@ const SalesIntelligence = () => {
     const [loadingText, setLoadingText] = useState('데이터 분석 중...');
     const [sharedData, setSharedData] = useState({ trend: [], topProducts: [] });
     const [isTabLoading, setIsTabLoading] = useState(false);
+    const [isGlobalProcessing, setIsGlobalProcessing] = useState(false);
+    const [globalLoadingText, setGlobalLoadingText] = useState('');
+
+    const toggleProcessing = (loading, text = '데이터 분석 중...') => {
+        setIsGlobalProcessing(loading);
+        setGlobalLoadingText(text);
+    };
 
     const handleTabChange = (tabId) => {
         if (activeTab === tabId) return;
@@ -61,7 +68,42 @@ const SalesIntelligence = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700">
+        <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative">
+            {/* Global Loading Overlays */}
+            {isLoading && (
+                <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center animate-in zoom-in-95 duration-500">
+                        <span className="material-symbols-rounded text-6xl text-indigo-500 animate-spin">cyclone</span>
+                        <div className="mt-6 text-xl font-black text-slate-700">{loadingText}</div>
+                        <p className="text-slate-400 text-sm mt-2">최적의 비즈니스 전략을 구성하는 중입니다.</p>
+                    </div>
+                </div>
+            )}
+
+            {isGlobalProcessing && (
+                <div className="absolute inset-0 z-[90] bg-slate-900/5 backdrop-blur-[1px] flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center gap-4 bg-white/90 backdrop-blur-md p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-200/40 border border-white/50 animate-in zoom-in-95 duration-300">
+                        <div className="relative">
+                            <span className="material-symbols-rounded text-7xl text-indigo-600 animate-spin">progress_activity</span>
+                            <span className="material-symbols-rounded text-3xl text-indigo-300 absolute inset-0 flex items-center justify-center">analytics</span>
+                        </div>
+                        <div className="flex flex-col items-center text-center">
+                            <span className="text-xl font-black text-slate-800">{globalLoadingText}</span>
+                            <span className="text-sm text-slate-500 mt-2">안정적인 분석을 위해 잠시만 기다려 주세요.<br />데이터 집계 완료 후 리포트가 갱신됩니다.</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isTabLoading && (
+                <div className="absolute inset-0 z-[80] bg-white/40 backdrop-blur-[1px] flex items-center justify-center">
+                    <div className="bg-white/90 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-xl flex items-center gap-4 border border-slate-100">
+                        <span className="material-symbols-rounded text-2xl animate-spin text-indigo-600">sync</span>
+                        <span className="text-base font-bold text-slate-700">탭 전환 중...</span>
+                    </div>
+                </div>
+            )}
+
             {/* Header Area */}
             <div className="px-6 lg:px-8 pt-6 lg:pt-8 pb-4 shrink-0">
                 <div className="flex justify-between items-end">
@@ -106,26 +148,10 @@ const SalesIntelligence = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0 custom-scrollbar relative">
-                {isLoading && (
-                    <div className="absolute inset-0 z-50 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center">
-                        <span className="material-symbols-rounded text-4xl text-indigo-500 animate-spin">cyclone</span>
-                        <div className="mt-4 text-slate-600 font-bold">{loadingText}</div>
-                    </div>
-                )}
-
-                {isTabLoading && (
-                    <div className="absolute inset-0 z-40 bg-white/60 backdrop-blur-[2px] flex items-center justify-center transition-opacity duration-300">
-                        <div className="bg-white p-4 rounded-full shadow-lg flex items-center gap-3">
-                            <span className="material-symbols-rounded w-6 h-6 animate-spin text-indigo-600">progress_activity</span>
-                            <span className="text-sm font-bold text-slate-600">Loading...</span>
-                        </div>
-                    </div>
-                )}
-
-                <div className={isTabLoading ? 'opacity-50 pointer-events-none' : 'opacity-100 transition-opacity duration-300'}>
+            <div className="flex-1 overflow-y-auto p-6 lg:p-8 min-h-0 custom-scrollbar">
+                <div className={(isTabLoading || isGlobalProcessing || isLoading) ? 'opacity-70 blur-[0.5px] pointer-events-none transition-all duration-300' : 'opacity-100 transition-all duration-300'}>
                     <div style={{ display: activeTab === 'advice' ? 'block' : 'none' }}>
-                        <TabAdvice sharedData={sharedData} isVisible={activeTab === 'advice'} showAlert={showAlert} />
+                        <TabAdvice sharedData={sharedData} isVisible={activeTab === 'advice'} showAlert={showAlert} toggleProcessing={toggleProcessing} />
                     </div>
                     <div style={{ display: activeTab === 'summary' ? 'block' : 'none' }}>
                         <TabSummary sharedData={sharedData} isVisible={activeTab === 'summary'} />
@@ -134,13 +160,13 @@ const SalesIntelligence = () => {
                         <TabTrend sharedData={sharedData} isVisible={activeTab === 'trend'} />
                     </div>
                     <div style={{ display: activeTab === 'product' ? 'block' : 'none' }}>
-                        <TabProductRegion isVisible={activeTab === 'product'} />
+                        <TabProductRegion isVisible={activeTab === 'product'} toggleProcessing={toggleProcessing} />
                     </div>
                     <div style={{ display: activeTab === 'forecast' ? 'block' : 'none' }}>
-                        <TabForecast isVisible={activeTab === 'forecast'} showAlert={showAlert} />
+                        <TabForecast isVisible={activeTab === 'forecast'} showAlert={showAlert} toggleProcessing={toggleProcessing} />
                     </div>
                     <div style={{ display: activeTab === 'profit' ? 'block' : 'none' }}>
-                        <TabProfit isVisible={activeTab === 'profit'} />
+                        <TabProfit isVisible={activeTab === 'profit'} toggleProcessing={toggleProcessing} />
                     </div>
                 </div>
             </div>
@@ -150,7 +176,7 @@ const SalesIntelligence = () => {
 
 // --- Sub Components ---
 
-const TabAdvice = ({ sharedData, isVisible, showAlert }) => {
+const TabAdvice = ({ sharedData, isVisible, showAlert, toggleProcessing }) => {
     const [stats, setStats] = useState({ yearTotal: 0, topItem: '-' });
     const [report, setReport] = useState(null);
     const [selectedTheme, setSelectedTheme] = useState('marketing');
@@ -170,6 +196,7 @@ const TabAdvice = ({ sharedData, isVisible, showAlert }) => {
     const handleGenerate = async () => {
         if (!window.__TAURI__) return;
         setIsGenerating(true);
+        toggleProcessing(true, 'AI가 경영 데이터를 심층 분석하고 있습니다...');
         setReport(null); // Clear previous
 
         try {
@@ -204,6 +231,7 @@ const TabAdvice = ({ sharedData, isVisible, showAlert }) => {
             console.error(e);
         } finally {
             setIsGenerating(false);
+            toggleProcessing(false);
         }
     };
 
@@ -268,14 +296,6 @@ const TabAdvice = ({ sharedData, isVisible, showAlert }) => {
                             <button onClick={handleGenerate} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center justify-center gap-2">
                                 <span className="material-symbols-rounded">auto_awesome</span> 지금 전략 분석 리포트 생성하기
                             </button>
-                        </div>
-                    )}
-
-                    {isGenerating && (
-                        <div className="h-64 flex flex-col items-center justify-center text-slate-400">
-                            <span className="material-symbols-rounded text-5xl text-indigo-500 animate-spin mb-4">psychology</span>
-                            <p className="font-bold text-slate-600">AI가 데이터를 분석하고 있습니다...</p>
-                            <p className="text-sm mt-2 text-indigo-500">{selectedTheme === 'marketing' ? '마케팅 전략 수립 중' : selectedTheme === 'stock' ? '운영 최적화 분석 중' : '고객 데이터 분석 중'} ({Math.floor(Math.random() * 20) + 10}초 소요)</p>
                         </div>
                     )}
 
@@ -525,11 +545,10 @@ const TabTrend = ({ sharedData, isVisible }) => {
     );
 };
 
-const TabProductRegion = ({ isVisible }) => {
+const TabProductRegion = ({ isVisible, toggleProcessing }) => {
     const [products, setProducts] = useState([]);
     const [regions, setRegions] = useState([]);
     const [hasLoaded, setHasLoaded] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
     const pieRef = useRef(null);
     const barRef = useRef(null);
     const pieInstance = useRef(null);
@@ -545,7 +564,7 @@ const TabProductRegion = ({ isVisible }) => {
 
     const loadData = async () => {
         if (!window.__TAURI__) return;
-        setIsLoading(true);
+        toggleProcessing(true, '점포 및 지역별 판매 실적을 집계하고 있습니다...');
         try {
             const year = new Date().getFullYear();
             const [pData, rData] = await Promise.all([
@@ -559,7 +578,7 @@ const TabProductRegion = ({ isVisible }) => {
         } catch (e) {
             console.error(e);
         } finally {
-            setIsLoading(false);
+            toggleProcessing(false);
         }
     };
 
@@ -642,15 +661,6 @@ const TabProductRegion = ({ isVisible }) => {
 
     return (
         <div className="flex flex-col gap-6 h-full relative">
-            {isLoading && (
-                <div className="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex items-center justify-center rounded-2xl">
-                    <div className="flex flex-col items-center gap-2">
-                        <span className="material-symbols-rounded text-3xl text-indigo-600 animate-spin">progress_activity</span>
-                        <span className="text-sm font-bold text-slate-500">데이터를 분석 중입니다...</span>
-                    </div>
-                </div>
-            )}
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px] shrink-0">
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col shadow-sm">
                     <h3 className="font-bold text-lg text-slate-700 mb-2 flex items-center gap-2">
@@ -716,13 +726,12 @@ const TabProductRegion = ({ isVisible }) => {
     );
 };
 
-const TabForecast = ({ isVisible, showAlert }) => {
+const TabForecast = ({ isVisible, showAlert, toggleProcessing }) => {
     const [productList, setProductList] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState('ALL');
     const [duration, setDuration] = useState('90');
     const [result, setResult] = useState(null);
     const [isProductLoaded, setIsProductLoaded] = useState(false);
-    const [isAnalyzing, setIsAnalyzing] = useState(false); // Local loading state
     const chartRef = useRef(null);
     const chartInstance = useRef(null);
 
@@ -746,7 +755,7 @@ const TabForecast = ({ isVisible, showAlert }) => {
 
     const runForecast = async () => {
         if (!window.__TAURI__) return;
-        setIsAnalyzing(true);
+        toggleProcessing(true, 'AI가 향후 수요를 예측하고 최적 재고량을 계산 중입니다...');
         try {
             const res = await invokeAI(showAlert, 'get_ai_demand_forecast', {
                 productName: selectedProduct === 'ALL' ? null : selectedProduct,
@@ -757,7 +766,7 @@ const TabForecast = ({ isVisible, showAlert }) => {
         } catch (e) {
             console.error(e);
         } finally {
-            setIsAnalyzing(false);
+            toggleProcessing(false);
         }
     };
 
@@ -803,12 +812,6 @@ const TabForecast = ({ isVisible, showAlert }) => {
 
             {!result ? (
                 <div className="h-[400px] border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 relative">
-                    {isAnalyzing && (
-                        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-10 transition-opacity">
-                            <span className="material-symbols-rounded text-4xl text-violet-500 animate-spin">cyclone</span>
-                            <div className="mt-4 text-slate-600 font-bold">AI가 미래 수요를 예측하고 있습니다...</div>
-                        </div>
-                    )}
                     <span className="material-symbols-rounded text-6xl opacity-30 mb-4">insights</span>
                     <p>조건을 선택하고 'AI 분석 실행' 버튼을 눌러주세요.</p>
                 </div>
@@ -834,7 +837,7 @@ const TabForecast = ({ isVisible, showAlert }) => {
     );
 };
 
-const TabProfit = ({ isVisible }) => {
+const TabProfit = ({ isVisible, toggleProcessing }) => {
     const [data, setData] = useState([]);
     const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -846,12 +849,15 @@ const TabProfit = ({ isVisible }) => {
 
     const loadData = async () => {
         if (!window.__TAURI__) return;
+        toggleProcessing(true, '품목별 수익 구조 및 마진율을 정밀 분석하고 있습니다...');
         try {
             const res = await window.__TAURI__.core.invoke('get_profit_margin_analysis', { year: new Date().getFullYear() });
             setData(res || []);
             setHasLoaded(true);
         } catch (e) {
             console.error(e);
+        } finally {
+            toggleProcessing(false);
         }
     };
 

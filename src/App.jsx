@@ -135,10 +135,33 @@ function AppContent() {
         }
 
         unlisten = await listen('window_close_requested', async () => {
-          const confirmed = await showConfirm("프로그램 종료", "종료하시겠습니까?");
-          if (confirmed) {
-            if (unlisten) unlisten();
-            await invoke('confirm_exit');
+          const isFriday = new Date().getDay() === 5;
+          const hasUnsavedChanges = true; // For now we assume there might be changes if they've logged in
+
+          if (isFriday) {
+            const result = await showChoice(
+              "프로그램 종료",
+              "오늘은 전체 백업이 예정된 금요일입니다.\n데이터를 안전하게 보관한 후 종료하시겠습니까?",
+              [
+                { label: '백업 후 종료', value: 'backup', primary: true },
+                { label: '즉시 종료', value: 'quick', danger: true },
+                { label: '취소', value: 'cancel' }
+              ]
+            );
+
+            if (result === 'backup') {
+              if (unlisten) unlisten();
+              await invoke('confirm_exit', { skipAutoBackup: false });
+            } else if (result === 'quick') {
+              if (unlisten) unlisten();
+              await invoke('confirm_exit', { skipAutoBackup: true });
+            }
+          } else {
+            const confirmed = await showConfirm("프로그램 종료", "종료하시겠습니까?");
+            if (confirmed) {
+              if (unlisten) unlisten();
+              await invoke('confirm_exit', { skipAutoBackup: false });
+            }
           }
         });
       } catch (err) {

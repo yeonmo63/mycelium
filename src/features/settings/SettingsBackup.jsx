@@ -155,7 +155,11 @@ const SettingsBackup = () => {
                     isIncremental: isIncremental,
                     useCompression: useCompression
                 });
-                await showAlert('백업 완료', `성공적으로 백업 및 마감이 완료되었습니다.\n${msg}`);
+                // Close progress before alert to avoid ghosting
+                setShowProgress(false);
+                setBackupProgress({ progress: 0, message: '' });
+
+                await showAlert('백업 완료', msg);
                 loadBackups();
             } finally {
                 unlisten();
@@ -200,11 +204,13 @@ const SettingsBackup = () => {
                 // Wait a bit for the 100% progress to be visible
                 await new Promise(resolve => setTimeout(resolve, 500));
 
+                setShowProgress(false);
+                setBackupProgress({ progress: 0, message: '' });
+
                 // Show completion alert
                 await showAlert('복구 완료', `${msg}\n\n확인을 누르면 애플리케이션이 재시작됩니다.`);
 
                 // Reload after user confirms
-                // Redirect to root and reload after user confirms
                 window.location.href = '/';
             } finally {
                 unlisten();
@@ -331,115 +337,75 @@ const SettingsBackup = () => {
                         {/* Decorative background for progress modal */}
                         <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl transition-all"></div>
 
-                        {backupProgress.progress === 100 ? (
-                            /* Completion State */
-                            <>
-                                <div className="text-center mb-8">
-                                    <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${operationType === 'backup' ? 'bg-emerald-100' :
-                                        operationType === 'restore' ? 'bg-purple-100' : 'bg-emerald-100'
+                        {/* Progress State */}
+                        <>
+                            <div className="text-center mb-8">
+                                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${operationType === 'backup' ? 'bg-indigo-100' :
+                                    operationType === 'restore' ? 'bg-purple-100' : 'bg-emerald-100'
+                                    }`}>
+                                    <span className={`material-symbols-rounded text-4xl animate-pulse ${operationType === 'backup' ? 'text-indigo-600' :
+                                        operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
                                         }`}>
-                                        <span className={`material-symbols-rounded text-5xl ${operationType === 'backup' ? 'text-emerald-600' :
-                                            operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
-                                            }`}>
-                                            check_circle
-                                        </span>
-                                    </div>
-                                    <h3 className="text-2xl font-bold text-slate-800 mb-2">
-                                        {operationType === 'backup' ? '백업이 완료되었습니다' :
-                                            operationType === 'restore' ? '복구가 완료되었습니다' : '최적화가 완료되었습니다'}
-                                    </h3>
-                                    <p className="text-sm text-slate-500">{backupProgress.message}</p>
+                                        {operationType === 'backup' ? 'backup' :
+                                            operationType === 'restore' ? 'restore' : 'architecture'}
+                                    </span>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                                    {operationType === 'backup' ? '데이터 백업 진행 중' :
+                                        operationType === 'restore' ? '데이터 복구 진행 중' : '시스템 최적화 진행 중'}
+                                </h3>
+                                <p className="text-sm text-slate-500">{backupProgress.message}</p>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden mb-3">
+                                <div
+                                    className={`absolute top-0 left-0 h-full transition-all duration-300 ease-out ${operationType === 'backup' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
+                                        operationType === 'restore' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
+                                            'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                                        }`}
+                                    style={{ width: `${backupProgress.progress}%` }}
+                                />
+                            </div>
+
+                            {/* Percentage & ETA */}
+                            <div className="text-center mb-8">
+                                <span className={`text-4xl font-black ${operationType === 'backup' ? 'text-indigo-600' :
+                                    operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
+                                    }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    {backupProgress.progress}%
+                                </span>
+                                <div className="flex flex-col gap-1 mt-3">
                                     {backupProgress.total > 0 && (
-                                        <p className="text-xs text-slate-400 mt-2">
-                                            총 {backupProgress.total?.toLocaleString() || 0} 레코드 처리 완료
+                                        <p className="text-[13px] text-slate-500 font-bold bg-slate-50 py-1.5 px-4 rounded-full inline-block mx-auto border border-slate-100">
+                                            {operationType === 'restore'
+                                                ? `${formatBytes(backupProgress.processed)} / ${formatBytes(backupProgress.total)}`
+                                                : `${backupProgress.processed?.toLocaleString() || 0} / ${backupProgress.total?.toLocaleString() || 0} 레코드`
+                                            }
                                         </p>
                                     )}
+                                    {backupProgress.startTime && backupProgress.progress > 0 && backupProgress.progress < 100 && (
+                                        <div className="flex items-center justify-center gap-1.5 text-indigo-500 mt-1">
+                                            <span className="material-symbols-rounded text-sm">schedule</span>
+                                            <span className="text-[12px] font-black uppercase tracking-wider">
+                                                남은 시간: {calculateETA(backupProgress.startTime, backupProgress.progress)}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
+                            </div>
 
-                                {/* Confirm Button */}
-                                <div className="flex justify-center">
-                                    <button
-                                        onClick={() => {
-                                            setShowProgress(false);
-                                            setBackupProgress({ progress: 0, message: '' });
-                                        }}
-                                        className="px-12 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-emerald-200 active:scale-95"
-                                    >
-                                        확인
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            /* Progress State */
-                            <>
-                                <div className="text-center mb-8">
-                                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${operationType === 'backup' ? 'bg-indigo-100' :
-                                        operationType === 'restore' ? 'bg-purple-100' : 'bg-emerald-100'
-                                        }`}>
-                                        <span className={`material-symbols-rounded text-4xl animate-pulse ${operationType === 'backup' ? 'text-indigo-600' :
-                                            operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
-                                            }`}>
-                                            {operationType === 'backup' ? 'backup' :
-                                                operationType === 'restore' ? 'restore' : 'architecture'}
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-bold text-slate-800 mb-2">
-                                        {operationType === 'backup' ? '데이터 백업 진행 중' :
-                                            operationType === 'restore' ? '데이터 복구 진행 중' : '시스템 최적화 진행 중'}
-                                    </h3>
-                                    <p className="text-sm text-slate-500">{backupProgress.message}</p>
-                                </div>
-
-                                {/* Progress Bar */}
-                                <div className="relative w-full h-3 bg-slate-200 rounded-full overflow-hidden mb-3">
-                                    <div
-                                        className={`absolute top-0 left-0 h-full transition-all duration-300 ease-out ${operationType === 'backup' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
-                                            operationType === 'restore' ? 'bg-gradient-to-r from-purple-500 to-purple-600' :
-                                                'bg-gradient-to-r from-emerald-500 to-emerald-600'
-                                            }`}
-                                        style={{ width: `${backupProgress.progress}%` }}
-                                    />
-                                </div>
-
-                                {/* Percentage & ETA */}
-                                <div className="text-center mb-8">
-                                    <span className={`text-4xl font-black ${operationType === 'backup' ? 'text-indigo-600' :
-                                        operationType === 'restore' ? 'text-purple-600' : 'text-emerald-600'
-                                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        {backupProgress.progress}%
-                                    </span>
-                                    <div className="flex flex-col gap-1 mt-3">
-                                        {backupProgress.total > 0 && (
-                                            <p className="text-[13px] text-slate-500 font-bold bg-slate-50 py-1.5 px-4 rounded-full inline-block mx-auto border border-slate-100">
-                                                {operationType === 'restore'
-                                                    ? `${formatBytes(backupProgress.processed)} / ${formatBytes(backupProgress.total)}`
-                                                    : `${backupProgress.processed?.toLocaleString() || 0} / ${backupProgress.total?.toLocaleString() || 0} 레코드`
-                                                }
-                                            </p>
-                                        )}
-                                        {backupProgress.startTime && backupProgress.progress > 0 && backupProgress.progress < 100 && (
-                                            <div className="flex items-center justify-center gap-1.5 text-indigo-500 mt-1">
-                                                <span className="material-symbols-rounded text-sm">schedule</span>
-                                                <span className="text-[12px] font-black uppercase tracking-wider">
-                                                    남은 시간: {calculateETA(backupProgress.startTime, backupProgress.progress)}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Cancel Button */}
-                                <div className="flex justify-center">
-                                    <button
-                                        onClick={handleCancel}
-                                        className="px-8 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded-xl text-[13px] font-black transition-all border border-slate-200 hover:border-red-100 flex items-center gap-2 group"
-                                    >
-                                        <span className="material-symbols-rounded text-lg group-hover:rotate-90 transition-transform">stop_circle</span>
-                                        {operationType === 'backup' ? '백업 중단' : '복구 중단'}
-                                    </button>
-                                </div>
-                            </>
-                        )}
+                            {/* Cancel Button */}
+                            <div className="flex justify-center">
+                                <button
+                                    onClick={handleCancel}
+                                    className="px-8 py-2.5 bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded-xl text-[13px] font-black transition-all border border-slate-200 hover:border-red-100 flex items-center gap-2 group"
+                                >
+                                    <span className="material-symbols-rounded text-lg group-hover:rotate-90 transition-transform">stop_circle</span>
+                                    {operationType === 'backup' ? '백업 중단' : '복구 중단'}
+                                </button>
+                            </div>
+                        </>
                     </div>
                 </div>
             )}

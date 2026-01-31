@@ -11,11 +11,12 @@ use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use db::Schedule;
 use db::{
     init_pool, AiMarketingProposal, AnalyzedMention, ChurnRiskCustomer, CompanyInfo, Consultation,
-    ConsultationAiAdvice, Customer, CustomerAddress, CustomerLifecycle, DashboardStats, DbPool,
-    Event, Expense, ExperienceProgram, ExperienceReservation, InventoryAlert, InventorySyncItem,
-    KeywordItem, LtvCustomer, MonthlyCohortStats, OnlineMentionInput, Product, ProductAssociation,
-    ProductPriceHistory, ProductSalesStats, ProfitAnalysisResult, Purchase, RawRfmData, Sales,
-    SalesClaim, SentimentAnalysisResult, StrategyItem, TenYearSalesStats, User, Vendor,
+    ConsultationAiAdvice, Customer, CustomerAddress, CustomerLedger, CustomerLifecycle,
+    DashboardStats, DbPool, Event, Expense, ExperienceProgram, ExperienceReservation,
+    InventoryAlert, InventorySyncItem, KeywordItem, LtvCustomer, MonthlyCohortStats,
+    OnlineMentionInput, Product, ProductAssociation, ProductPriceHistory, ProductSalesStats,
+    ProfitAnalysisResult, Purchase, RawRfmData, Sales, SalesClaim, SentimentAnalysisResult,
+    StrategyItem, TenYearSalesStats, User, Vendor,
 };
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -4412,16 +4413,15 @@ async fn cancel_backup_restore() {
 }
 
 #[tauri::command]
-async fn confirm_exit(app: tauri::AppHandle) -> Result<(), String> {
+async fn confirm_exit(app: tauri::AppHandle, skip_auto_backup: bool) -> Result<(), String> {
     // Prevent re-entry
     if IS_EXITING.load(Ordering::Relaxed) {
         return Ok(());
     }
     IS_EXITING.store(true, Ordering::Relaxed);
 
-    // 0. Check if DB was modified
-    if !DB_MODIFIED.load(Ordering::Relaxed) {
-        // println!("No changes detected. Skipping auto-backup.");
+    // 0. Check if skip requested or no changes detected
+    if skip_auto_backup || !DB_MODIFIED.load(Ordering::Relaxed) {
         std::process::exit(0);
     }
 
@@ -4436,10 +4436,8 @@ async fn confirm_exit(app: tauri::AppHandle) -> Result<(), String> {
 
         // Friday is Full Backup, other days are skip or Incremental
         let since = if day_of_week == chrono::Weekday::Fri {
-            // println!("[Auto-Backup] Friday detected. Performing FULL compressed backup.");
             None
         } else {
-            // println!("[Auto-Backup] Performing INCREMENTAL compressed backup.");
             get_last_backup_at(&app)
         };
 
@@ -4453,7 +4451,7 @@ async fn confirm_exit(app: tauri::AppHandle) -> Result<(), String> {
 
         if let Some(pool) = app.try_state::<DbPool>() {
             match backup_database_internal(
-                None, // Don't emit progress during exit for now, or use a dummy handle
+                None,
                 &*pool,
                 backup_path.to_string_lossy().to_string(),
                 since,
@@ -4462,7 +4460,6 @@ async fn confirm_exit(app: tauri::AppHandle) -> Result<(), String> {
             .await
             {
                 Ok(_msg) => {
-                    // println!("[Auto-Backup] Success: {}", msg);
                     let _ = update_last_backup_at(&app, chrono::Local::now().naive_local());
                 }
                 Err(e) => eprintln!("[Auto-Backup] Failed: {}", e),
@@ -5088,6 +5085,40 @@ struct PurchaseBackup {
     pub updated_at: Option<NaiveDateTime>,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+struct ExperienceReservationBackup {
+    pub reservation_id: i32,
+    pub program_id: i32,
+    pub customer_id: Option<String>,
+    pub guest_name: String,
+    pub guest_contact: String,
+    pub reservation_date: NaiveDate,
+    pub reservation_time: chrono::NaiveTime,
+    pub participant_count: i32,
+    pub total_amount: i32,
+    pub status: String,
+    pub payment_status: String,
+    pub memo: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+struct SalesClaimBackup {
+    pub claim_id: i32,
+    pub sales_id: String,
+    pub customer_id: Option<String>,
+    pub claim_type: String,
+    pub claim_status: String,
+    pub reason_category: String,
+    pub quantity: i32,
+    pub refund_amount: i32,
+    pub is_inventory_recovered: bool,
+    pub memo: Option<String>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    pub updated_at: Option<chrono::NaiveDateTime>,
+}
+
 // DB Location Information
 #[derive(Debug, serde::Serialize)]
 struct DbLocationInfo {
@@ -5347,6 +5378,22 @@ async fn backup_database_internal(
         .fetch_one(pool)
         .await
         .map_err(|e| e.to_string())?;
+    let count_ledger: (i64,) = sqlx::query_as(&count_query("customer_ledger"))
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count_vendors: (i64,) = sqlx::query_as(&count_query("vendors"))
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count_exp_programs: (i64,) = sqlx::query_as(&count_query("experience_programs"))
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let count_exp_reservations: (i64,) = sqlx::query_as(&count_query("experience_reservations"))
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let count_deletions: (i64,) = if let Some(s) = since {
         sqlx::query_as(&format!(
             "SELECT COUNT(*) FROM deletion_log WHERE deleted_at > '{}'",
@@ -5372,6 +5419,10 @@ async fn backup_database_internal(
         + count_consultations.0
         + count_claims.0
         + count_inventory.0
+        + count_ledger.0
+        + count_vendors.0
+        + count_exp_programs.0
+        + count_exp_reservations.0
         + count_deletions.0;
 
     let mut processed = 0i64;
@@ -5559,7 +5610,7 @@ async fn backup_database_internal(
     );
     batch_table_internal!(
         "sales_claims",
-        SalesClaim,
+        SalesClaimBackup,
         "SELECT * FROM sales_claims",
         "sales_claims",
         "판매 클레임 백업 중",
@@ -5574,6 +5625,42 @@ async fn backup_database_internal(
         "재고 로그 백업 중",
         count_inventory.0,
         "created_at"
+    );
+    batch_table_internal!(
+        "customer_ledger",
+        CustomerLedger,
+        "SELECT * FROM customer_ledger",
+        "customer_ledger",
+        "고객 원장 백업 중",
+        count_ledger.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "vendors",
+        Vendor,
+        "SELECT * FROM vendors",
+        "vendors",
+        "거래처 정보 백업 중",
+        count_vendors.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "experience_programs",
+        ExperienceProgram,
+        "SELECT * FROM experience_programs",
+        "experience_programs",
+        "체험 프로그램 백업 중",
+        count_exp_programs.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "experience_reservations",
+        ExperienceReservationBackup,
+        "SELECT * FROM experience_reservations",
+        "experience_reservations",
+        "체험 예약 백업 중",
+        count_exp_reservations.0,
+        "updated_at"
     );
 
     // Deletion Logs - Only for Incremental
@@ -5680,8 +5767,11 @@ async fn restore_database(
         e.to_string()
     })?;
 
-    // Set short lock timeout
-    let _ = sqlx::query("SET lock_timeout = '10s'")
+    // Set short lock timeout and disable triggers for performance
+    let _ = sqlx::query("SET lock_timeout = '30s'")
+        .execute(&mut *tx)
+        .await;
+    let _ = sqlx::query("SET session_replication_role = 'replica'")
         .execute(&mut *tx)
         .await;
 
@@ -5704,7 +5794,7 @@ async fn restore_database(
 
         emit_progress(0, total_bytes as i64, "기존 데이터 삭제 중 (전체 복구)...");
         println!("[Restore] Truncating tables for full restore...");
-        sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, consultations, sales_claims, inventory_logs RESTART IDENTITY CASCADE")
+        sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, consultations, sales_claims, inventory_logs, customer_ledger, vendors, experience_programs, experience_reservations, deletion_log RESTART IDENTITY CASCADE")
             .execute(&mut *tx)
             .await
             .map_err(|e| {
@@ -5898,10 +5988,10 @@ async fn restore_database(
 
     // SALES
     restore_table!("sales", Sales, "판매 내역 복구 중", s, t, {
-        sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at) 
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) 
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at, product_code, product_id) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) 
              ON CONFLICT (sales_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at")
-            .bind(&s.sales_id).bind(&s.customer_id).bind(&s.status).bind(s.order_date).bind(&s.product_name).bind(&s.specification).bind(s.unit_price).bind(s.quantity).bind(s.total_amount).bind(s.discount_rate).bind(&s.courier_name).bind(&s.tracking_number).bind(&s.memo).bind(&s.shipping_name).bind(&s.shipping_zip_code).bind(&s.shipping_address_primary).bind(&s.shipping_address_detail).bind(&s.shipping_mobile_number).bind(s.shipping_date).bind(s.paid_amount).bind(&s.payment_status).bind(s.updated_at)
+            .bind(&s.sales_id).bind(&s.customer_id).bind(&s.status).bind(s.order_date).bind(&s.product_name).bind(&s.specification).bind(s.unit_price).bind(s.quantity).bind(s.total_amount).bind(s.discount_rate).bind(&s.courier_name).bind(&s.tracking_number).bind(&s.memo).bind(&s.shipping_name).bind(&s.shipping_zip_code).bind(&s.shipping_address_primary).bind(&s.shipping_address_detail).bind(&s.shipping_mobile_number).bind(s.shipping_date).bind(s.paid_amount).bind(&s.payment_status).bind(s.updated_at).bind(&s.product_code).bind(s.product_id)
             .execute(&mut **t).await.map_err(|e| e.to_string())?;
     });
 
@@ -5971,7 +6061,7 @@ async fn restore_database(
     // CLAIMS
     restore_table!(
         "sales_claims",
-        SalesClaim,
+        SalesClaimBackup,
         "클레임 내역 복구 중",
         c,
         t,
@@ -5990,8 +6080,57 @@ async fn restore_database(
         l,
         t,
         {
-            sqlx::query("INSERT INTO inventory_logs (log_id, product_name, specification, change_type, change_quantity, current_stock, reference_id, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (log_id) DO UPDATE SET current_stock=EXCLUDED.current_stock, updated_at=EXCLUDED.updated_at")
-            .bind(l.log_id).bind(l.product_name).bind(l.specification).bind(l.change_type).bind(l.change_quantity).bind(l.current_stock).bind(l.reference_id).bind(l.memo).bind(l.created_at).bind(l.updated_at)
+            sqlx::query("INSERT INTO inventory_logs (log_id, product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (log_id) DO UPDATE SET current_stock=EXCLUDED.current_stock, updated_at=EXCLUDED.updated_at")
+            .bind(l.log_id).bind(l.product_id).bind(l.product_name).bind(l.specification).bind(l.product_code).bind(l.change_type).bind(l.change_quantity).bind(l.current_stock).bind(l.reference_id).bind(l.memo).bind(l.created_at).bind(l.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // LEDGER
+    restore_table!(
+        "customer_ledger",
+        CustomerLedger,
+        "고객 원장 복구 중",
+        l,
+        t,
+        {
+            sqlx::query("INSERT INTO customer_ledger (ledger_id, customer_id, transaction_date, transaction_type, amount, description, reference_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (ledger_id) DO UPDATE SET amount=EXCLUDED.amount, updated_at=EXCLUDED.updated_at")
+            .bind(l.ledger_id).bind(l.customer_id).bind(l.transaction_date).bind(l.transaction_type).bind(l.amount).bind(l.description).bind(l.reference_id).bind(l.created_at).bind(l.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // VENDORS
+    restore_table!("vendors", Vendor, "거래처 정보 복구 중", v, t, {
+        sqlx::query("INSERT INTO vendors (vendor_id, vendor_name, business_number, representative, mobile_number, email, address, main_items, memo, is_active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (vendor_id) DO UPDATE SET vendor_name=EXCLUDED.vendor_name, updated_at=EXCLUDED.updated_at")
+            .bind(v.vendor_id).bind(v.vendor_name).bind(v.business_number).bind(v.representative).bind(v.mobile_number).bind(v.email).bind(v.address).bind(v.main_items).bind(v.memo).bind(v.is_active).bind(v.created_at).bind(v.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+    });
+
+    // EXPERIENCE PROGRAMS
+    restore_table!(
+        "experience_programs",
+        ExperienceProgram,
+        "체험 프로그램 복구 중",
+        p,
+        t,
+        {
+            sqlx::query("INSERT INTO experience_programs (program_id, program_name, description, duration_min, max_capacity, price_per_person, is_active, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (program_id) DO UPDATE SET program_name=EXCLUDED.program_name, updated_at=EXCLUDED.updated_at")
+            .bind(p.program_id).bind(p.program_name).bind(p.description).bind(p.duration_min).bind(p.max_capacity).bind(p.price_per_person).bind(p.is_active).bind(p.created_at).bind(p.updated_at)
+            .execute(&mut **t).await.map_err(|e| e.to_string())?;
+        }
+    );
+
+    // EXPERIENCE RESERVATIONS
+    restore_table!(
+        "experience_reservations",
+        ExperienceReservationBackup,
+        "체험 예약 복구 중",
+        r,
+        t,
+        {
+            sqlx::query("INSERT INTO experience_reservations (reservation_id, program_id, customer_id, guest_name, guest_contact, reservation_date, reservation_time, participant_count, total_amount, status, payment_status, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (reservation_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at")
+            .bind(r.reservation_id).bind(r.program_id).bind(r.customer_id).bind(r.guest_name).bind(r.guest_contact).bind(r.reservation_date).bind(r.reservation_time).bind(r.participant_count).bind(r.total_amount).bind(r.status).bind(r.payment_status).bind(r.memo).bind(r.created_at).bind(r.updated_at)
             .execute(&mut **t).await.map_err(|e| e.to_string())?;
         }
     );
