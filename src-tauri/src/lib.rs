@@ -2305,8 +2305,8 @@ async fn create_sale(
     shipping_address_detail: Option<String>,
     shipping_mobile_number: Option<String>,
     shipping_date: Option<String>,
-    // New: Payment amount can be passed to immediately record a payment
     paid_amount: Option<i32>,
+    product_code: Option<String>,
 ) -> Result<String, String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     // Parse input date
@@ -2349,11 +2349,29 @@ async fn create_sale(
 
     let mut tx = state.begin().await.map_err(|e| e.to_string())?;
 
+    // Find product_id
+    let p_id_row: Option<(i32,)> = if let Some(code) = &product_code {
+        sqlx::query_as("SELECT product_id FROM products WHERE product_code = $1")
+            .bind(code)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+            .bind(&product_name)
+            .bind(&specification)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    let p_id = p_id_row.map(|r| r.0);
+
     sqlx::query(
         "INSERT INTO sales (
             sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, status, order_date, memo,
-            shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+            shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date,
+            product_code, product_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
     )
     .bind(&sales_id)
     .bind(&customer_id)
@@ -2371,6 +2389,8 @@ async fn create_sale(
     .bind(shipping_address_detail)
     .bind(shipping_mobile_number)
     .bind(shipping_date_parsed)
+    .bind(product_code)
+    .bind(p_id)
     .execute(&mut *tx)
     .await
     .map_err(|e: sqlx::Error| e.to_string())?;
@@ -2551,8 +2571,12 @@ async fn save_general_sales_batch(
                     }
                 }
 
-                sqlx::query("UPDATE sales SET product_name=$1, specification=$2, unit_price=$3, quantity=$4, total_amount=$5, status=$6, memo=$7, shipping_name=$8, shipping_zip_code=$9, shipping_address_primary=$10, shipping_address_detail=$11, shipping_mobile_number=$12, order_date=$13, shipping_date=$14, discount_rate=$15, paid_amount=$16, payment_status=$17 WHERE sales_id=$18")
-                    .bind(&item.product_name).bind(&item.specification).bind(item.unit_price).bind(item.quantity).bind(item.total_amount).bind(&item.status).bind(&item.memo).bind(&item.shipping_name).bind(&item.shipping_zip_code).bind(&item.shipping_address_primary).bind(&item.shipping_address_detail).bind(&item.shipping_mobile_number).bind(order_date).bind(if item.status == "배송완료" { Some(order_date) } else { None }).bind(item.discount_rate.unwrap_or(0)).bind(item.paid_amount.unwrap_or(0)).bind(&item.payment_status).bind(&sid).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+                    .bind(&item.product_name).bind(&item.specification).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+                let p_id = p_id_row.map(|r| r.0);
+
+                sqlx::query("UPDATE sales SET product_name=$1, specification=$2, unit_price=$3, quantity=$4, total_amount=$5, status=$6, memo=$7, shipping_name=$8, shipping_zip_code=$9, shipping_address_primary=$10, shipping_address_detail=$11, shipping_mobile_number=$12, order_date=$13, shipping_date=$14, discount_rate=$15, paid_amount=$16, payment_status=$17, product_id=$18 WHERE sales_id=$19")
+                    .bind(&item.product_name).bind(&item.specification).bind(item.unit_price).bind(item.quantity).bind(item.total_amount).bind(&item.status).bind(&item.memo).bind(&item.shipping_name).bind(&item.shipping_zip_code).bind(&item.shipping_address_primary).bind(&item.shipping_address_detail).bind(&item.shipping_mobile_number).bind(order_date).bind(if item.status == "배송완료" { Some(order_date) } else { None }).bind(item.discount_rate.unwrap_or(0)).bind(item.paid_amount.unwrap_or(0)).bind(&item.payment_status).bind(p_id).bind(&sid).execute(&mut *tx).await.map_err(|e| e.to_string())?;
                 success_count += 1;
             }
         } else {
@@ -2564,8 +2588,12 @@ async fn save_general_sales_batch(
             let new_sid = format!("{}-{:05}", date_key, *next_num);
             *next_num += 1; // Increment for next item in same batch
 
-            sqlx::query("INSERT INTO sales (sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, status, order_date, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, discount_rate, paid_amount, payment_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)")
-                .bind(&new_sid).bind(&item.customer_id).bind(&item.product_name).bind(&item.specification).bind(item.unit_price).bind(item.quantity).bind(item.total_amount).bind(&item.status).bind(order_date).bind(&item.memo).bind(&item.shipping_name).bind(&item.shipping_zip_code).bind(&item.shipping_address_primary).bind(&item.shipping_address_detail).bind(&item.shipping_mobile_number).bind(if item.status == "배송완료" { Some(order_date) } else { None }).bind(item.discount_rate.unwrap_or(0)).bind(item.paid_amount.unwrap_or(0)).bind(&item.payment_status).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+                .bind(&item.product_name).bind(&item.specification).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+            let p_id = p_id_row.map(|r| r.0);
+
+            sqlx::query("INSERT INTO sales (sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, status, order_date, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, discount_rate, paid_amount, payment_status, product_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)")
+                .bind(&new_sid).bind(&item.customer_id).bind(&item.product_name).bind(&item.specification).bind(item.unit_price).bind(item.quantity).bind(item.total_amount).bind(&item.status).bind(order_date).bind(&item.memo).bind(&item.shipping_name).bind(&item.shipping_zip_code).bind(&item.shipping_address_primary).bind(&item.shipping_address_detail).bind(&item.shipping_mobile_number).bind(if item.status == "배송완료" { Some(order_date) } else { None }).bind(item.discount_rate.unwrap_or(0)).bind(item.paid_amount.unwrap_or(0)).bind(&item.payment_status).bind(p_id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
             sqlx::query("INSERT INTO customer_ledger (customer_id, transaction_date, transaction_type, amount, description, reference_id) VALUES ($1, $2, '매출', $3, $4, $5)")
                 .bind(&item.customer_id).bind(order_date).bind(item.total_amount).bind(format!("매출 등록: {}", item.product_name)).bind(&new_sid).execute(&mut *tx).await.map_err(|e| e.to_string())?;
@@ -2625,23 +2653,96 @@ async fn get_discontinued_product_names(pool: State<'_, DbPool>) -> Result<Vec<S
 #[tauri::command]
 async fn consolidate_products(
     pool: State<'_, DbPool>,
-    old_name: String,
-    new_name: String,
+    old_product_id: i32,
+    new_product_id: i32,
+    sync_names: Option<bool>, // New Option
 ) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let sync = sync_names.unwrap_or(false);
 
-    // Update sales
-    sqlx::query("UPDATE sales SET product_name = $1 WHERE product_name = $2")
-        .bind(&new_name)
-        .bind(&old_name)
+    // 1. Get info of both products
+    let old_p: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(old_product_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Source product not found: {}", e))?;
+
+    let new_p: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(new_product_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Target product not found: {}", e))?;
+
+    // 2. Update sales
+    if sync {
+        // Full Sync: Change ID AND Info
+        sqlx::query(
+            "UPDATE sales SET product_id = $1, product_name = $2, specification = $3, product_code = $4 
+             WHERE product_id = $5 OR (product_id IS NULL AND product_name = $6 AND specification IS NOT DISTINCT FROM $7)"
+        )
+        .bind(new_product_id).bind(&new_p.product_name).bind(&new_p.specification).bind(&new_p.product_code)
+        .bind(old_product_id).bind(&old_p.product_name).bind(&old_p.specification)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    } else {
+        // ID Only Sync: Keep old names for history
+        sqlx::query(
+            "UPDATE sales SET product_id = $1 
+             WHERE product_id = $2 OR (product_id IS NULL AND product_name = $3 AND specification IS NOT DISTINCT FROM $4)"
+        )
+        .bind(new_product_id).bind(old_product_id).bind(&old_p.product_name).bind(&old_p.specification)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+
+    // 3. Update inventory_logs (Similar logic)
+    if sync {
+        sqlx::query(
+            "UPDATE inventory_logs SET product_id = $1, product_name = $2, specification = $3, product_code = $4 
+             WHERE product_id = $5 OR (product_id IS NULL AND product_name = $6 AND specification IS NOT DISTINCT FROM $7)"
+        )
+        .bind(new_product_id).bind(&new_p.product_name).bind(&new_p.specification).bind(&new_p.product_code)
+        .bind(old_product_id).bind(&old_p.product_name).bind(&old_p.specification)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    } else {
+        sqlx::query(
+            "UPDATE inventory_logs SET product_id = $1 
+             WHERE product_id = $2 OR (product_id IS NULL AND product_name = $3 AND specification IS NOT DISTINCT FROM $4)"
+        )
+        .bind(new_product_id).bind(old_product_id).bind(&old_p.product_name).bind(&old_p.specification)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+
+    // 4. Merge Stock: Move old stock to new and set old to zero (or delete)
+    let old_qty = old_p.stock_quantity.unwrap_or(0);
+    if old_qty != 0 {
+        sqlx::query(
+            "UPDATE products SET stock_quantity = stock_quantity + $1 WHERE product_id = $2",
+        )
+        .bind(old_qty)
+        .bind(new_product_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Stock merging failed: {}", e))?;
+
+        // Log the merge event
+        sqlx::query(
+            "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+             VALUES ($1, $2, $3, $4, '조정', $5, (SELECT stock_quantity FROM products WHERE product_id = $1), $6)"
+        )
+        .bind(new_product_id)
+        .bind(&new_p.product_name)
+        .bind(&new_p.specification)
+        .bind(&new_p.product_code)
+        .bind(old_qty)
+        .bind(format!("상품 병합으로 인한 재고 흡수 (원본: {} [{}])", old_p.product_name, old_product_id))
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
+    }
 
-    // Update inventory_logs
-    sqlx::query("UPDATE inventory_logs SET product_name = $1 WHERE product_name = $2")
-        .bind(&new_name)
-        .bind(&old_name)
+    // 5. Finally, soft delete or remove the old product
+    sqlx::query("UPDATE products SET status = '단종상품', memo = COALESCE(memo, '') || $1 WHERE product_id = $2")
+        .bind(format!(" | {}에 상품 ID:{}로 병합됨", chrono::Local::now().format("%Y-%m-%d"), new_product_id))
+        .bind(old_product_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -2674,11 +2775,33 @@ async fn create_product(
     item_type: Option<String>,
 ) -> Result<i32, String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
-    let id: i32 = sqlx::query_scalar(
-        "INSERT INTO products (product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, item_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING product_id",
+
+    // 1. Generate Next Product Code (PROD-XXXX)
+    let last_code: Option<String> = sqlx::query_scalar(
+        "SELECT product_code FROM products WHERE product_code LIKE 'PROD-%' ORDER BY product_code DESC LIMIT 1"
     )
-    .bind(product_name)
-    .bind(specification)
+    .fetch_optional(&*state)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let next_val = match last_code {
+        Some(code) => {
+            let num_part = code.replace("PROD-", "");
+            num_part.parse::<i32>().unwrap_or(0) + 1
+        }
+        None => 1,
+    };
+    let product_code = format!("PROD-{:04}", next_val);
+
+    // 2. Insert with product_code and default status
+    let id: i32 = sqlx::query_scalar(
+        "INSERT INTO products (
+            product_name, specification, unit_price, stock_quantity, safety_stock, 
+            cost_price, material_id, material_ratio, item_type, product_code, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '판매중') RETURNING product_id",
+    )
+    .bind(&product_name)
+    .bind(&specification)
     .bind(unit_price)
     .bind(stock_quantity.unwrap_or(0))
     .bind(safety_stock.unwrap_or(10))
@@ -2686,9 +2809,24 @@ async fn create_product(
     .bind(material_id)
     .bind(material_ratio.unwrap_or(1.0))
     .bind(item_type.unwrap_or_else(|| "product".to_string()))
+    .bind(&product_code)
     .fetch_one(&*state)
     .await
     .map_err(|e: sqlx::Error| e.to_string())?;
+
+    // Log Creation
+    sqlx::query(
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+         VALUES ($1, $2, $3, $4, '상품등록', 0, $5, '새 상품이 시스템에 등록되었습니다.')"
+    )
+    .bind(id)
+    .bind(&product_name)
+    .bind(&specification)
+    .bind(&product_code)
+    .bind(stock_quantity.unwrap_or(0))
+    .execute(&*state)
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(id)
 }
@@ -2706,56 +2844,177 @@ async fn update_product(
     material_id: Option<i32>,
     material_ratio: Option<f64>,
     item_type: Option<String>,
+    status: Option<String>,
+    sync_sales_names: Option<bool>, // New Option
 ) -> Result<(), String> {
-    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await.map_err(|e| e.to_string())?;
+    let sync = sync_sales_names.unwrap_or(false);
     let cost = cost_price.unwrap_or(0);
     let ratio = material_ratio.unwrap_or(1.0);
+    let status_val = status.unwrap_or_else(|| "판매중".to_string());
 
+    // 1. Get current info for audit log
+    let old: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(product_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 2. Perform Update
     if let Some(qty) = stock_quantity {
         sqlx::query(
-            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, stock_quantity = $4, safety_stock = $5, cost_price = $6, material_id = $7, material_ratio = $8, item_type = $9 WHERE product_id = $10",
+            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, stock_quantity = $4, safety_stock = $5, cost_price = $6, material_id = $7, material_ratio = $8, item_type = $9, status = $10 WHERE product_id = $11",
         )
-        .bind(product_name)
-        .bind(specification)
-        .bind(unit_price)
-        .bind(qty)
-        .bind(safety_stock.unwrap_or(10))
-        .bind(cost)
-        .bind(material_id)
-        .bind(ratio)
-        .bind(item_type.clone().unwrap_or_else(|| "product".to_string()))
-        .bind(product_id)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
+        .bind(&product_name).bind(&specification).bind(unit_price).bind(qty).bind(safety_stock.unwrap_or(10)).bind(cost).bind(material_id).bind(ratio).bind(item_type.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(product_id)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     } else {
         sqlx::query(
-            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, safety_stock = $4, cost_price = $5, material_id = $6, material_ratio = $7, item_type = $8 WHERE product_id = $9",
+            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, safety_stock = $4, cost_price = $5, material_id = $6, material_ratio = $7, item_type = $8, status = $9 WHERE product_id = $10",
         )
-        .bind(product_name)
-        .bind(specification)
-        .bind(unit_price)
-        .bind(safety_stock.unwrap_or(10))
-        .bind(cost)
-        .bind(material_id)
-        .bind(ratio)
-        .bind(item_type.unwrap_or_else(|| "product".to_string()))
-        .bind(product_id)
-        .execute(&*state)
-        .await
-        .map_err(|e: sqlx::Error| e.to_string())?;
+        .bind(&product_name).bind(&specification).bind(unit_price).bind(safety_stock.unwrap_or(10)).bind(cost).bind(material_id).bind(ratio).bind(item_type.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(product_id)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
+
+    // 3. Compare and Log changes
+    let mut changes = Vec::new();
+    if old.product_name != product_name {
+        changes.push(format!(
+            "이름변경: '{}' -> '{}'",
+            old.product_name, product_name
+        ));
+    }
+    if old.specification != specification {
+        changes.push(format!(
+            "규격변경: '{:?}' -> '{:?}'",
+            old.specification, specification
+        ));
+    }
+    if old.unit_price != unit_price {
+        changes.push(format!(
+            "가격변경: {:,}원 -> {:,}원",
+            old.unit_price, unit_price
+        ));
+    }
+    if old.status.as_deref().unwrap_or("판매중") != status_val {
+        changes.push(format!(
+            "상태변경: '{}' -> '{}'",
+            old.status.as_deref().unwrap_or("판매중"),
+            status_val
+        ));
+    }
+
+    if !changes.is_empty() {
+        let memo = changes.join(" | ");
+        sqlx::query(
+            "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+             VALUES ($1, $2, $3, $4, '정보변경', 0, $5, $6)"
+        )
+        .bind(product_id)
+        .bind(&product_name)
+        .bind(&specification)
+        .bind(&old.product_code)
+        .bind(old.stock_quantity.unwrap_or(0))
+        .bind(memo)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // 4. Optional Sync to sales table
+        if sync {
+            sqlx::query(
+                "UPDATE sales SET product_name = $1, specification = $2, product_code = $3 WHERE product_id = $4"
+            )
+            .bind(&product_name)
+            .bind(&specification)
+            .bind(&old.product_code)
+            .bind(product_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            sqlx::query(
+                "UPDATE inventory_logs SET product_name = $1, specification = $2, product_code = $3 WHERE product_id = $4"
+            )
+            .bind(&product_name)
+            .bind(&specification)
+            .bind(&old.product_code)
+            .bind(product_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 async fn delete_product(state: State<'_, DbPool>, product_id: i32) -> Result<(), String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
-    sqlx::query("DELETE FROM products WHERE product_id = $1")
+    let mut tx = state.begin().await.map_err(|e| e.to_string())?;
+
+    // Get current info
+    let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(product_id)
-        .execute(&*state)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Soft delete: Change status to '단종상품'
+    sqlx::query("UPDATE products SET status = '단종상품' WHERE product_id = $1")
+        .bind(product_id)
+        .execute(&mut *tx)
         .await
         .map_err(|e: sqlx::Error| e.to_string())?;
+
+    // Log status change
+    sqlx::query(
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+         VALUES ($1, $2, $3, $4, '상태변경', 0, $5, '상품이 단종 처리되었습니다.')"
+    )
+    .bind(product_id)
+    .bind(&product.product_name)
+    .bind(&product.specification)
+    .bind(&product.product_code)
+    .bind(product.stock_quantity.unwrap_or(0))
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn hard_delete_product(state: State<'_, DbPool>, product_id: i32) -> Result<(), String> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+
+    let mut tx = state.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. Delete related sales using product_id
+    sqlx::query("DELETE FROM sales WHERE product_id = $1")
+        .bind(product_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Related sales deletion failed: {}", e))?;
+
+    // 2. Delete inventory logs using product_id
+    sqlx::query("DELETE FROM inventory_logs WHERE product_id = $1")
+        .bind(product_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Inventory logs deletion failed: {}", e))?;
+
+    // 3. Finally delete the product from master
+    sqlx::query("DELETE FROM products WHERE product_id = $1")
+        .bind(product_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("Product master deletion failed: {}", e))?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -3134,17 +3393,19 @@ async fn convert_stock(
     let m_ratio = product.4;
 
     // 2. Get Material info
-    let material: (String, Option<String>, i32) = sqlx::query_as(
-        "SELECT product_name, specification, stock_quantity FROM products WHERE product_id = $1",
+    let material: (i32, String, Option<String>, Option<String>, i32) = sqlx::query_as(
+        "SELECT product_id, product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1",
     )
     .bind(m_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| format!("Material not found: {}", e))?;
 
-    let m_name = material.0;
-    let m_spec = material.1;
-    let m_old_qty = material.2;
+    let m_actual_id = material.0;
+    let m_name = material.1;
+    let m_spec = material.2;
+    let m_code = material.3;
+    let m_old_qty = material.4;
 
     // 3. Calculate changes
     let m_deduct = (convert_qty as f64 * m_ratio).ceil() as i32;
@@ -3167,37 +3428,44 @@ async fn convert_stock(
         .map_err(|e| format!("Product update failed: {}", e))?;
 
     // 5. Logging
-    let p_log_memo = format!("{} (자재 {} {}개 소모)", memo, m_name, m_deduct);
+    // Log Material Out
     sqlx::query(
-        "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) 
+         VALUES ($1, $2, $3, $4, '출고', $5, $6, $7, 'CONVERT_OUT')"
     )
-    .bind(&p_name)
-    .bind(&p_spec)
-    .bind("입고")
-    .bind(convert_qty)
-    .bind(p_new_qty)
-    .bind("CONVERT")
-    .bind(p_log_memo)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| format!("Product log failed: {}", e))?;
-
-    let m_log_memo = format!("생산 전환 소모 ({} 제작용)", p_name);
-    sqlx::query(
-        "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)"
-    )
+    .bind(m_actual_id)
     .bind(&m_name)
     .bind(&m_spec)
-    .bind("출고")
+    .bind(&m_code)
     .bind(-m_deduct)
     .bind(m_new_qty)
-    .bind("CONVERT")
-    .bind(m_log_memo)
+    .bind(format!("가공 전환: {} 제작용 원자재 소모", p_name))
     .execute(&mut *tx)
     .await
-    .map_err(|e| format!("Material log failed: {}", e))?;
+    .map_err(|e| e.to_string())?;
+
+    // Log Product In (Need product code for product)
+    let p_code: Option<String> =
+        sqlx::query_scalar("SELECT product_code FROM products WHERE product_id = $1")
+            .bind(product_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    sqlx::query(
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) 
+         VALUES ($1, $2, $3, $4, '입고', $5, $6, $7, 'CONVERT_IN')"
+    )
+    .bind(product_id)
+    .bind(&p_name)
+    .bind(&p_spec)
+    .bind(&p_code)
+    .bind(convert_qty)
+    .bind(p_new_qty)
+    .bind(format!("가공 완료: {}", memo))
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
 
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
@@ -3215,18 +3483,15 @@ async fn adjust_product_stock(
     let mut tx = state.begin().await.map_err(|e| e.to_string())?;
 
     // 1. Get current info
-    let product: (String, Option<String>, i32) = sqlx::query_as(
-        "SELECT product_name, specification, stock_quantity FROM products WHERE product_id = $1",
+    let product: ProductInfo = sqlx::query_as(
+        "SELECT product_id, product_name, specification, product_code, stock_quantity, material_id, material_ratio FROM products WHERE product_id = $1",
     )
     .bind(product_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| format!("Product not found: {}", e))?;
 
-    let name = product.0;
-    let spec = product.1;
-    let old_qty = product.2;
-    let new_qty = old_qty + change_qty;
+    let new_qty = product.stock_quantity + change_qty;
 
     // 2. Update stock
     sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
@@ -3260,12 +3525,15 @@ async fn adjust_product_stock(
         "조정".to_string()
     };
 
+    // Insert Log
     sqlx::query(
-        "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-         VALUES ($1, $2, $3, $4, $5, 'MANUAL', $6)"
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ADJUST')"
     )
-    .bind(name)
-    .bind(spec)
+    .bind(product_id)
+    .bind(&product.product_name)
+    .bind(&product.specification)
+    .bind(&product.product_code)
     .bind(log_type)
     .bind(change_qty)
     .bind(new_qty)
@@ -3281,8 +3549,10 @@ async fn adjust_product_stock(
 #[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct InventoryLog {
     pub log_id: i32,
+    pub product_id: Option<i32>, // Added
     pub product_name: String,
     pub specification: Option<String>,
+    pub product_code: Option<String>, // Added
     pub change_type: String,
     pub change_quantity: i32,
     pub current_stock: i32,
@@ -3304,7 +3574,7 @@ async fn get_inventory_logs(
 
     let base_sql = r#"
         SELECT l.* FROM inventory_logs l 
-        LEFT JOIN products p ON TRIM(l.product_name) = TRIM(p.product_name) 
+        LEFT JOIN products p ON l.product_id = p.product_id 
         WHERE l.created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
     "#;
 
@@ -3648,6 +3918,15 @@ async fn update_sale(
         .await
         .map_err(|e: sqlx::Error| e.to_string())?;
 
+    // Resolve product_id for the possibly updated product
+    let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+        .bind(&product_name)
+        .bind(&specification)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    let p_id = p_id_row.map(|r| r.0);
+
     // Get old info for comparison if we wanted to adjust ledger automatically.
     // For now, complicated. Updating sales amount doesn't automatically update ledger in this simple version
     // UNLESS we explicitly handle it.
@@ -3694,8 +3973,9 @@ async fn update_sale(
             status = $7, memo = $8, shipping_name = $9, shipping_zip_code = $10,
             shipping_address_primary = $11, shipping_address_detail = $12, shipping_mobile_number = $13,
             order_date = $14,
-            shipping_date = $14
-        WHERE sales_id = $15"
+            shipping_date = $14,
+            product_id = $15
+        WHERE sales_id = $16"
     )
     .bind(customer_id)
     .bind(&product_name)
@@ -3711,6 +3991,7 @@ async fn update_sale(
     .bind(shipping_address_detail)
     .bind(shipping_mobile_number)
     .bind(order_date)
+    .bind(p_id)
     .bind(&sales_id)
     .execute(&mut *tx)
     .await
@@ -4145,6 +4426,7 @@ pub fn run() {
             create_product,
             update_product,
             delete_product,
+            hard_delete_product,
             get_last_event,
             debug_db_schema,
             create_event,
@@ -6652,9 +6934,14 @@ async fn save_special_sales_batch(
 
         if let Some(sid) = &sale.sales_id {
             if !sid.is_empty() {
+                // Find product_id
+                let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+                    .bind(&sale.product_name).bind(&sale.specification).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+                let p_id = p_id_row.map(|r| r.0);
+
                 // Update Sale Record
                 // We use '현장판매완료' status to distinguish from '배송완료'
-                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10 WHERE sales_id=$11")
+                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10, product_id=$11 WHERE sales_id=$12")
                     .bind(sale_date)
                     .bind(&sale.product_name)
                     .bind(&sale.specification)
@@ -6665,6 +6952,7 @@ async fn save_special_sales_batch(
                     .bind(&sale.memo)
                     .bind(today_naive)
                     .bind(&event_id) // Link to Event ID
+                    .bind(p_id)
                     .bind(sid)
                     .execute(&mut *tx)
                     .await
@@ -6677,7 +6965,12 @@ async fn save_special_sales_batch(
         let new_sid = format!("{}{:05}", sl_prefix, next_seq);
         next_seq += 1;
 
-        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11)")
+        // Find product_id
+        let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+            .bind(&sale.product_name).bind(&sale.specification).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+        let p_id = p_id_row.map(|r| r.0);
+
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date, product_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11, $12)")
         .bind(&new_sid)
         .bind(&event_id) // Link to Event ID
         .bind(sale_date)
@@ -6689,6 +6982,7 @@ async fn save_special_sales_batch(
         .bind(discount)
         .bind(&sale.memo)
         .bind(today_naive) // shipping_date = today for spot sales
+        .bind(p_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -8288,15 +8582,15 @@ async fn save_purchase(
     // 1. Process Material Buy (Increase purchased item stock)
     if let Some(m_id) = purchase.material_item_id {
         // Fetch Material Info
-        let m_prod: (String, Option<String>, i32) = sqlx::query_as(
-            "SELECT product_name, specification, stock_quantity FROM products WHERE product_id = $1"
+        let m_prod: (String, Option<String>, Option<String>, i32) = sqlx::query_as(
+            "SELECT product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1"
         )
         .bind(m_id)
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| format!("Material lookup failed: {}", e))?;
 
-        let new_m_stock = m_prod.2 + purchase.quantity;
+        let new_m_stock = m_prod.3 + purchase.quantity;
 
         // Update Material Stock
         sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
@@ -8308,11 +8602,13 @@ async fn save_purchase(
 
         // Log Material In
         sqlx::query(
-            "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
+        .bind(m_id)
         .bind(&m_prod.0)
         .bind(&m_prod.1)
+        .bind(&m_prod.2)
         .bind("입고")
         .bind(purchase.quantity)
         .bind(new_m_stock)
@@ -8328,8 +8624,8 @@ async fn save_purchase(
 
             for item in sync_items {
                 // Fetch Product Info
-                let product: (String, Option<String>, i32) = sqlx::query_as(
-                    "SELECT product_name, specification, stock_quantity FROM products WHERE product_id = $1"
+                let product: (String, Option<String>, Option<String>, i32) = sqlx::query_as(
+                    "SELECT product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1"
                 )
                 .bind(item.product_id)
                 .fetch_one(&mut *tx)
@@ -8337,7 +8633,7 @@ async fn save_purchase(
                 .map_err(|e| format!("Product lookup failed: {}", e))?;
 
                 // Product Stock Increase
-                let new_p_stock = product.2 + item.quantity;
+                let new_p_stock = product.3 + item.quantity;
                 sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
                     .bind(new_p_stock)
                     .bind(item.product_id)
@@ -8356,11 +8652,13 @@ async fn save_purchase(
 
                 // Log Product In
                 sqlx::query(
-                    "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)"
+                    "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
                 )
+                .bind(item.product_id)
                 .bind(&product.0)
                 .bind(&product.1)
+                .bind(&product.2)
                 .bind("입고")
                 .bind(item.quantity)
                 .bind(new_p_stock)
@@ -8372,11 +8670,13 @@ async fn save_purchase(
 
                 // Log Material Out (Conversion)
                 sqlx::query(
-                    "INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)"
+                    "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
                 )
+                .bind(m_id)
                 .bind(&m_prod.0)
                 .bind(&m_prod.1)
+                .bind(&m_prod.2)
                 .bind("출고")
                 .bind(-item.quantity)
                 .bind(current_m_stock)

@@ -22,3 +22,24 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Rust
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# SQL and Backups
+*.sql
+*.db
+*.sqlite
+*.gz
+*.zip
+
+# Database related (if any)
+db/
+backup/
+
+# Environment
+.env
+.env.*
+.secrets

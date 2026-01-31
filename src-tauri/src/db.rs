@@ -86,7 +86,42 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
                     END IF;
                 END LOOP;
             END;
-        END $$;
+            $$;
+
+            -- Product Code and Status Migration
+            DO $$
+            BEGIN
+                -- Add columns to products
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='product_code') THEN
+                    ALTER TABLE products ADD COLUMN product_code VARCHAR(50);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='status') THEN
+                    ALTER TABLE products ADD COLUMN status VARCHAR(20) DEFAULT '판매중';
+                END IF;
+
+                -- Add columns to sales
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sales' AND column_name='product_code') THEN
+                    ALTER TABLE sales ADD COLUMN product_code VARCHAR(50);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='sales' AND column_name='product_id') THEN
+                    ALTER TABLE sales ADD COLUMN product_id INTEGER;
+                END IF;
+
+                -- Add columns to inventory_logs
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='inventory_logs' AND column_name='product_code') THEN
+                    ALTER TABLE inventory_logs ADD COLUMN product_code VARCHAR(50);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='inventory_logs' AND column_name='product_id') THEN
+                    ALTER TABLE inventory_logs ADD COLUMN product_id INTEGER;
+                END IF;
+
+                -- Data correction for existing records
+                UPDATE inventory_logs l SET product_id = p.product_id FROM products p 
+                WHERE l.product_id IS NULL AND (l.product_code = p.product_code OR (l.product_code IS NULL AND l.product_name = p.product_name AND l.specification IS NOT DISTINCT FROM p.specification));
+                
+                UPDATE sales s SET product_id = p.product_id FROM products p 
+                WHERE s.product_id IS NULL AND (s.product_code = p.product_code OR (s.product_code IS NULL AND s.product_name = p.product_name AND s.specification IS NOT DISTINCT FROM p.specification));
+            END $$;
 
         -- Automatic updated_at trigger function
         CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
@@ -211,55 +246,69 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
         CREATE OR REPLACE FUNCTION manage_product_stock() RETURNS TRIGGER AS $$
         DECLARE
             v_final_stock INTEGER;
+            v_p_id INTEGER;
         BEGIN
+            -- Resolve Product ID
+            IF (NEW.product_id IS NOT NULL) THEN
+                v_p_id := NEW.product_id;
+            ELSIF (NEW.product_code IS NOT NULL) THEN
+                SELECT product_id INTO v_p_id FROM products WHERE product_code = NEW.product_code;
+            ELSE
+                SELECT product_id INTO v_p_id FROM products WHERE product_name = NEW.product_name AND specification IS NOT DISTINCT FROM NEW.specification;
+            END IF;
+
             IF (TG_OP = 'INSERT') THEN
                 IF (NEW.status NOT IN ('취소', '반품', '반품완료')) THEN
                     UPDATE products SET stock_quantity = stock_quantity - NEW.quantity
-                    WHERE product_name = NEW.product_name AND specification IS NOT DISTINCT FROM NEW.specification
+                    WHERE product_id = v_p_id
                     RETURNING stock_quantity INTO v_final_stock;
-                    INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES (NEW.product_name, NEW.specification, '출고', -NEW.quantity, COALESCE(v_final_stock, 0), NEW.sales_id, '판매 등록');
+
+                    INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES (v_p_id, NEW.product_name, NEW.specification, NEW.product_code, '출고', -NEW.quantity, COALESCE(v_final_stock, 0), NEW.sales_id, '판매 등록');
                 END IF;
                 RETURN NEW;
             ELSIF (TG_OP = 'DELETE') THEN
+                -- Resolve ID for OLD record
+                IF (OLD.product_id IS NOT NULL) THEN v_p_id := OLD.product_id;
+                ELSIF (OLD.product_code IS NOT NULL) THEN SELECT product_id INTO v_p_id FROM products WHERE product_code = OLD.product_code;
+                ELSE SELECT product_id INTO v_p_id FROM products WHERE product_name = OLD.product_name AND specification IS NOT DISTINCT FROM OLD.specification;
+                END IF;
+
                 IF (OLD.status NOT IN ('취소', '반품', '반품완료')) THEN
                     UPDATE products SET stock_quantity = stock_quantity + OLD.quantity
-                    WHERE product_name = OLD.product_name AND specification IS NOT DISTINCT FROM OLD.specification
+                    WHERE product_id = v_p_id
                     RETURNING stock_quantity INTO v_final_stock;
-                    INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES (OLD.product_name, OLD.specification, '취소반품', OLD.quantity, COALESCE(v_final_stock, 0), OLD.sales_id, '판매 삭제(복구)');
+
+                    INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES (v_p_id, OLD.product_name, OLD.specification, OLD.product_code, '취소반품', OLD.quantity, COALESCE(v_final_stock, 0), OLD.sales_id, '판매 삭제(복구)');
                 END IF;
                 RETURN OLD;
             ELSIF (TG_OP = 'UPDATE') THEN
+                -- Logic for Status Changes or Quantity Changes
                 IF (OLD.status NOT IN ('취소', '반품', '반품완료') AND NEW.status IN ('취소', '반품', '반품완료')) THEN
                     UPDATE products SET stock_quantity = stock_quantity + OLD.quantity
-                    WHERE product_name = OLD.product_name AND specification IS NOT DISTINCT FROM OLD.specification
+                    WHERE product_id = v_p_id
                     RETURNING stock_quantity INTO v_final_stock;
-                    INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES (OLD.product_name, OLD.specification, '취소반품', OLD.quantity, COALESCE(v_final_stock, 0), OLD.sales_id, '상태 변경(취소/반품)');
+
+                    INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES (v_p_id, OLD.product_name, OLD.specification, OLD.product_code, '취소반품', OLD.quantity, COALESCE(v_final_stock, 0), OLD.sales_id, '상태 변경(취소/반품)');
                 ELSIF (OLD.status IN ('취소', '반품', '반품완료') AND NEW.status NOT IN ('취소', '반품', '반품완료')) THEN
                     UPDATE products SET stock_quantity = stock_quantity - NEW.quantity
-                    WHERE product_name = NEW.product_name AND specification IS NOT DISTINCT FROM NEW.specification
+                    WHERE product_id = v_p_id
                     RETURNING stock_quantity INTO v_final_stock;
-                    INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                    VALUES (NEW.product_name, NEW.specification, '출고', -NEW.quantity, COALESCE(v_final_stock, 0), NEW.sales_id, '상태 변경(정상전환)');
+
+                    INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                    VALUES (v_p_id, NEW.product_name, NEW.specification, NEW.product_code, '출고', -NEW.quantity, COALESCE(v_final_stock, 0), NEW.sales_id, '상태 변경(정상전환)');
                 ELSIF (OLD.status NOT IN ('취소', '반품', '반품완료') AND NEW.status NOT IN ('취소', '반품', '반품완료')) THEN
-                    IF (OLD.product_name = NEW.product_name AND OLD.specification IS NOT DISTINCT FROM NEW.specification) THEN
+                    IF (v_p_id IS NOT NULL) THEN
                         IF (OLD.quantity <> NEW.quantity) THEN
                             UPDATE products SET stock_quantity = stock_quantity + (OLD.quantity - NEW.quantity)
-                            WHERE product_name = NEW.product_name AND specification IS NOT DISTINCT FROM NEW.specification
+                            WHERE product_id = v_p_id
                             RETURNING stock_quantity INTO v_final_stock;
-                            INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                            VALUES (NEW.product_name, NEW.specification, '조정', (OLD.quantity - NEW.quantity), COALESCE(v_final_stock, 0), NEW.sales_id, '수량 수정');
+
+                            INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo)
+                            VALUES (v_p_id, NEW.product_name, NEW.specification, NEW.product_code, '조정', (OLD.quantity - NEW.quantity), COALESCE(v_final_stock, 0), NEW.sales_id, '수량 수정');
                         END IF;
-                    ELSE
-                        UPDATE products SET stock_quantity = stock_quantity + OLD.quantity
-                        WHERE product_name = OLD.product_name AND specification IS NOT DISTINCT FROM OLD.specification;
-                        UPDATE products SET stock_quantity = stock_quantity - NEW.quantity
-                        WHERE product_name = NEW.product_name AND specification IS NOT DISTINCT FROM NEW.specification
-                        RETURNING stock_quantity INTO v_final_stock;
-                        INSERT INTO inventory_logs (product_name, specification, change_type, change_quantity, current_stock, reference_id, memo)
-                        VALUES (NEW.product_name, NEW.specification, '출고', -NEW.quantity, COALESCE(v_final_stock, 0), NEW.sales_id, '상품 변경(교체)');
                     END IF;
                 END IF;
                 RETURN NEW;
@@ -321,6 +370,10 @@ pub struct Sales {
     pub payment_status: Option<String>,
     #[sqlx(default)]
     pub updated_at: Option<NaiveDateTime>,
+    #[sqlx(default)]
+    pub product_code: Option<String>,
+    #[sqlx(default)]
+    pub product_id: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -497,6 +550,10 @@ pub struct Product {
     pub item_type: Option<String>,
     #[sqlx(default)]
     pub updated_at: Option<NaiveDateTime>,
+    #[sqlx(default)]
+    pub product_code: Option<String>,
+    #[sqlx(default)]
+    pub status: Option<String>, // '판매중', '단종상품'
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
