@@ -2891,7 +2891,7 @@ async fn update_product(
     }
     if old.unit_price != unit_price {
         changes.push(format!(
-            "가격변경: {:,}원 -> {:,}원",
+            "가격변경: {}원 -> {}원",
             old.unit_price, unit_price
         ));
     }
@@ -3376,36 +3376,32 @@ async fn convert_stock(
     let mut tx = state.begin().await.map_err(|e| e.to_string())?;
 
     // 1. Get Product info and its material link
-    let product: (String, Option<String>, i32, Option<i32>, f64) = sqlx::query_as(
-        "SELECT product_name, specification, stock_quantity, material_id, material_ratio FROM products WHERE product_id = $1",
-    )
-    .bind(product_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| format!("Product not found: {}", e))?;
+    let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(product_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Product not found: {}", e))?;
 
-    let p_name = product.0;
-    let p_spec = product.1;
-    let p_old_qty = product.2;
+    let p_name = product.product_name;
+    let p_spec = product.specification;
+    let p_old_qty = product.stock_quantity.unwrap_or(0);
     let m_id = product
-        .3
+        .material_id
         .ok_or("The selected product has no linked material.")?;
-    let m_ratio = product.4;
+    let m_ratio = product.material_ratio.unwrap_or(1.0);
 
     // 2. Get Material info
-    let material: (i32, String, Option<String>, Option<String>, i32) = sqlx::query_as(
-        "SELECT product_id, product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1",
-    )
-    .bind(m_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|e| format!("Material not found: {}", e))?;
+    let material: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(m_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("Material not found: {}", e))?;
 
-    let m_actual_id = material.0;
-    let m_name = material.1;
-    let m_spec = material.2;
-    let m_code = material.3;
-    let m_old_qty = material.4;
+    let m_actual_id = material.product_id.unwrap_or(0);
+    let m_name = material.product_name;
+    let m_spec = material.specification;
+    let m_code = material.product_code;
+    let m_old_qty = material.stock_quantity.unwrap_or(0);
 
     // 3. Calculate changes
     let m_deduct = (convert_qty as f64 * m_ratio).ceil() as i32;
@@ -3483,15 +3479,15 @@ async fn adjust_product_stock(
     let mut tx = state.begin().await.map_err(|e| e.to_string())?;
 
     // 1. Get current info
-    let product: ProductInfo = sqlx::query_as(
-        "SELECT product_id, product_name, specification, product_code, stock_quantity, material_id, material_ratio FROM products WHERE product_id = $1",
+    let product: Product = sqlx::query_as(
+        "SELECT product_id, product_name, specification, product_code, stock_quantity, material_id, material_ratio, unit_price FROM products WHERE product_id = $1",
     )
     .bind(product_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| format!("Product not found: {}", e))?;
 
-    let new_qty = product.stock_quantity + change_qty;
+    let new_qty = product.stock_quantity.unwrap_or(0) + change_qty;
 
     // 2. Update stock
     sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
@@ -8582,15 +8578,13 @@ async fn save_purchase(
     // 1. Process Material Buy (Increase purchased item stock)
     if let Some(m_id) = purchase.material_item_id {
         // Fetch Material Info
-        let m_prod: (String, Option<String>, Option<String>, i32) = sqlx::query_as(
-            "SELECT product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1"
-        )
-        .bind(m_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| format!("Material lookup failed: {}", e))?;
+        let m_prod: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+            .bind(m_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| format!("Material lookup failed: {}", e))?;
 
-        let new_m_stock = m_prod.3 + purchase.quantity;
+        let new_m_stock = m_prod.stock_quantity.unwrap_or(0) + purchase.quantity;
 
         // Update Material Stock
         sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
@@ -8606,9 +8600,9 @@ async fn save_purchase(
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(m_id)
-        .bind(&m_prod.0)
-        .bind(&m_prod.1)
-        .bind(&m_prod.2)
+        .bind(&m_prod.product_name)
+        .bind(&m_prod.specification)
+        .bind(&m_prod.product_code)
         .bind("입고")
         .bind(purchase.quantity)
         .bind(new_m_stock)
@@ -8624,16 +8618,15 @@ async fn save_purchase(
 
             for item in sync_items {
                 // Fetch Product Info
-                let product: (String, Option<String>, Option<String>, i32) = sqlx::query_as(
-                    "SELECT product_name, specification, product_code, stock_quantity FROM products WHERE product_id = $1"
-                )
-                .bind(item.product_id)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(|e| format!("Product lookup failed: {}", e))?;
+                let p_info: Product =
+                    sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+                        .bind(item.product_id)
+                        .fetch_one(&mut *tx)
+                        .await
+                        .map_err(|e| format!("Product lookup failed: {}", e))?;
 
                 // Product Stock Increase
-                let new_p_stock = product.3 + item.quantity;
+                let new_p_stock = p_info.stock_quantity.unwrap_or(0) + item.quantity;
                 sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
                     .bind(new_p_stock)
                     .bind(item.product_id)
@@ -8656,14 +8649,14 @@ async fn save_purchase(
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
                 )
                 .bind(item.product_id)
-                .bind(&product.0)
-                .bind(&product.1)
-                .bind(&product.2)
+                .bind(&p_info.product_name)
+                .bind(&p_info.specification)
+                .bind(&p_info.product_code)
                 .bind("입고")
                 .bind(item.quantity)
                 .bind(new_p_stock)
                 .bind(purchase_id.to_string())
-                .bind(format!("매입 전환 생산 (#{}): {} 자재 사용", purchase_id, m_prod.0))
+                .bind(format!("매입 전환 생산 (#{}): {} 자재 사용", purchase_id, m_prod.product_name))
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| format!("Product stock log failed: {}", e))?;
@@ -8674,14 +8667,14 @@ async fn save_purchase(
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
                 )
                 .bind(m_id)
-                .bind(&m_prod.0)
-                .bind(&m_prod.1)
-                .bind(&m_prod.2)
+                .bind(&m_prod.product_name)
+                .bind(&m_prod.specification)
+                .bind(&m_prod.product_code)
                 .bind("출고")
                 .bind(-item.quantity)
                 .bind(current_m_stock)
                 .bind(purchase_id.to_string())
-                .bind(format!("생산 전환 소모 (#{}): {} 상품 제작", purchase_id, product.0))
+                .bind(format!("생산 전환 소모 (#{}): {} 상품 제작", purchase_id, p_info.product_name))
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| format!("Material reduction log failed: {}", e))?;

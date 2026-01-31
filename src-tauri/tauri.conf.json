@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "csi-manager",
-  "version": "1.0.1",
-  "identifier": "com.csi-manager",
+  "productName": "Mycelium",
+  "version": "1.0.0",
+  "identifier": "com.mycelium",
   "plugins": {
     "updater": {
       "endpoints": [
@@ -22,7 +22,7 @@
     "windows": [
       {
         "resizable": true,
-        "title": "csi-manager",
+        "title": "Mycelium",
         "width": 1920,
         "height": 1030,
         "minWidth": 1920,
