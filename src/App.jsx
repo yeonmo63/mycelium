@@ -118,10 +118,10 @@ function AppContent() {
 
     const setup = async () => {
       try {
-        console.log('App starting setup...');
-        // Force fresh login on every startup - only once on mount
-        sessionStorage.removeItem('isLoggedIn');
-        setIsLoggedIn(false);
+        // Check if user is already logged in (persistence)
+        if (sessionStorage.getItem('isLoggedIn') === 'true') {
+          setIsLoggedIn(true);
+        }
 
         const status = await invoke('check_setup_status');
         console.log('Setup status:', status);

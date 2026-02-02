@@ -15,16 +15,16 @@ pub async fn get_ltv_analysis(
             c.customer_id, c.customer_name, c.membership_level, c.join_date,
             SUM(s.total_amount) as total_spent,
             COUNT(s.sales_id) as total_orders,
-            EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0) as years_active,
+            GREATEST(EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0), 0.1) as years_active,
             CASE 
-                WHEN EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0) > 0 
-                THEN SUM(s.total_amount) / (EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0))
+                WHEN (EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0)) > 0 
+                THEN SUM(s.total_amount) / GREATEST((EXTRACT(YEAR FROM age(CURRENT_DATE, c.join_date)) + (EXTRACT(MONTH FROM age(CURRENT_DATE, c.join_date))/12.0)), 0.1)
                 ELSE SUM(s.total_amount)
             END as ltv_score
         FROM customers c
         JOIN sales s ON c.customer_id = s.customer_id
         WHERE s.status != '취소'
-        GROUP BY c.customer_id
+        GROUP BY c.customer_id, c.customer_name, c.membership_level, c.join_date
         ORDER BY ltv_score DESC
         LIMIT $1
     "#;
