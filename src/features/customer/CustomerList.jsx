@@ -162,32 +162,26 @@ const CustomerList = () => {
         setIsProcessing(true);
         try {
             const payload = {
-                id: formData.id,
-                name: formData.name,
-                mobile: formData.mobile,
-                level: formData.level,
-                phone: formData.phone || null,
+                customerId: formData.id,
+                customerName: formData.name,
+                mobileNumber: formData.mobile,
+                membershipLevel: formData.level,
+                phoneNumber: formData.phone || null,
                 email: formData.email || null,
-                zip: formData.zip || null,
-                addr1: formData.addr1 || null,
-                addr2: formData.addr2 || null,
+                zipCode: formData.zip || null,
+                addressPrimary: formData.addr1 || null,
+                addressDetail: formData.addr2 || null,
                 memo: formData.memo || null,
-                join_date: formData.joinDate || null,
-                anniversary_date: formData.anniversaryDate || null,
-                anniversary_type: formData.anniversaryType || null,
-                marketing_consent: formData.marketingConsent,
-                acquisition_channel: formData.acquisition || null,
-                pref_product_type: formData.prefProduct || null,
-                pref_package_type: formData.prefPackage || null,
-                family_type: formData.familyType || null,
-                health_concern: formData.healthConcern || null,
-                sub_interest: formData.subInterest,
-                purchase_cycle: formData.purchaseCycle || null
+                anniversaryDate: formData.anniversaryDate || null,
+                anniversaryType: formData.anniversaryType || null,
+                marketingConsent: formData.marketingConsent,
+                acquisitionChannel: formData.acquisition || null,
+                status: formData.status
             };
             await window.__TAURI__.core.invoke('update_customer', payload);
             await showAlert("성공", "수정되었습니다.");
             setMode('view');
-            const fresh = await window.__TAURI__.core.invoke('get_customer', { id: formData.id });
+            const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: formData.id });
             if (fresh) loadCustomer(fresh);
         } catch (err) { await showAlert("오류", "수정 실패: " + err); } finally { setIsProcessing(false); }
     };
@@ -200,7 +194,7 @@ const CustomerList = () => {
         if (!await showConfirm("휴면 전환", "정말로 이 고객을 휴면 고객으로 전환하시겠습니까?\n고객 정보는 보관되지만, '정상' 고객 검색 결과에서 제외됩니다.")) return;
         setIsProcessing(true);
         try {
-            await window.__TAURI__.core.invoke('delete_customer', { id: customer.customer_id });
+            await window.__TAURI__.core.invoke('delete_customer', { customerId: customer.customer_id });
             await showAlert("성공", "휴면 고객으로 전환되었습니다.");
             handleReset();
         } catch (err) { await showAlert("오류", "휴면 전환 실패: " + err); } finally { setIsProcessing(false); }
@@ -211,9 +205,9 @@ const CustomerList = () => {
         if (!await showConfirm("정상 전환", "이 고객을 다시 '정상' 고객으로 전환하시겠습니까?")) return;
         setIsProcessing(true);
         try {
-            await window.__TAURI__.core.invoke('reactivate_customer', { id: customer.customer_id });
+            await window.__TAURI__.core.invoke('reactivate_customer', { customerId: customer.customer_id });
             await showAlert("성공", "정상 고객으로 전환되었습니다.");
-            const fresh = await window.__TAURI__.core.invoke('get_customer', { id: customer.customer_id });
+            const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: customer.customer_id });
             if (fresh) loadCustomer(fresh);
         } catch (err) { await showAlert("오류", "전환 실패: " + err); } finally { setIsProcessing(false); }
     };

@@ -95,7 +95,8 @@ const SalesLedger = () => {
 
     const handleSaveEntry = async () => {
         const { id, type, date, amount, desc } = entryForm;
-        const amountVal = Number(String(amount).replace(/[^0-9]/g, ''));
+        // Strip everything except numbers and minus sign
+        const amountVal = Number(String(amount).replace(/[^0-9-]/g, ''));
 
         if (amountVal === 0) return showAlert("알림", "금액을 입력해주세요.");
         if (!selectedCustomer) return;
@@ -124,8 +125,17 @@ const SalesLedger = () => {
                 }
 
                 setIsEntryModalOpen(false);
-                handleSelectCustomer(selectedCustomer); // Refresh
-                loadDefaultDebtList(); // Refresh list balances
+                await loadDefaultDebtList(); // Refresh list balances
+
+                // Refresh the selected customer object to get fresh current_balance
+                const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: selectedCustomer.customer_id });
+                if (fresh) {
+                    handleSelectCustomer(fresh);
+                } else {
+                    // If balance became 0 and filtered out (though get_customer should still work), 
+                    // we still want to show the current one until they switch
+                    handleSelectCustomer(selectedCustomer);
+                }
             }
         } catch (e) {
             showAlert("오류", "저장 실패: " + e);
@@ -381,7 +391,20 @@ const SalesLedger = () => {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-black text-slate-400 uppercase ml-1">금액</label>
-                                <input value={formatCurrency(entryForm.amount)} onChange={e => setEntryForm({ ...entryForm, amount: e.target.value })}
+                                <input value={formatCurrency(entryForm.amount)}
+                                    onChange={e => {
+                                        let val = e.target.value;
+                                        if (entryForm.type === '조정') {
+                                            // Allow minus sign for adjustments
+                                            val = val.replace(/[^0-9-]/g, '');
+                                            // Ensure minus is only at the front
+                                            if (val.includes('-') && val.indexOf('-') !== 0) val = val.replace(/-/g, '');
+                                            if ((val.match(/-/g) || []).length > 1) val = '-' + val.replace(/-/g, '');
+                                        } else {
+                                            val = val.replace(/[^0-9]/g, '');
+                                        }
+                                        setEntryForm({ ...entryForm, amount: val });
+                                    }}
                                     className="w-full h-11 px-4 rounded-xl bg-white border border-slate-300 text-right font-black text-xl text-indigo-600 focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                                 <div className="text-[11px] text-right font-bold mt-1 text-slate-400">
                                     {entryForm.type === '입금' ? <span className="text-emerald-500">잔액이 차감됩니다.</span> : <span className="text-rose-500">잔액이 증가합니다.</span>}

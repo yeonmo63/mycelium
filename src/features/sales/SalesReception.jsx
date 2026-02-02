@@ -77,7 +77,7 @@ const SalesReception = () => {
     const loadSalesHistory = useCallback(async (cid, date) => {
         try {
             if (!window.__TAURI__) return;
-            const history = await window.__TAURI__.core.invoke('get_customer_sales_history', {
+            const history = await window.__TAURI__.core.invoke('get_customer_sales_on_date', {
                 customerId: String(cid),
                 date
             });

@@ -531,7 +531,7 @@ const FinancePurchase = () => {
                                     ))}
                                     {purchases.length === 0 && (
                                         <tr>
-                                            <td colspan="7" className="py-12 text-center text-slate-400 font-medium">매입 내역이 없습니다.</td>
+                                            <td colSpan="7" className="py-12 text-center text-slate-400 font-medium">매입 내역이 없습니다.</td>
                                         </tr>
                                     )}
                                 </tbody>

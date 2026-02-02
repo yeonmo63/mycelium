@@ -1,7 +1,11 @@
 
 export function formatCurrency(amount) {
     if (amount === undefined || amount === null) return '0';
-    return new Intl.NumberFormat('ko-KR').format(amount);
+    if (amount === '') return '';
+    if (amount === '-') return '-';
+    const num = typeof amount === 'number' ? amount : Number(String(amount).replace(/[^0-9.-]/g, ''));
+    if (isNaN(num)) return '0';
+    return new Intl.NumberFormat('ko-KR').format(num);
 }
 
 export function parseNumber(str) {

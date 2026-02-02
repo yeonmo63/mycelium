@@ -25,6 +25,9 @@ const SettingsCompany = () => {
         mobile_number: '',
         business_reg_number: '',
         registration_date: '',
+        address: '',
+        business_type: '',
+        item: '',
         memo: ''
     });
 
@@ -56,6 +59,9 @@ const SettingsCompany = () => {
                             mobile_number: info.mobile_number || '',
                             business_reg_number: info.business_reg_number || '',
                             registration_date: info.registration_date ? info.registration_date.substring(0, 10) : '',
+                            address: info.address || '',
+                            business_type: info.business_type || '',
+                            item: info.item || '',
                             memo: info.memo || ''
                         });
                     }
@@ -83,6 +89,9 @@ const SettingsCompany = () => {
                 mobileNumber: formData.mobile_number || null,
                 businessRegNumber: formData.business_reg_number || null,
                 registrationDate: formData.registration_date || null,
+                address: formData.address || null,
+                businessType: formData.business_type || null,
+                item: formData.item || null,
                 memo: formData.memo || null
             });
             await showAlert('저장 완료', '업체 정보가 저장되었습니다.');
@@ -156,7 +165,7 @@ const SettingsCompany = () => {
                                         type="text"
                                         value={formData.company_name}
                                         onChange={e => setFormData({ ...formData, company_name: e.target.value })}
-                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="업체명을 입력하세요"
                                         required
                                     />
@@ -168,7 +177,7 @@ const SettingsCompany = () => {
                                         type="text"
                                         value={formData.representative_name}
                                         onChange={e => setFormData({ ...formData, representative_name: e.target.value })}
-                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="대표자 성함"
                                     />
                                 </div>
@@ -179,7 +188,7 @@ const SettingsCompany = () => {
                                         type="text"
                                         value={formData.business_reg_number}
                                         onChange={e => setFormData({ ...formData, business_reg_number: e.target.value })}
-                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="000-00-00000"
                                     />
                                 </div>
@@ -190,7 +199,40 @@ const SettingsCompany = () => {
                                         type="date"
                                         value={formData.registration_date}
                                         onChange={e => setFormData({ ...formData, registration_date: e.target.value })}
-                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                    />
+                                </div>
+
+                                <div className="space-y-1 col-span-1 md:col-span-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">사업장 주소</label>
+                                    <input
+                                        type="text"
+                                        value={formData.address}
+                                        onChange={e => setFormData({ ...formData, address: e.target.value })}
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        placeholder="사업장 소재지를 입력하세요"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">업태</label>
+                                    <input
+                                        type="text"
+                                        value={formData.business_type}
+                                        onChange={e => setFormData({ ...formData, business_type: e.target.value })}
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        placeholder="예: 도소매업, 농업"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">종목</label>
+                                    <input
+                                        type="text"
+                                        value={formData.item}
+                                        onChange={e => setFormData({ ...formData, item: e.target.value })}
+                                        className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        placeholder="예: 버섯, 농산물"
                                     />
                                 </div>
                             </div>
@@ -212,7 +254,7 @@ const SettingsCompany = () => {
                                         type="tel"
                                         value={formData.phone_number}
                                         onChange={e => setFormData({ ...formData, phone_number: e.target.value })}
-                                        className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="02-000-0000"
                                     />
                                 </div>
@@ -223,7 +265,7 @@ const SettingsCompany = () => {
                                         type="tel"
                                         value={formData.mobile_number}
                                         onChange={e => setFormData({ ...formData, mobile_number: e.target.value })}
-                                        className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 transition-all ring-1 ring-inset ring-slate-200"
+                                        className="w-full h-11 px-4 bg-white border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="010-0000-0000"
                                     />
                                 </div>
@@ -244,7 +286,7 @@ const SettingsCompany = () => {
                                 <textarea
                                     value={formData.memo}
                                     onChange={e => setFormData({ ...formData, memo: e.target.value })}
-                                    className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 resize-none custom-scrollbar min-h-[100px]"
+                                    className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200 resize-none custom-scrollbar min-h-[100px]"
                                     placeholder="업체에 대한 추가 정보나 메모를 입력하세요"
                                 ></textarea>
                             </div>

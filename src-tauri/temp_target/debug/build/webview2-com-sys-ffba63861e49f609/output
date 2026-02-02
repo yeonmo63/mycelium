@@ -1,0 +1,2 @@
+cargo:rustc-link-search=native=D:\workspace\rust\mycelium\src-tauri\temp_target\debug\build\webview2-com-sys-ffba63861e49f609\out\x64
+cargo:rustc-link-lib=advapi32

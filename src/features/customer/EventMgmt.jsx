@@ -91,6 +91,9 @@ const EventMgmt = () => {
     const handleSave = async () => {
         if (!form.name.trim()) return showAlert("알림", "행사명은 필수입니다.");
 
+        const isConfirm = await showConfirm("저장 확인", "수정 사항을 저장하시겠습니까?");
+        if (!isConfirm) return;
+
         const payload = {
             eventName: form.name,
             organizer: form.organizer || null,
@@ -107,12 +110,13 @@ const EventMgmt = () => {
             if (window.__TAURI__) {
                 if (form.id) {
                     await window.__TAURI__.core.invoke('update_event', { ...payload, eventId: form.id });
+                    setIsModalOpen(false);
                     await showAlert("성공", "수정되었습니다.");
                 } else {
                     await window.__TAURI__.core.invoke('create_event', payload);
+                    setIsModalOpen(false);
                     await showAlert("성공", "등록되었습니다.");
                 }
-                setIsModalOpen(false);
                 loadEvents(searchQuery);
             }
         } catch (e) {
@@ -127,8 +131,8 @@ const EventMgmt = () => {
         try {
             if (window.__TAURI__) {
                 await window.__TAURI__.core.invoke('delete_event', { eventId: form.id });
-                await showAlert("성공", "삭제되었습니다.");
                 setIsModalOpen(false);
+                await showAlert("성공", "삭제되었습니다.");
                 loadEvents(searchQuery);
             }
         } catch (e) {

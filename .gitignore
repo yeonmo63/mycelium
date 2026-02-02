@@ -45,4 +45,4 @@ backup/
 .secrets
 
 # Temporary files
-src-tauri/*.txt
+*.txt

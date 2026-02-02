@@ -90,7 +90,7 @@ const ExperienceStatus = () => {
                 targetStatus = '체험완료';
                 break;
             case 'status_canceled':
-                confirmMsg = `선택한 ${selectedIds.length}건을 [예약취소] 처리하시겠습니까?`;
+                confirmMsg = `선택한 ${selectedIds.length}건을 [예약취소] 처리하시겠습니까?\n(결제 완료된 건은 자동으로 [환불완료] 처리됩니다)`;
                 targetStatus = '예약취소';
                 break;
             case 'delete':
@@ -106,11 +106,19 @@ const ExperienceStatus = () => {
         try {
             for (const id of selectedIds) {
                 if (isDelete) {
-                    await invoke('delete_experience_reservation', { reservationId: id });
+                    await invoke('delete_experience_reservation', { reservation_id: id });
                 } else if (isPayment) {
-                    await invoke('update_experience_payment_status', { reservationId: id, paymentStatus: '결제완료' });
+                    await invoke('update_experience_payment_status', { reservation_id: id, payment_status: '결제완료' });
                 } else {
-                    await invoke('update_experience_status', { reservationId: id, status: targetStatus, appendMemo: null });
+
+                    await invoke('update_experience_status', { reservation_id: id, status: targetStatus, append_memo: null });
+                    // Auto-refund for batch cancel
+                    if (targetStatus === '예약취소') {
+                        const t = reservations.find(r => r.reservation_id === id);
+                        if (t && t.payment_status === '결제완료') {
+                            await invoke('update_experience_payment_status', { reservation_id: id, payment_status: '환불완료' });
+                        }
+                    }
                 }
             }
             showAlert('처리 완료', '요청하신 작업이 일괄 처리되었습니다.');
@@ -134,6 +142,11 @@ const ExperienceStatus = () => {
                 showAlert('요청 거부', `[${target.guest_name}]님은 이미 체험이 완료되어 예약을 취소할 수 없습니다.`);
                 return;
             }
+            if (target.payment_status === '결제완료') {
+                if (await showConfirm('예약 취소 및 환불', `[${target.guest_name}]님은 결제가 완료된 예약을 취소합니다.\n결제 상태를 [환불완료]로 변경하시겠습니까?`)) {
+                    await invoke('update_experience_payment_status', { reservation_id: id, payment_status: '환불완료' });
+                }
+            }
         }
 
         if (status === '체험완료') {
@@ -152,7 +165,7 @@ const ExperienceStatus = () => {
         }
 
         try {
-            await invoke('update_experience_status', { reservationId: id, status, appendMemo: null });
+            await invoke('update_experience_status', { reservation_id: id, status, append_memo: null });
             showAlert('완료', `[${status}] 상태로 변경되었습니다.`);
             loadReservations();
             // If inside modal, editingRes might need update if we want to keep modal open, 
@@ -166,7 +179,7 @@ const ExperienceStatus = () => {
     const handleUpdatePayment = async (id, status) => {
         if (!id) return;
         try {
-            await invoke('update_experience_payment_status', { reservationId: id, paymentStatus: status });
+            await invoke('update_experience_payment_status', { reservation_id: id, payment_status: status });
             showAlert('완료', `[${status}] 처리되었습니다.`);
             loadReservations();
         } catch (err) {
@@ -190,7 +203,7 @@ const ExperienceStatus = () => {
 
         try {
             for (const tid of idsToDelete) {
-                await invoke('delete_experience_reservation', { reservationId: tid });
+                await invoke('delete_experience_reservation', { reservation_id: tid });
             }
             showAlert('삭제 완료', '삭제되었습니다.');
             setSelectedIds([]);
@@ -321,17 +334,17 @@ const ExperienceStatus = () => {
         e.preventDefault();
         try {
             await invoke('update_experience_reservation', {
-                reservationId: editingRes.reservation_id,
-                programId: parseInt(editingRes.program_id), // Ensure integer
-                customerId: editingRes.customer_id,
-                guestName: editingRes.guest_name,
-                guestContact: editingRes.guest_contact,
-                reservationDate: editingRes.reservation_date,
-                reservationTime: editingRes.reservation_time.substring(0, 5),
-                participantCount: parseInt(editingRes.participant_count),
-                totalAmount: parseInt(editingRes.total_amount),
+                reservation_id: editingRes.reservation_id,
+                program_id: parseInt(editingRes.program_id), // Ensure integer
+                customer_id: editingRes.customer_id,
+                guest_name: editingRes.guest_name,
+                guest_contact: editingRes.guest_contact,
+                reservation_date: editingRes.reservation_date,
+                reservation_time: editingRes.reservation_time.substring(0, 5),
+                participant_count: parseInt(editingRes.participant_count),
+                total_amount: parseInt(editingRes.total_amount),
                 status: editingRes.status,
-                paymentStatus: editingRes.payment_status,
+                payment_status: editingRes.payment_status,
                 memo: editingRes.memo
             });
             showAlert('예약 정보가 수정되었습니다.');
@@ -477,7 +490,7 @@ const ExperienceStatus = () => {
                                     const target = reservations.find(r => r.reservation_id === selectedIds[0]);
                                     if (target) setEditingRes(target);
                                 }}
-                                disabled={selectedIds.length !== 1 || reservations.find(r => r.reservation_id === selectedIds[0])?.status === '체험완료'}
+                                disabled={selectedIds.length !== 1 || ['체험완료', '예약취소'].includes(reservations.find(r => r.reservation_id === selectedIds[0])?.status)}
                                 className="px-3 py-1.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg text-xs font-black transition-all flex items-center gap-1"
                             >
                                 <span className="material-symbols-rounded text-sm">edit</span> 정보 수정
@@ -496,7 +509,7 @@ const ExperienceStatus = () => {
                             {/* Logic: Can pay if not paid yet. Ignore status for flexibility, or require confirmed? Let's allow paying anytime except canceled */}
                             <button
                                 onClick={() => handleBatchAction('payment_paid')}
-                                disabled={reservations.filter(r => selectedIds.includes(r.reservation_id)).every(r => r.payment_status === '결제완료')}
+                                disabled={reservations.filter(r => selectedIds.includes(r.reservation_id)).every(r => r.payment_status === '결제완료') || reservations.filter(r => selectedIds.includes(r.reservation_id)).some(r => r.status === '예약취소')}
                                 className="px-3 py-1.5 bg-indigo-500/80 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg text-xs font-black transition-all"
                             >
                                 결제완료 처리
@@ -514,7 +527,7 @@ const ExperienceStatus = () => {
                             {/* Logic: Cancel allowed unless already completed */}
                             <button
                                 onClick={() => handleBatchAction('status_canceled')}
-                                disabled={reservations.filter(r => selectedIds.includes(r.reservation_id)).some(r => r.status === '체험완료')}
+                                disabled={reservations.filter(r => selectedIds.includes(r.reservation_id)).some(r => r.status === '체험완료') || reservations.filter(r => selectedIds.includes(r.reservation_id)).every(r => r.status === '예약취소')}
                                 className="px-3 py-1.5 bg-rose-500/80 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg text-xs font-black transition-all"
                             >
                                 예약취소 처리

@@ -116,16 +116,16 @@ const ExperienceReservation = () => {
         setLoading(true);
         try {
             await invoke('create_experience_reservation', {
-                programId: parseInt(formData.program_id),
-                customerId: formData.customer_id,
-                guestName: formData.guest_name,
-                guestContact: formData.guest_contact,
-                reservationDate: formData.reservation_date,
-                reservationTime: formData.reservation_time,
-                participantCount: parseInt(formData.participant_count),
-                totalAmount: formData.total_amount,
+                program_id: parseInt(formData.program_id),
+                customer_id: formData.customer_id,
+                guest_name: formData.guest_name,
+                guest_contact: formData.guest_contact,
+                reservation_date: formData.reservation_date,
+                reservation_time: formData.reservation_time,
+                participant_count: parseInt(formData.participant_count),
+                total_amount: formData.total_amount,
                 status: formData.status,
-                paymentStatus: formData.payment_status,
+                payment_status: formData.payment_status,
                 memo: formData.memo || null
             });
             showAlert('예약이 접수되었습니다.');

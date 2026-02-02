@@ -1,0 +1,6 @@
+D:\workspace\rust\mycelium\src-tauri\temp_target\debug\deps\zerofrom_derive-ac421a934a07f895.d: C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\lib.rs C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\visitor.rs
+
+D:\workspace\rust\mycelium\src-tauri\temp_target\debug\deps\zerofrom_derive-ac421a934a07f895.dll: C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\lib.rs C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\visitor.rs
+
+C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\lib.rs:
+C:\Users\yeonmo63\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zerofrom-derive-0.1.6\src\visitor.rs:

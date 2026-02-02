@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS customer_ledger (
     ledger_id       SERIAL PRIMARY KEY,
     customer_id     VARCHAR(20) NOT NULL REFERENCES customers(customer_id),
     transaction_date DATE DEFAULT CURRENT_DATE,
-    type            VARCHAR(30) NOT NULL, -- '매출(배송)', '입금', '반품/취소', '이월'
+    transaction_type VARCHAR(30) NOT NULL, -- '매출(배송)', '입금', '반품/취소', '이월'
     amount          INTEGER NOT NULL DEFAULT 0, -- 발생 금액 (매출은 +, 입금도 +로 기록하되 로직에서 처리, or 매출+, 입금-)
                                                  -- 일반적 장부: 차변(매출) / 대변(입금). 여기서는 단일 컬럼 + Type으로 구분 권장.
                                                  -- 여기서는 미수금 증가(매출) = Positive, 미수금 감소(입금) = Negative로 저장하거나,

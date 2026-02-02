@@ -17,7 +17,7 @@ const MainLayout = () => {
         <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
             <Sidebar />
             <main className="flex-1 relative overflow-hidden flex flex-col">
-                <div id="local-modal-root" className="absolute inset-0 z-[9999] pointer-events-none" />
+
                 <div className="flex-1 relative min-h-0 h-full">
                     <Outlet />
                 </div>

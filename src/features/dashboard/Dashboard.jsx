@@ -91,7 +91,7 @@ const Dashboard = () => {
         });
 
         // 2. 모달 관련 데이터들
-        invoke('get_upcoming_anniversaries').then(res => setAnniversaries(res || [])).catch(e => console.error("Anniv error", e));
+        invoke('get_upcoming_anniversaries', { days: 3 }).then(res => setAnniversaries(res || [])).catch(e => console.error("Anniv error", e));
         invoke('get_repurchase_candidates').then(res => setRepurchaseCandidates(res || [])).catch(e => console.error("Repurchase error", e));
         invoke('get_inventory_forecast_alerts').then(res => setForecastAlerts(res || [])).catch(e => console.error("Inventory error", e));
 

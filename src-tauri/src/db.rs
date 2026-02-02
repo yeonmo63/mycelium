@@ -149,6 +149,25 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
                 ALTER TABLE deletion_log ADD COLUMN deleted_by VARCHAR(100);
             END IF;
         END $$;
+
+        -- Sequence Synchronization (Fix for duplicate key errors after restore)
+        DO $$
+        DECLARE
+            t text;
+            c text;
+            seq text;
+        BEGIN
+            -- Logic: For each table/column pair, get the sequence and reset it to match the current MAX(id)
+            FOR t, c IN 
+                SELECT table_name, column_name 
+                FROM information_schema.columns 
+                WHERE column_default LIKE 'nextval%' 
+                  AND table_schema = 'public'
+            LOOP
+                EXECUTE format('SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE(MAX(%I), 0) + 1, false) FROM %I', t, c, c, t);
+            END LOOP;
+        END $$;
+
         CREATE INDEX IF NOT EXISTS idx_deletion_log_at ON deletion_log(deleted_at);
 
         -- Product Price History Table (Added dynamically for existing users)
@@ -583,6 +602,7 @@ pub struct MonthlyCohortStats {
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct ProductSalesStats {
+    pub product_id: Option<i32>,
     pub product_name: String,
     pub record_count: i64,
     pub total_quantity: i64,
@@ -717,6 +737,19 @@ pub struct LtvCustomer {
     pub total_orders: i64,
     pub years_active: f64,
     pub ltv_score: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct BestCustomer {
+    pub customer_id: String,
+    pub customer_name: String,
+    pub mobile_number: Option<String>,
+    pub membership_level: Option<String>,
+    pub address_primary: Option<String>,
+    pub address_detail: Option<String>,
+    pub total_orders: i64,
+    pub total_qty: i64,
+    pub total_amount: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -950,4 +983,32 @@ pub struct ProductPriceHistory {
     pub new_price: i32,
     pub reason: Option<String>,
     pub changed_at: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct InventoryLog {
+    pub log_id: i32,
+    pub product_id: Option<i32>,
+    pub product_name: String,
+    pub specification: Option<String>,
+    pub product_code: Option<String>,
+    pub change_type: String,
+    pub change_quantity: i32,
+    pub current_stock: i32,
+    pub reference_id: Option<String>,
+    pub memo: Option<String>,
+    pub created_at: Option<chrono::NaiveDateTime>,
+    #[sqlx(default)]
+    pub updated_at: Option<chrono::NaiveDateTime>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ProductHistoryItem {
+    pub history_type: String, // '생성', '수정', '가격변경', '상태변경', '재고'
+    pub date: String,
+    pub title: String,
+    pub description: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
+    pub change_amount: i32,
 }

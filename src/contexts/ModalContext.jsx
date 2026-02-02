@@ -165,7 +165,7 @@ const ModalItem = ({ modal, index }) => {
     };
 
     return (
-        <div className="absolute inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-auto">
             <div
                 className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
                 style={{ zIndex: 9999 + index }}

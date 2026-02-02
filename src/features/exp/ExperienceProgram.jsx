@@ -101,17 +101,17 @@ const ExperienceProgram = () => {
         setLoading(true);
         try {
             const payload = {
-                programName: formData.program_name,
+                program_name: formData.program_name,
                 description: formData.description || null,
-                durationMin: parseInt(formData.duration_minutes || 0),
-                pricePerPerson: parseInt(formData.price_per_person || 0),
-                maxCapacity: parseInt(formData.max_participants || 0),
-                isActive: formData.is_active
+                duration_min: parseInt(formData.duration_minutes || 0),
+                price_per_person: parseInt(formData.price_per_person || 0),
+                max_capacity: parseInt(formData.max_participants || 0),
+                is_active: formData.is_active
             };
 
             if (formData.program_id) {
                 await invoke('update_experience_program', {
-                    programId: formData.program_id, // include ID for update
+                    program_id: formData.program_id, // include ID for update
                     ...payload
                 });
                 showAlert('수정되었습니다.');
@@ -131,7 +131,7 @@ const ExperienceProgram = () => {
     const handleDelete = async (id) => {
         if (await showConfirm('프로그램 삭제', '이 프로그램을 삭제하시겠습니까? 관련 예약 데이터가 있는 경우 삭제되지 않을 수 있습니다.')) {
             try {
-                await invoke('delete_experience_program', { programId: id });
+                await invoke('delete_experience_program', { program_id: id });
                 showAlert('삭제되었습니다.');
                 loadPrograms();
             } catch (err) {
