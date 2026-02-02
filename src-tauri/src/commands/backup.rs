@@ -739,9 +739,16 @@ async fn backup_database_internal(
     let count_exp_reservations: (i64,) = sqlx::query_as(&count_query("experience_reservations"))
         .fetch_one(pool)
         .await?;
-    let count_price_history: (i64,) = sqlx::query_as(&count_query("product_price_history"))
-        .fetch_one(pool)
-        .await?;
+    let count_price_history: (i64,) = sqlx::query_as(&if let Some(s) = since {
+        format!(
+            "SELECT COUNT(*) FROM product_price_history WHERE changed_at > '{}'",
+            s.format("%Y-%m-%d %H:%M:%S")
+        )
+    } else {
+        "SELECT COUNT(*) FROM product_price_history".to_string()
+    })
+    .fetch_one(pool)
+    .await?;
     let count_deletions: (i64,) = if let Some(s) = since {
         sqlx::query_as(&format!(
             "SELECT COUNT(*) FROM deletion_log WHERE deleted_at > '{}'",
