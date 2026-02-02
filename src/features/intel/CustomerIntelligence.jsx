@@ -217,19 +217,33 @@ const CustomerIntelligence = () => {
 const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, openSmsModal, openSummaryModal }) => {
     const navigate = useNavigate();
     const [filter, setFilter] = useState('all');
+    const [isFiltering, setIsFiltering] = useState(false);
+
+    const handleFilterChange = (e) => {
+        const newFilter = e.target.value;
+        setIsFiltering(true);
+        // Small delay to ensure the spinner is visible and provide a smooth transition
+        setTimeout(() => {
+            setFilter(newFilter);
+            setIsFiltering(false);
+        }, 300);
+    };
 
     const filteredData = useMemo(() => {
         if (!data) return [];
-        return filter === 'all' ? data : data.filter(c => c.rfm_segment === filter);
+        if (filter === 'all') return data;
+        // Use includes because backend returns "Korean (English)" format
+        return data.filter(c => c.rfm_segment.includes(filter));
     }, [data, filter]);
 
     const stats = useMemo(() => {
-        if (!data) return { champion: 0, loyal: 0, risky: 0, new: 0 };
+        if (!data) return { champion: 0, promising: 0, atRisk: 0, hibernating: 0, attention: 0 };
         return {
-            champion: data.filter(c => c.rfm_segment === 'Champions').length,
-            loyal: data.filter(c => c.rfm_segment === 'Loyal').length,
-            risky: data.filter(c => c.rfm_segment === 'At Risk').length,
-            new: data.filter(c => c.rfm_segment === 'New / Potential').length
+            champion: data.filter(c => c.rfm_segment.includes('Champions')).length,
+            promising: data.filter(c => c.rfm_segment.includes('Promising')).length,
+            atRisk: data.filter(c => c.rfm_segment.includes('At Risk')).length,
+            hibernating: data.filter(c => c.rfm_segment.includes('Hibernating')).length,
+            attention: data.filter(c => c.rfm_segment.includes('Need Attention')).length
         };
     }, [data]);
 
@@ -252,38 +266,50 @@ const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, o
     return (
         <div className="space-y-6">
             {/* Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {[
                     { label: '챔피언 (최우수)', value: stats.champion, icon: '🏆', bg: 'bg-amber-50 border-amber-200', text: 'text-amber-800' },
-                    { label: '충성 고객', value: stats.loyal, icon: '💙', bg: 'bg-blue-50 border-blue-200', text: 'text-blue-800' },
-                    { label: '이탈 위험', value: stats.risky, icon: '🚨', bg: 'bg-red-50 border-red-200', text: 'text-red-800' },
-                    { label: '신규/잠재', value: stats.new, icon: '🌱', bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-800' },
+                    { label: '잠재 우수 (Promising)', value: stats.promising, icon: '💙', bg: 'bg-blue-50 border-blue-200', text: 'text-blue-800' },
+                    { label: '이탈 위험 (At Risk)', value: stats.atRisk, icon: '🚨', bg: 'bg-rose-50 border-rose-200', text: 'text-rose-800' },
+                    { label: '휴면 고객 (Hibernating)', value: stats.hibernating, icon: 'zzz', bg: 'bg-slate-50 border-slate-200', text: 'text-slate-800' },
+                    { label: '일반 / 관심필요', value: stats.attention, icon: '🌱', bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-800' },
                 ].map((card, idx) => (
                     <div key={idx} className={`p-4 rounded-2xl border ${card.bg} flex flex-col items-center justify-center text-center shadow-sm`}>
-                        <div className="text-3xl mb-2">{card.icon}</div>
-                        <div className="text-xs font-bold opacity-60 uppercase mb-1">{card.label}</div>
-                        <div className={`text-2xl font-black ${card.text}`}>{card.value.toLocaleString()}명</div>
+                        <div className="text-3xl mb-2">
+                            {card.icon === 'zzz' ? <span className="material-symbols-rounded text-slate-400">snooze</span> : card.icon}
+                        </div>
+                        <div className="text-[10px] font-bold opacity-60 uppercase mb-1">{card.label}</div>
+                        <div className={`text-xl font-black ${card.text}`}>{card.value.toLocaleString()}명</div>
                     </div>
                 ))}
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[600px]">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col h-[600px] relative">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-slate-700">등급별 타겟 리스트</h3>
                     <select
                         value={filter}
-                        onChange={e => setFilter(e.target.value)}
+                        onChange={handleFilterChange}
                         className="h-10 px-4 text-base font-bold text-slate-700 bg-white border border-slate-300 rounded-xl shadow-sm hover:border-indigo-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all outline-none"
                     >
                         <option value="all">전체 고객 보기</option>
                         <option value="Champions">🏆 챔피언 (최우수)</option>
-                        <option value="Loyal">💙 충성 고객</option>
+                        <option value="Promising">💙 잠재 우수</option>
                         <option value="At Risk">🚨 이탈 위험</option>
-                        <option value="New / Potential">🌱 신규/잠재</option>
+                        <option value="Hibernating">💤 휴면 고객</option>
+                        <option value="Need Attention">🌱 일반/관심필요</option>
                     </select>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                    {isFiltering && (
+                        <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[1px] flex items-center justify-center animate-in fade-in duration-200">
+                            <div className="flex flex-col items-center gap-2">
+                                <span className="material-symbols-rounded text-3xl text-indigo-500 animate-spin">sync</span>
+                                <span className="text-xs font-bold text-slate-500">리스트 필터링 중...</span>
+                            </div>
+                        </div>
+                    )}
                     <table className="w-full text-sm text-left">
                         <thead className="bg-white shadow-sm sticky top-0 z-10">
                             <tr className="text-slate-500 border-b border-slate-100">
@@ -321,11 +347,11 @@ const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, o
                                         <td className="py-3 px-4 text-center font-bold text-indigo-500">{c.membership_level || '일반'}</td>
                                         <td className="py-3 px-4 text-center">
                                             <span className={`px-2 py-1 rounded text-xs font-bold 
-                                                ${c.rfm_segment === 'Champions' ? 'bg-amber-100 text-amber-600' :
-                                                    c.rfm_segment === 'Loyal' ? 'bg-blue-100 text-blue-600' :
-                                                        c.rfm_segment === 'At Risk' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                                                ${c.rfm_segment.includes('Champions') ? 'bg-amber-100 text-amber-600' :
+                                                    c.rfm_segment.includes('Promising') ? 'bg-blue-100 text-blue-600' :
+                                                        (c.rfm_segment.includes('At Risk') || c.rfm_segment.includes('Hibernating')) ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
                                                 }`}>
-                                                {c.rfm_segment}
+                                                {c.rfm_segment.split('(')[0]}
                                             </span>
                                         </td>
                                         <td className="py-3 px-4 text-center">
