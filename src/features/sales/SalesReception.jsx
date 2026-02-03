@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { formatCurrency, parseNumber, formatPhoneNumber } from '../../utils/common';
+import { formatCurrency, parseNumber, formatPhoneNumber, formatDate } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 
 /**
@@ -11,7 +11,7 @@ const SalesReception = () => {
     const { showAlert, showConfirm } = useModal();
 
     // --- State Management ---
-    const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+    const [orderDate, setOrderDate] = useState(formatDate(new Date()));
     const [customer, setCustomer] = useState(null);
     const [addresses, setAddresses] = useState([]);
     const [products, setProducts] = useState([]);
@@ -21,6 +21,7 @@ const SalesReception = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [companyInfo, setCompanyInfo] = useState(null);
+    const [isDraftRestored, setIsDraftRestored] = useState(false);
 
     // Form Input State
     const initialInputState = {
@@ -107,19 +108,74 @@ const SalesReception = () => {
         }
     }, []);
 
+    // --- Draft Auto-Save Logic ---
+    useEffect(() => {
+        // Load Draft on Mount
+        const draft = localStorage.getItem('mycelium_draft_reception');
+        if (draft) {
+            try {
+                const parsed = JSON.parse(draft);
+                if (parsed.salesRows?.length > 0 || parsed.customer) {
+                    setCustomer(parsed.customer);
+                    setOrderDate(parsed.orderDate || formatDate(new Date()));
+                    setSalesRows(parsed.salesRows || []);
+                    setDeletedSalesIds(parsed.deletedSalesIds || []);
+                    setInputState(prev => ({ ...prev, ...parsed.inputState }));
+                    setIsDirty(true);
+                    setIsDraftRestored(true);
+
+                    // 만약 고객이 있었다면 검색창 이름도 채워줌
+                    setTimeout(() => {
+                        if (parsed.customer && custSearchRef.current) {
+                            custSearchRef.current.value = parsed.customer.customer_name;
+                        }
+                    }, 100);
+                }
+            } catch (e) {
+                console.error("Draft restore error:", e);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        // Save Draft whenever state changes (throttled by effect)
+        if (isDirty || salesRows.length > 0 || customer) {
+            const draftData = {
+                customer,
+                orderDate,
+                salesRows,
+                deletedSalesIds,
+                inputState
+            };
+            localStorage.setItem('mycelium_draft_reception', JSON.stringify(draftData));
+        }
+    }, [customer, orderDate, salesRows, deletedSalesIds, inputState, isDirty]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mycelium_draft_reception');
+        setIsDraftRestored(false);
+    };
+
     // --- Data Loading ---
     useEffect(() => {
         loadProducts();
         loadCompanyInfo();
     }, [loadProducts, loadCompanyInfo]);
 
+    const initialLoadRef = useRef(true);
     useEffect(() => {
+        // 드래프트 복구된 상태라면 초기 로딩(DB에서 가져오기)을 건너뜀
+        if (isDraftRestored && initialLoadRef.current) {
+            initialLoadRef.current = false;
+            return;
+        }
+
         if (customer && orderDate) {
             loadSalesHistory(customer.customer_id, orderDate);
         } else {
             setSalesRows([]);
         }
-    }, [customer, orderDate, loadSalesHistory]);
+    }, [customer, orderDate, loadSalesHistory, isDraftRestored]);
 
     // --- Customer Logic ---
     const handleSearchCustomer = async () => {
@@ -449,6 +505,7 @@ const SalesReception = () => {
             if (name === 'shipMobile') next.shipMobile = formatPhoneNumber(value);
             return next;
         });
+        setIsDirty(true);
     };
 
     const handleAddRow = () => {
@@ -560,6 +617,7 @@ const SalesReception = () => {
             }));
             await window.__TAURI__.core.invoke('save_general_sales_batch', { items: payload, deletedIds: deletedSalesIds });
             await showAlert('성공', '정상적으로 저장되었습니다.');
+            clearDraft();
             loadSalesHistory(customer.customer_id, orderDate);
         } catch (e) {
             showAlert('오류', `저장 중 오류가 발생했습니다: ${e} `);
@@ -569,6 +627,7 @@ const SalesReception = () => {
     const handleReset = async () => {
         if (isDirty && !await showConfirm('초기화', '작성 중인 내용이 있습니다. 정말 초기화하시겠습니까?')) return;
         setCustomer(null); setSalesRows([]); setInputState(initialInputState); setIsDirty(false);
+        clearDraft();
         if (custSearchRef.current) custSearchRef.current.value = '';
     };
 

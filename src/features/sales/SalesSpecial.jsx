@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { formatCurrency } from '../../utils/common';
+import { formatCurrency, formatDate } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 
 const SalesSpecial = () => {
@@ -28,6 +28,8 @@ const SalesSpecial = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [lastSearchQuery, setLastSearchQuery] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDraftRestored, setIsDraftRestored] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
 
     // Derived
     const summary = useMemo(() => {
@@ -52,10 +54,46 @@ const SalesSpecial = () => {
         }
     };
 
+    // --- Draft Auto-Save Logic ---
+    useEffect(() => {
+        const draft = localStorage.getItem('mycelium_draft_special');
+        if (draft) {
+            try {
+                const parsed = JSON.parse(draft);
+                if (parsed.salesRows?.length > 0 || parsed.eventData?.event_name) {
+                    setEventData(parsed.eventData);
+                    setSalesRows(parsed.salesRows || []);
+                    setDeletedSalesIds(parsed.deletedSalesIds || []);
+                    setIsDirty(true);
+                    setIsDraftRestored(true);
+                }
+            } catch (e) {
+                console.error("Special Draft restore error:", e);
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isDirty || salesRows.length > 0 || eventData.event_name) {
+            const draftData = {
+                eventData,
+                salesRows,
+                deletedSalesIds
+            };
+            localStorage.setItem('mycelium_draft_special', JSON.stringify(draftData));
+        }
+    }, [eventData, salesRows, deletedSalesIds, isDirty]);
+
+    const clearDraft = () => {
+        localStorage.removeItem('mycelium_draft_special');
+        setIsDraftRestored(false);
+    };
+
     // --- Event Operations ---
     const handleEventInputChange = (e) => {
         const { name, value } = e.target;
         setEventData(prev => ({ ...prev, [name]: value }));
+        setIsDirty(true);
     };
 
     const searchEvents = async () => {
@@ -109,6 +147,7 @@ const SalesSpecial = () => {
             end_date: evt.end_date || ''
         });
         setIsEventSearchOpen(false);
+        setIsDirty(true);
 
         // Load Sales
         loadEventSales(evt.event_id, evt.start_date, evt.end_date);
@@ -136,6 +175,7 @@ const SalesSpecial = () => {
             }));
             setSalesRows(rows.reverse());
             setDeletedSalesIds([]);
+            setIsDirty(false);
         } catch (e) {
             console.error(e);
         }
@@ -150,11 +190,12 @@ const SalesSpecial = () => {
             manager_contact: '',
             location_address: '',
             memo: '',
-            start_date: new Date().toISOString().split('T')[0],
-            end_date: new Date().toISOString().split('T')[0]
+            start_date: formatDate(new Date()),
+            end_date: formatDate(new Date())
         });
         setSalesRows([]);
         setIsEventSearchOpen(false);
+        setIsDirty(true);
     };
 
     // --- Row Operations ---
@@ -164,12 +205,11 @@ const SalesSpecial = () => {
             return;
         }
 
-        const date = new Date().toISOString().split('T')[0];
+        const date = formatDate(new Date());
         // Clamp date
         let d = date;
         if (eventData.start_date && d < eventData.start_date.substring(0, 10)) d = eventData.start_date.substring(0, 10);
         if (eventData.end_date && d > eventData.end_date.substring(0, 10)) d = eventData.end_date.substring(0, 10);
-
         setSalesRows(prev => [{
             tempId: Date.now() + Math.random(),
             orderDate: d,
@@ -181,6 +221,7 @@ const SalesSpecial = () => {
             amount: 0,
             memo: ''
         }, ...prev]);
+        setIsDirty(true);
     };
 
     const handleRowChange = (id, field, value) => {
@@ -207,6 +248,7 @@ const SalesSpecial = () => {
 
             return newRow;
         }));
+        setIsDirty(true);
     };
 
     const deleteRow = (row) => {
@@ -214,6 +256,7 @@ const SalesSpecial = () => {
             setDeletedSalesIds(prev => [...prev, row.id]);
         }
         setSalesRows(prev => prev.filter(r => r.tempId !== row.tempId));
+        setIsDirty(true);
     };
 
     const handleQrScan = () => {
@@ -225,7 +268,6 @@ const SalesSpecial = () => {
         showAlert("QR 스캔", "카메라 스캔 시뮬레이션: '상품 A'가 인식되었습니다.");
         const date = new Date().toISOString().split('T')[0];
         const p = products.find(x => x.product_name === '상품 A') || (products[0] || { product_name: '상품 A', unit_price: 10000, specification: '1kg' });
-
         setSalesRows(prev => [{
             tempId: Date.now() + Math.random(),
             orderDate: date,
@@ -237,6 +279,7 @@ const SalesSpecial = () => {
             amount: p.unit_price,
             memo: ''
         }, ...prev]);
+        setIsDirty(true);
     };
 
     const handleSaveAll = async () => {
@@ -272,6 +315,7 @@ const SalesSpecial = () => {
                 });
                 setEventData(prev => ({ ...prev, event_id: newEventId }));
                 await showAlert("성공", "저장되었습니다.");
+                clearDraft();
                 loadEventSales(newEventId, eventInput.start_date, eventInput.end_date);
             } else {
                 await showAlert("성공", "저장 테스트 완료");
@@ -495,7 +539,7 @@ const SalesSpecial = () => {
                             </div>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={() => { setEventData({ event_id: '', event_name: '', organizer: '', manager_name: '', manager_contact: '', location_address: '', memo: '', start_date: '', end_date: '' }); setSalesRows([]); setDeletedSalesIds([]); }}
+                            <button onClick={() => { setEventData({ event_id: '', event_name: '', organizer: '', manager_name: '', manager_contact: '', location_address: '', memo: '', start_date: '', end_date: '' }); setSalesRows([]); setDeletedSalesIds([]); setIsDirty(false); clearDraft(); }}
                                 className="h-12 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold transition-all text-xs flex items-center gap-2 border border-slate-700/50">
                                 <span className="material-symbols-rounded">refresh</span> 초기화
                             </button>

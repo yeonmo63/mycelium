@@ -93,73 +93,75 @@ const SettingsProduct = () => {
     }, [isAuthorized, loadProducts]);
 
     // --- Handlers ---
-    const openModal = async (product = null) => {
-        if (product) {
-            setEditingProduct(product);
-
-            // Initial form data from product struct (Legacy support)
+    const openModal = async (product = null, isClone = false) => {
+        setIsLoading(true); // Show loading while fetching BOM
+        try {
             let initialBoms = [];
-
-            // Fetch real BOM list from backend
-            try {
-                const boms = await invoke('get_product_bom', { productId: product.product_id });
-                if (boms && boms.length > 0) {
-                    initialBoms = boms.map(b => ({
-                        materialId: b.material_id,
-                        ratio: b.ratio,
-                        type: b.item_type === 'aux_material' ? 'aux' : 'raw',
-                        key: Math.random().toString(36).substr(2, 9)
-                    }));
-                } else {
-                    // Fallback to legacy fields if BOM is empty
-                    if (product.material_id) {
-                        initialBoms.push({
-                            materialId: product.material_id,
-                            ratio: product.material_ratio || 1.0,
-                            type: 'raw',
-                            key: Math.random().toString(36).substr(2, 9)
-                        });
-                    }
-                    if (product.aux_material_id) {
-                        initialBoms.push({
-                            materialId: product.aux_material_id,
-                            ratio: product.aux_material_ratio || 1.0,
-                            type: 'aux',
-                            key: Math.random().toString(36).substr(2, 9)
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error("Failed to fetch BOM:", e);
-                // Fallback on error
-                if (product.material_id) initialBoms.push({ materialId: product.material_id, ratio: product.material_ratio || 1.0, type: 'raw', key: 'legacy_raw' });
-                if (product.aux_material_id) initialBoms.push({ materialId: product.aux_material_id, ratio: product.aux_material_ratio || 1.0, type: 'aux', key: 'legacy_aux' });
-            }
-
-            setFormData({
-                name: product.product_name,
-                spec: product.specification || '',
-                price: product.unit_price,
-                cost: product.cost_price || 0,
-                safety: product.safety_stock || 10,
-                type: product.item_type || 'product',
-                bomList: initialBoms,
-                sync: false
-            });
-        } else {
-            setEditingProduct(null);
-            setFormData({
+            let initialFormData = {
                 name: '',
                 spec: '',
                 price: 0,
                 cost: 0,
                 safety: 10,
-                type: tabMode, // Set default type based on active tab
+                type: tabMode,
                 bomList: [],
                 sync: false
-            });
+            };
+
+            if (product) {
+                if (!isClone) setEditingProduct(product);
+                else setEditingProduct(null);
+
+                // Fetch real BOM list from backend
+                try {
+                    const boms = await invoke('get_product_bom', { productId: product.product_id });
+                    if (boms && boms.length > 0) {
+                        initialBoms = boms.map(b => ({
+                            materialId: b.material_id,
+                            ratio: b.ratio,
+                            type: b.item_type === 'aux_material' ? 'aux' : 'raw',
+                            key: Math.random().toString(36).substr(2, 9)
+                        }));
+                    } else {
+                        // Fallback to legacy fields if BOM is empty
+                        if (product.material_id) {
+                            initialBoms.push({
+                                materialId: product.material_id,
+                                ratio: product.material_ratio || 1.0,
+                                type: 'raw',
+                                key: Math.random().toString(36).substr(2, 9)
+                            });
+                        }
+                        if (product.aux_material_id) {
+                            initialBoms.push({
+                                materialId: product.aux_material_id,
+                                ratio: product.aux_material_ratio || 1.0,
+                                type: 'aux',
+                                key: Math.random().toString(36).substr(2, 9)
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch BOM:", e);
+                }
+
+                initialFormData = {
+                    name: isClone ? `${product.product_name} (복사)` : product.product_name,
+                    spec: product.specification || '',
+                    price: product.unit_price,
+                    cost: product.cost_price || 0,
+                    safety: product.safety_stock || 10,
+                    type: product.item_type || 'product',
+                    bomList: initialBoms,
+                    sync: false
+                };
+            }
+
+            setFormData(initialFormData);
+            setIsModalOpen(true);
+        } finally {
+            setIsLoading(false);
         }
-        setIsModalOpen(true);
     };
 
     const closeModal = () => {
@@ -380,6 +382,17 @@ const SettingsProduct = () => {
     const rawMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'material' || p.item_type === 'raw_material'), [allProducts]);
     const auxMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'aux_material'), [allProducts]);
 
+    const suggestedRecipeSource = useMemo(() => {
+        if (editingProduct || !formData.name || formData.name.length < 2 || formData.bomList.length > 0) return null;
+        // Find products with similar names that have BOMs
+        const match = allProducts.find(p =>
+            p.product_id !== editingProduct?.product_id &&
+            (p.item_type === 'product' || !p.item_type) &&
+            formData.name.split(' ').some(word => word.length > 1 && p.product_name.includes(word))
+        );
+        return match;
+    }, [formData.name, formData.bomList.length, allProducts, editingProduct]);
+
     if (!isAuthorized) {
         return (
             <div className="flex h-full items-center justify-center bg-[#f8fafc]">
@@ -559,24 +572,31 @@ const SettingsProduct = () => {
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button
                                                                 onClick={() => openModal(p)}
-                                                                className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center"
+                                                                className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center"
                                                                 title="수정"
                                                             >
-                                                                <span className="material-symbols-rounded text-[20px]">edit</span>
+                                                                <span className="material-symbols-rounded text-[18px]">edit</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => openModal(p, true)}
+                                                                className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-all shadow-sm flex items-center justify-center border border-transparent hover:border-emerald-100"
+                                                                title="레시피 복제 (Clone)"
+                                                            >
+                                                                <span className="material-symbols-rounded text-[18px]">content_copy</span>
                                                             </button>
                                                             <button
                                                                 onClick={() => loadPriceHistory(p.product_id)}
-                                                                className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 text-indigo-600 font-bold transition-all shadow-sm flex items-center justify-center border border-transparent hover:border-slate-300"
+                                                                className="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center"
                                                                 title="관리 이력"
                                                             >
-                                                                <span className="material-symbols-rounded text-[20px]">history</span>
+                                                                <span className="material-symbols-rounded text-[18px]">history</span>
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDelete(p)}
-                                                                className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm flex items-center justify-center"
+                                                                className="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm flex items-center justify-center"
                                                                 title="삭제"
                                                             >
-                                                                <span className="material-symbols-rounded text-[20px]">delete</span>
+                                                                <span className="material-symbols-rounded text-[18px]">delete</span>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -750,14 +770,25 @@ const SettingsProduct = () => {
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                                 레시피 구성 (Bill of Materials)
                                             </label>
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsImportOpen(!isImportOpen)}
-                                                disabled={isLoading}
-                                                className="text-[10px] font-black flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm"
-                                            >
-                                                <TrendingUp size={14} /> 다른 상품 레시피 불러오기
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                {suggestedRecipeSource && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleLoadSourceBom(suggestedRecipeSource.product_id).then(() => confirmImport())}
+                                                        className="text-[10px] font-black flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg transition-all border border-emerald-100 shadow-sm animate-bounce-short"
+                                                    >
+                                                        <CheckCircle2 size={14} /> 유사 상품 [{suggestedRecipeSource.product_name}] 레시피 자동 적용
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsImportOpen(!isImportOpen)}
+                                                    disabled={isLoading}
+                                                    className="text-[10px] font-black flex items-center gap-1.5 text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm"
+                                                >
+                                                    <TrendingUp size={14} /> 다른 상품 레시피 불러오기
+                                                </button>
+                                            </div>
                                         </div>
 
                                         {/* Recipe Import UI */}
@@ -952,80 +983,83 @@ const SettingsProduct = () => {
                         </form>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Product History Modal (Unified) */}
-            {showHistoryModal && (
-                <div className="absolute inset-0 z-[110] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowHistoryModal(false)}></div>
-                    <div className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-slate-900/10">
-                        <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                                <History size={20} className="text-indigo-600" /> 상품 관리 이력
-                            </h3>
-                            <button onClick={() => setShowHistoryModal(false)} className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-100 hover:text-slate-600 transition-all shadow-sm">
-                                <X size={16} />
-                            </button>
-                        </div>
-                        <div className="p-0 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                            {priceHistory.length === 0 ? (
-                                <div className="p-10 text-center">
-                                    <p className="text-slate-400 font-bold text-sm">기록된 관리 이력이 없습니다.</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-slate-100">
-                                    {priceHistory.map((h, idx) => {
-                                        // h: { history_type, date, title, description, old_value, new_value, change_amount }
-                                        const isPrice = h.history_type === '가격변경';
+            {
+                showHistoryModal && (
+                    <div className="absolute inset-0 z-[110] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setShowHistoryModal(false)}></div>
+                        <div className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-slate-900/10">
+                            <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                    <History size={20} className="text-indigo-600" /> 상품 관리 이력
+                                </h3>
+                                <button onClick={() => setShowHistoryModal(false)} className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-100 hover:text-slate-600 transition-all shadow-sm">
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="p-0 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                {priceHistory.length === 0 ? (
+                                    <div className="p-10 text-center">
+                                        <p className="text-slate-400 font-bold text-sm">기록된 관리 이력이 없습니다.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {priceHistory.map((h, idx) => {
+                                            // h: { history_type, date, title, description, old_value, new_value, change_amount }
+                                            const isPrice = h.history_type === '가격변경';
 
-                                        return (
-                                            <div key={idx} className="p-6 hover:bg-slate-50 transition-colors">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase">{formatDateTime(h.date)}</span>
-                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPrice ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                                        h.history_type === '상품등록' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                            'bg-slate-100 text-slate-500 border-slate-200'
-                                                        }`}>
-                                                        {h.title}
-                                                    </span>
+                                            return (
+                                                <div key={idx} className="p-6 hover:bg-slate-50 transition-colors">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase">{formatDateTime(h.date)}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPrice ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                                            h.history_type === '상품등록' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                                'bg-slate-100 text-slate-500 border-slate-200'
+                                                            }`}>
+                                                            {h.title}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Content based on type */}
+                                                    {isPrice ? (
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm font-bold text-slate-400 decoration-slate-300 line-through tabular-nums decoration-2">
+                                                                {parseInt(h.old_value || '0').toLocaleString()}
+                                                            </span>
+                                                            <ArrowRight size={14} className="text-slate-300" />
+                                                            <span className="text-lg font-black text-slate-700 tabular-nums">
+                                                                {parseInt(h.new_value || '0').toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm font-bold text-slate-700">
+                                                            {h.description}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Extra context for non-price items if needed */}
                                                 </div>
-
-                                                {/* Content based on type */}
-                                                {isPrice ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-sm font-bold text-slate-400 decoration-slate-300 line-through tabular-nums decoration-2">
-                                                            {parseInt(h.old_value || '0').toLocaleString()}
-                                                        </span>
-                                                        <ArrowRight size={14} className="text-slate-300" />
-                                                        <span className="text-lg font-black text-slate-700 tabular-nums">
-                                                            {parseInt(h.new_value || '0').toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-sm font-bold text-slate-700">
-                                                        {h.description}
-                                                    </div>
-                                                )}
-
-                                                {/* Extra context for non-price items if needed */}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex justify-center">
-                            <button
-                                onClick={() => setShowHistoryModal(false)}
-                                className="w-full py-3 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors shadow-sm"
-                            >
-                                확인 (닫기)
-                            </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex justify-center">
+                                <button
+                                    onClick={() => setShowHistoryModal(false)}
+                                    className="w-full py-3 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors shadow-sm"
+                                >
+                                    확인 (닫기)
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

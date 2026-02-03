@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import { Chart, registerables } from 'chart.js';
@@ -27,12 +27,15 @@ const Dashboard = () => {
     const [isWeatherLoading, setIsWeatherLoading] = useState(true);
     const [isChartLoading, setIsChartLoading] = useState(true);
 
-    // Modal States
-    const [showAnnivModal, setShowAnnivModal] = useState(false);
-    const [showRepurchaseModal, setShowRepurchaseModal] = useState(false);
-    const [showInventoryModal, setShowInventoryModal] = useState(false);
+    // Unified Expanded Section State (Replaces individual Modals)
+    const [expandedAlert, setExpandedAlert] = useState(null); // null | 'anniversary' | 'repurchase' | 'inventory'
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [aiBriefingContent, setAiBriefingContent] = useState(null);
+
+    // Command Palette / Search State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const searchRef = useRef(null);
 
     const chartRef = useRef(null);
     const chartInstance = useRef(null);
@@ -207,7 +210,7 @@ const Dashboard = () => {
                         beginAtZero: true,
                         grid: { color: 'rgba(0,0,0,0.03)' },
                         ticks: {
-                            callback: (val) => val >= 10000 ? (val / 10000) + '만' : val,
+                            callback: (val) => formatCurrency(val / 10000) + '만원',
                             font: { size: 11, weight: '500' }
                         }
                     },
@@ -258,7 +261,8 @@ const Dashboard = () => {
 고객: ${customer.customer_name}, 마지막 상품: ${customer.last_product}, 예상 주기 도달.
 재구매 유도 문구를 친절하게 작성해주세요.`;
             const draft = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
-            if (await showConfirm("AI 추천 문구", draft + "\n\n이 문구를 복사하고 전송 화면으로 이동할까요?")) {
+            const reasoning = "이 추천은 고객의 과거 구매 패턴과 최근 주문 이력을 분석하여 작성되었습니다.";
+            if (await showConfirm("AI 추천 문구 (데이터 기반)", draft + `\n\n---\n💡 분석 근거: ${reasoning}\n\n이 문구를 복사하고 전송 화면으로 이동할까요?`)) {
                 navigator.clipboard.writeText(draft);
                 window.__SMS_DRAFT_CONTENT__ = draft;
                 window.__SMS_DRAFT_RECIPIENT__ = customer.mobile_number;
@@ -292,6 +296,40 @@ const Dashboard = () => {
         return { pct: (Math.abs(diff) / yestVal) * 100, pos: diff >= 0 };
     })();
 
+    // --- Command Palette Logic ---
+    const commands = useMemo(() => [
+        { id: 'reception', label: '주문 접수 바로가기', sub: '일반/특판 주문 입력', path: '/sales/reception', icon: 'add_shopping_cart' },
+        { id: 'stock', label: '재고 및 수확 관리', sub: '실시간 재고 현황 및 감사 로그', path: '/sales/stock', icon: 'inventory_2' },
+        { id: 'customer', label: '고객명부 조회', sub: '회원/비회원 통합 검색', path: '/customer/edit', icon: 'group' },
+        { id: 'consult', label: '고객 상담 내역', sub: '미처리 상담 및 대응 기록', path: '/customer/consultation', icon: 'forum' },
+        { id: 'ledger', label: '통합 매출 장부', sub: '월간/분기 매출 통계 확인', path: '/sales/ledger', icon: 'menu_book' },
+        { id: 'purchase', label: '매입/지축 관리', sub: '자재 매입 및 경비 증빙', path: '/finance/purchase', icon: 'receipt_long' },
+        { id: 'exp_status', label: '체험 예약 현황', sub: '오늘과 이번 주 체험 기록', path: '/exp/reservation-status', icon: 'event_available' },
+        { id: 'settings', label: '시스템 설정', sub: '사용자 관리 및 DB 백업', path: '/settings/company-info', icon: 'settings' }
+    ], []);
+
+    const filteredCommands = useMemo(() => {
+        if (!searchQuery) return commands.slice(0, 5); // Show top 5 by default
+        const q = searchQuery.toLowerCase();
+        return commands.filter(c => c.label.toLowerCase().includes(q) || c.sub.toLowerCase().includes(q));
+    }, [searchQuery, commands]);
+
+    const handleCommandClick = (path) => {
+        setIsSearchFocused(false);
+        setSearchQuery('');
+        navigate(path);
+    };
+
+    const toggleAlert = (type) => {
+        setExpandedAlert(expandedAlert === type ? null : type);
+        // Scroll to the area smoothly if opening
+        if (expandedAlert !== type) {
+            setTimeout(() => {
+                document.getElementById('alert-expansion-area')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        }
+    };
+
     return (
         <div className="dashboard-container p-6 lg:p-8 min-[2000px]:p-12 bg-[#f8fafc] h-full flex flex-col overflow-hidden text-slate-900 font-sans relative">
             {/* Background Decorative Elements */}
@@ -299,20 +337,83 @@ const Dashboard = () => {
             <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none"></div>
 
             {/* 1. Global Action Bar (Search & Profile) */}
-            <div className="flex items-center justify-between mb-4 gap-8 animate-in fade-in slide-in-from-top-4 duration-500 shrink-0">
-                <div className="flex-1 max-w-2xl min-[2000px]:max-w-4xl relative group">
-                    <div className="relative flex items-center bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] group-focus-within:border-indigo-400 group-focus-within:ring-4 group-focus-within:ring-indigo-500/5 rounded-[24px] px-6 py-4 min-[2000px]:mobile-py-6 transition-all duration-500">
-                        <span className="material-symbols-rounded text-slate-400 group-focus-within:text-indigo-500 transition-colors text-2xl">search</span>
+            <div className="flex items-center justify-between mb-4 gap-8 animate-in fade-in slide-in-from-top-4 duration-500 shrink-0 relative">
+                <div className="flex-1 max-w-2xl min-[2000px]:max-w-4xl relative group" ref={searchRef}>
+                    <div className={`relative flex items-center bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] ${isSearchFocused ? 'border-indigo-400 ring-4 ring-indigo-500/5' : ''} rounded-[24px] px-6 py-4 transition-all duration-300`}>
+                        <span className={`material-symbols-rounded ${isSearchFocused ? 'text-indigo-500' : 'text-slate-400'} transition-colors text-2xl`}>search</span>
                         <input
                             type="text"
-                            placeholder="AI 비서에게 무엇이든 물어보세요 (예: '이번 달 매출 분석해줘')"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => setIsSearchFocused(true)}
+                            placeholder="명령어를 입력하거나 메뉴를 검색하세요 (예: '재고', '매출')"
                             className="flex-1 bg-transparent border-none outline-none px-4 text-[15px] font-medium tracking-tight text-slate-700 placeholder:text-slate-300"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && filteredCommands.length > 0) {
+                                    handleCommandClick(filteredCommands[0].path);
+                                }
+                            }}
                         />
-                        <button className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-indigo-600 transition-all shadow-lg active:scale-95 group/mic">
-                            <span className="material-symbols-rounded text-[20px]">mic</span>
-                            <span className="text-xs font-bold uppercase tracking-wider">Talk</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400">
+                                    <span className="material-symbols-rounded text-lg">close</span>
+                                </button>
+                            )}
+                            <span className="w-px h-4 bg-slate-200 mx-2"></span>
+                            <div className="bg-slate-100 px-2 py-1 rounded-md text-[10px] font-black text-slate-400 border border-slate-200">ALT + K</div>
+                        </div>
                     </div>
+
+                    {/* Command Palette Dropdown */}
+                    {isSearchFocused && (
+                        <>
+                            <div className="absolute inset-0 bg-transparent z-[99] fixed w-screen h-screen top-0 left-0" onClick={() => setIsSearchFocused(false)}></div>
+                            <div className="absolute top-[calc(100%+12px)] left-0 w-full bg-white rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+                                <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rapid Navigation & Commands</span>
+                                    <span className="text-[10px] text-slate-400 font-bold">{filteredCommands.length} matches</span>
+                                </div>
+                                <div className="p-2 max-h-[400px] overflow-auto stylish-scrollbar">
+                                    {filteredCommands.length > 0 ? filteredCommands.map((cmd) => (
+                                        <button
+                                            key={cmd.id}
+                                            onClick={() => handleCommandClick(cmd.path)}
+                                            className="w-full flex items-center gap-4 p-4 hover:bg-indigo-50/50 rounded-2xl transition-all group text-left"
+                                        >
+                                            <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-white text-slate-400 group-hover:text-indigo-600 flex items-center justify-center transition-all shadow-sm">
+                                                <span className="material-symbols-rounded text-xl">{cmd.icon}</span>
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="text-sm font-black text-slate-700 group-hover:text-indigo-900 leading-tight">{cmd.label}</div>
+                                                <div className="text-[11px] text-slate-400 group-hover:text-indigo-400 font-medium mt-1 uppercase tracking-tight">{cmd.sub}</div>
+                                            </div>
+                                            <span className="material-symbols-rounded text-slate-200 group-hover:text-indigo-300 text-lg opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all">arrow_forward</span>
+                                        </button>
+                                    )) : (
+                                        <div className="py-12 text-center text-slate-400 font-bold italic">
+                                            No commands found for "{searchQuery}"
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-1.5 grayscale opacity-50">
+                                            <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-[9px] font-bold">↵</span>
+                                            <span className="text-[10px] font-bold">Enter to Select</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 grayscale opacity-50">
+                                            <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-[9px] font-bold">ESC</span>
+                                            <span className="text-[10px] font-bold">Close</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
+                                        Powered by Mycelium AI
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-4 bg-white p-2.5 pr-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
@@ -363,6 +464,12 @@ const Dashboard = () => {
                             <p className="text-slate-300 text-[0.95rem] font-medium leading-relaxed max-w-[90%] drop-shadow-sm">
                                 {isWeatherLoading ? "인공지능이 오늘의 날씨와 데이터를 통합 분석 중입니다..." : (weatherAdvice?.marketing_advice || "오늘의 최적화된 마케팅 전략을 확인하세요.")}
                             </p>
+                            {!isWeatherLoading && (
+                                <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                                    <span className="material-symbols-rounded text-xs">info</span>
+                                    이 분석은 최근 3년간의 계절별 판매 기록과 실시간 날씨 데이터를 바탕으로 작성되었습니다.
+                                </div>
+                            )}
                         </div>
                         <div className="hidden 2xl:block pr-8 shrink-0">
                             <div className="text-right">
@@ -479,7 +586,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div onClick={() => setShowInventoryModal(true)} className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-rose-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-rose-200 hover:shadow-[0_20px_40px_rgba(244,63,94,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between cursor-pointer">
+                <div onClick={() => toggleAlert('inventory')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-rose-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-rose-200 hover:shadow-[0_20px_40px_rgba(244,63,94,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'inventory' ? 'ring-2 ring-rose-500' : ''}`}>
                     <div className="flex justify-between items-start">
                         <span className="material-symbols-rounded text-rose-600 bg-rose-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">inventory_2</span>
                         <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Inventory</div>
@@ -500,7 +607,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Third Row (Partial) */}
-                <div onClick={() => setShowAnnivModal(true)} className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-pink-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-pink-200 hover:shadow-[0_20px_40px_rgba(236,72,153,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between cursor-pointer">
+                <div onClick={() => toggleAlert('anniversary')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-pink-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-pink-200 hover:shadow-[0_20px_40px_rgba(236,72,153,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'anniversary' ? 'ring-2 ring-pink-500' : ''}`}>
                     <div className="flex justify-between items-start">
                         <span className="material-symbols-rounded text-pink-600 bg-pink-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">cake</span>
                         <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Event</div>
@@ -526,7 +633,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div onClick={() => setShowRepurchaseModal(true)} className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-indigo-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between cursor-pointer">
+                <div onClick={() => toggleAlert('repurchase')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-indigo-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'repurchase' ? 'ring-2 ring-indigo-500' : ''}`}>
                     <div className="flex justify-between items-start">
                         <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-2.5 rounded-[16px] text-[20px] shadow-sm">notifications_active</span>
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Retarget</div>
@@ -539,6 +646,197 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* 3. Alert Expansion Area (Accordion Logic) */}
+            {expandedAlert && (
+                <div id="alert-expansion-area" className="mb-6 animate-in slide-in-from-top-4 duration-500">
+                    <div className="bg-white rounded-[32px] border border-slate-200 shadow-2xl overflow-hidden ring-1 ring-black/5">
+                        {/* Accordion Header */}
+                        <div className={`p-6 flex items-center justify-between text-white ${expandedAlert === 'inventory' ? 'bg-gradient-to-r from-rose-500 to-rose-600' :
+                            expandedAlert === 'anniversary' ? 'bg-gradient-to-r from-pink-500 to-pink-600' :
+                                'bg-gradient-to-r from-indigo-500 to-indigo-600'
+                            }`}>
+                            <div className="flex items-center gap-3">
+                                <span className="material-symbols-rounded text-2xl">
+                                    {expandedAlert === 'inventory' ? 'inventory_2' : expandedAlert === 'anniversary' ? 'cake' : 'notifications_active'}
+                                </span>
+                                <h3 className="text-xl font-black tracking-tight">
+                                    {expandedAlert === 'inventory' ? '지능형 재고 소모 분석 & 알림' : expandedAlert === 'anniversary' ? '다가오는 기념일 고객 케어' : 'AI 재구매 골든 타임 타겟'}
+                                </h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full border border-white/20">Expanded Insight</span>
+                                <button onClick={() => setExpandedAlert(null)} className="w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-colors">
+                                    <span className="material-symbols-rounded text-lg">close</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Accordion Content */}
+                        <div className="p-8 max-h-[600px] overflow-auto stylish-scrollbar">
+                            {expandedAlert === 'inventory' ? (
+                                <div className="space-y-8">
+                                    <div>
+                                        <h4 className="text-lg font-black text-rose-600 mb-3 flex items-center gap-2">
+                                            <span className="material-symbols-rounded">trending_down</span> 재고 소진 임박 (Forecast)
+                                        </h4>
+                                        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-slate-50 text-slate-500 font-bold">
+                                                    <tr>
+                                                        <th className="p-4 text-left">품목명</th>
+                                                        <th className="p-4 text-center">현재고</th>
+                                                        <th className="p-4 text-center">평균소모</th>
+                                                        <th className="p-4 text-center">예상소진</th>
+                                                        <th className="p-4 text-center">태스크</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {forecastAlerts.map((item, i) => (
+                                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-4">
+                                                                <div className="font-bold text-slate-800">{item.product_name}</div>
+                                                                <div className="text-[10px] text-slate-400 font-black uppercase tracking-tight">{item.item_type === 'material' ? '📦 자재' : '🍄 완제품'}</div>
+                                                            </td>
+                                                            <td className="p-4 text-center font-bold text-slate-700">{item.stock_quantity.toLocaleString()}개</td>
+                                                            <td className="p-4 text-center text-slate-500">{item.daily_avg_consumption.toFixed(1)}개/일</td>
+                                                            <td className={`p-4 text-center font-black ${item.days_remaining <= 3 ? 'text-rose-500' : 'text-amber-500'}`}>
+                                                                {item.days_remaining >= 900 ? '출고 없음' : `${item.days_remaining}일 남음`}
+                                                            </td>
+                                                            <td className="p-4 text-center">
+                                                                <button onClick={() => navigate(item.item_type === 'material' ? '/finance/purchase' : '/sales/stock')} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-800 transition-all">입고등록</button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {forecastAlerts.length === 0 && <tr><td colSpan="5" className="p-12 text-center text-slate-400 font-bold italic underline border-t border-slate-100">소진 임박 품목이 없습니다.</td></tr>}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <h4 className="text-lg font-black text-amber-600 mb-3 flex items-center gap-2">
+                                            <span className="material-symbols-rounded">timer</span> 골든 타임 경과 (Freshness)
+                                        </h4>
+                                        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-slate-50 text-slate-500 font-bold">
+                                                    <tr>
+                                                        <th className="p-4 text-left">품목명</th>
+                                                        <th className="p-4 text-center">현재고</th>
+                                                        <th className="p-4 text-center">마지막 입고일</th>
+                                                        <th className="p-4 text-center">경과일</th>
+                                                        <th className="p-4 text-center">태스크</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {freshnessAlerts.map((item, i) => (
+                                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-4 font-bold text-slate-800">{item.product_name}</td>
+                                                            <td className="p-4 text-center font-bold text-slate-700">{item.stock_quantity.toLocaleString()}개</td>
+                                                            <td className="p-4 text-center text-slate-500">{item.last_in_date ? item.last_in_date.substring(0, 10) : '-'}</td>
+                                                            <td className="p-4 text-center font-black text-rose-500">+{item.diffDays}일</td>
+                                                            <td className="p-4 text-center">
+                                                                <button onClick={() => navigate('/sales/stock')} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-800 transition-all">재고관리</button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : expandedAlert === 'anniversary' ? (
+                                <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 text-slate-500 font-bold">
+                                            <tr>
+                                                <th className="p-4 text-left">고객명</th>
+                                                <th className="p-4 text-left">구분</th>
+                                                <th className="p-4 text-center">날짜</th>
+                                                <th className="p-4 text-center">관리</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {anniversaries.map((c, i) => (
+                                                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="p-4 font-black text-slate-800">{c.customer_name}</td>
+                                                    <td className="p-4 text-slate-500 font-bold">{c.anniversary_type}</td>
+                                                    <td className="p-4 text-center text-slate-500 font-mono">{c.anniversary_date}</td>
+                                                    <td className="p-4 text-center">
+                                                        <button onClick={() => navigate('/customer/sms')} className="bg-pink-100 text-pink-600 px-4 py-2 rounded-xl font-bold text-xs hover:bg-pink-200 transition-all border border-pink-200 shadow-sm">문자발송</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {anniversaries.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-400 font-bold italic">예정된 기념일이 없습니다.</td></tr>}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 mb-4">
+                                        <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white shrink-0 shadow-lg">
+                                            <span className="material-symbols-rounded">psychology</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-indigo-800 text-[13px] font-bold leading-relaxed line-clamp-2">고객별 과거 구매 주기를 분석하여 재구매 시점이 임박한 분들입니다. 맞춤형 판촉 문자를 발송해 보세요.</p>
+                                            <div className="text-[10px] text-indigo-400 font-bold mt-1 flex items-center gap-1">
+                                                <span className="material-symbols-rounded text-[12px]">verified</span>
+                                                최근 2년간의 주문 데이터 및 SKU별 소모 주기를 기준으로 분석됨
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold">
+                                                <tr>
+                                                    <th className="p-4 text-left">고객명</th>
+                                                    <th className="p-4 text-left">연락처</th>
+                                                    <th className="p-4 text-center">마지막 주문</th>
+                                                    <th className="p-4 text-center">구매주기</th>
+                                                    <th className="p-4 text-center">예측상태</th>
+                                                    <th className="p-4 text-center">관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {repurchaseCandidates.map((c, i) => {
+                                                    const remaining = parseInt(c.predicted_days_remaining);
+                                                    const status = remaining === 0 ? "오늘" : (remaining > 0 ? `${remaining}일 남음` : `${Math.abs(remaining)}일 경과`);
+                                                    const color = remaining === 0 ? 'text-rose-500' : (remaining > 0 ? 'text-emerald-500' : 'text-amber-500');
+                                                    return (
+                                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-4 font-black text-slate-800">{c.customer_name}</td>
+                                                            <td className="p-4 text-slate-500 font-mono text-xs">{c.mobile_number}</td>
+                                                            <td className="p-4 text-center text-slate-500">{c.last_order_date}</td>
+                                                            <td className="p-4 text-center font-black text-slate-700">{c.avg_interval_days}일</td>
+                                                            <td className={`p-4 text-center font-black ${color}`}>{status}</td>
+                                                            <td className="p-4 text-center">
+                                                                <button onClick={() => generateAIDraft(c)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-100 italic flex items-center gap-1.5 mx-auto">
+                                                                    <span className="material-symbols-rounded text-sm">auto_fix_high</span> AI 추천문구
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {repurchaseCandidates.length === 0 && <tr><td colSpan="6" className="p-12 text-center text-slate-400 font-bold italic">재구매 대상 고객이 없습니다.</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Accordion Footer */}
+                        <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                            <div className="flex items-center gap-4">
+                                <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Analysis</span>
+                                <span className="w-px h-3 bg-slate-200"></span>
+                                <span className="flex items-center gap-1.5"><span className="material-symbols-rounded text-xs">history</span> Updated {dayjs().format('HH:mm')}</span>
+                            </div>
+                            <button onClick={() => setExpandedAlert(null)} className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1">CLOSE INSIGHT <span className="material-symbols-rounded text-xs">expand_less</span></button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Bottom Section: Chart & Table - Improved stability */}
             <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-5 flex-1 min-h-0">
@@ -614,173 +912,6 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Modals */}
-            {showAnnivModal && (
-                <div className="modal-overlay" onClick={() => setShowAnnivModal(false)}>
-                    <div className="modal-container w-full max-w-2xl overflow-hidden rounded-[20px]" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header bg-gradient-to-br from-pink-500 to-pink-600 text-white p-6">
-                            <h3 className="flex items-center gap-2 text-xl font-bold"><span className="material-symbols-rounded">cake</span> 다가오는 기념일 고객 (3일 이내)</h3>
-                            <button onClick={() => setShowAnnivModal(false)} className="material-symbols-rounded bg-white/20 p-1 rounded-full hover:bg-white/30 transition-colors">close</button>
-                        </div>
-                        <div className="p-6">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                                    <tr>
-                                        <th className="p-3 text-left">고객명</th>
-                                        <th className="p-3 text-left">구분</th>
-                                        <th className="p-3 text-center">날짜</th>
-                                        <th className="p-3 text-center">관리</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {anniversaries.map((c, i) => (
-                                        <tr key={i}>
-                                            <td className="p-3 font-bold text-slate-700">{c.customer_name}</td>
-                                            <td className="p-3 text-slate-500">{c.anniversary_type}</td>
-                                            <td className="p-3 text-center text-slate-500">{c.anniversary_date}</td>
-                                            <td className="p-3 text-center">
-                                                <button onClick={() => navigate('/customer/sms')} className="btn-secondary py-1 px-3 text-xs">문자발송</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {anniversaries.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-400 font-medium">예정된 기념일이 없습니다.</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showRepurchaseModal && (
-                <div className="modal-overlay" onClick={() => setShowRepurchaseModal(false)}>
-                    <div className="modal-container w-full max-w-5xl overflow-hidden rounded-[20px]" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header bg-gradient-to-br from-indigo-500 to-indigo-600 text-white p-6">
-                            <h3 className="flex items-center gap-2 text-xl font-bold"><span className="material-symbols-rounded">notifications_active</span> AI 재구매 "골든 타임" 타겟 (오늘 기준 ±7일)</h3>
-                            <button onClick={() => setShowRepurchaseModal(false)} className="material-symbols-rounded bg-white/20 p-1 rounded-full hover:bg-white/30 transition-colors">close</button>
-                        </div>
-                        <div className="p-6 overflow-auto max-h-[600px]">
-                            <p className="text-slate-500 text-sm mb-4 leading-relaxed">고객별 과거 구매 주기를 분석하여 재구매 시점이 임박한 분들입니다. 맞춤형 판촉 문자를 발송해 보세요.</p>
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                                    <tr>
-                                        <th className="p-3 text-left">고객명</th>
-                                        <th className="p-3 text-left">연락처</th>
-                                        <th className="p-3 text-center">마지막 주문</th>
-                                        <th className="p-3 text-center">구매주기</th>
-                                        <th className="p-3 text-center">예측상태</th>
-                                        <th className="p-3 text-center">관리</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {repurchaseCandidates.map((c, i) => {
-                                        const remaining = parseInt(c.predicted_days_remaining);
-                                        const status = remaining === 0 ? "오늘" : (remaining > 0 ? `${remaining}일 남음` : `${Math.abs(remaining)}일 경과`);
-                                        const color = remaining === 0 ? 'text-rose-500' : (remaining > 0 ? 'text-emerald-500' : 'text-amber-500');
-                                        return (
-                                            <tr key={i}>
-                                                <td className="p-3 font-bold text-slate-700">{c.customer_name}</td>
-                                                <td className="p-3 text-slate-500 font-mono">{c.mobile_number}</td>
-                                                <td className="p-3 text-center text-slate-500">{c.last_order_date}</td>
-                                                <td className="p-3 text-center font-bold">{c.avg_interval_days}일</td>
-                                                <td className={`p-3 text-center font-black ${color}`}>{status}</td>
-                                                <td className="p-3 text-center">
-                                                    <button onClick={() => generateAIDraft(c)} className="btn-primary py-1 px-3 text-xs bg-indigo-500 border-indigo-500">AI 문구추천</button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {repurchaseCandidates.length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-400 font-medium">재구매 대상 고객이 없습니다.</td></tr>}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showInventoryModal && (
-                <div className="modal-overlay" onClick={() => setShowInventoryModal(false)}>
-                    <div className="modal-container w-full max-w-4xl overflow-hidden rounded-[20px]" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header bg-gradient-to-br from-rose-500 to-rose-600 text-white p-6">
-                            <h3 className="flex items-center gap-2 text-xl font-bold"><span className="material-symbols-rounded">inventory_2</span> 지능형 재고 소모 분석 & 알림</h3>
-                            <button onClick={() => setShowInventoryModal(false)} className="material-symbols-rounded bg-white/20 p-1 rounded-full hover:bg-white/30 transition-colors">close</button>
-                        </div>
-                        <div className="p-6 overflow-auto max-h-[600px] stylish-scrollbar">
-                            {/* Section 1: Forecasting */}
-                            <div className="mb-8">
-                                <h4 className="text-lg font-black text-rose-600 mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-rounded">trending_down</span> 재고 소진 임박 (Forecast)
-                                </h4>
-                                <p className="text-slate-500 text-sm mb-4 leading-relaxed">최근 30일간의 데이터를 바탕으로, <b>7일 이내</b> 소모가 예상되는 품목입니다.</p>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                                        <tr>
-                                            <th className="p-3 text-left">품목명</th>
-                                            <th className="p-3 text-center">현재고</th>
-                                            <th className="p-3 text-center">평균소모</th>
-                                            <th className="p-3 text-center">예상소진</th>
-                                            <th className="p-3 text-center">태스크</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {forecastAlerts.map((item, i) => (
-                                            <tr key={i}>
-                                                <td className="p-3 text-slate-700">
-                                                    <div className="font-bold">{item.product_name}</div>
-                                                    <div className="text-[10px] text-slate-400">{item.item_type === 'material' ? '📦 자재' : '🍄 완제품'}</div>
-                                                </td>
-                                                <td className="p-3 text-center font-bold">{item.stock_quantity.toLocaleString()}개</td>
-                                                <td className="p-3 text-center text-slate-500">{item.daily_avg_consumption.toFixed(1)}개/일</td>
-                                                <td className={`p-3 text-center font-black ${item.days_remaining <= 3 ? 'text-rose-500' : 'text-amber-500'}`}>
-                                                    {item.days_remaining >= 900 ? '출고 없음' : `${item.days_remaining}일 남음`}
-                                                </td>
-                                                <td className="p-3 text-center font-medium">
-                                                    <button onClick={() => navigate(item.item_type === 'material' ? '/finance/purchase' : '/sales/stock')} className="text-indigo-600 font-bold hover:underline">입고등록 →</button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {forecastAlerts.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400 text-xs">소진 임박 품목이 없습니다.</td></tr>}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Section 2: Freshness */}
-                            <div>
-                                <h4 className="text-lg font-black text-amber-600 mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-rounded">timer</span> 골든 타임 경과 (Freshness)
-                                </h4>
-                                <p className="text-slate-500 text-sm mb-4 leading-relaxed">입고 후 <b>7일 이상</b> 경과하여 신선도 관리가 필요한 품목입니다.</p>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                                        <tr>
-                                            <th className="p-3 text-left">품목명</th>
-                                            <th className="p-3 text-center">현재고</th>
-                                            <th className="p-3 text-center">마지막 입고일</th>
-                                            <th className="p-3 text-center">경과일</th>
-                                            <th className="p-3 text-center">태스크</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {freshnessAlerts.map((item, i) => (
-                                            <tr key={i}>
-                                                <td className="p-3 text-slate-700 font-bold">{item.product_name}</td>
-                                                <td className="p-3 text-center font-bold">{item.stock_quantity.toLocaleString()}개</td>
-                                                <td className="p-3 text-center text-slate-500">{item.last_in_date ? item.last_in_date.substring(0, 10) : '-'}</td>
-                                                <td className="p-3 text-center font-black text-rose-500">
-                                                    +{item.diffDays}일
-                                                </td>
-                                                <td className="p-3 text-center font-medium">
-                                                    <button onClick={() => navigate('/sales/stock')} className="text-indigo-600 font-bold hover:underline">재고관리 →</button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {freshnessAlerts.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400 text-xs">신선도 주의 품목이 없습니다.</td></tr>}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Premium Logout Confirmation Modal - Deep Blue Theme */}
             {showLogoutModal && (
@@ -844,6 +975,11 @@ const Dashboard = () => {
                                 ) : (
                                     aiBriefingContent
                                 )}
+                            </div>
+
+                            <div className="mt-4 flex items-center justify-center gap-2 text-[11px] font-bold text-slate-400 opacity-60">
+                                <span className="material-symbols-rounded text-sm">history_edu</span>
+                                이 분석은 과거 운영 데이터 및 실시간 주문 로그를 바탕으로 작성되었습니다.
                             </div>
 
                             <div className="mt-10">
