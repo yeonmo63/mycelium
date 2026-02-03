@@ -108,6 +108,7 @@ pub fn run() {
             commands::customer::delete_customer_address,
             commands::customer::set_default_customer_address,
             commands::dashboard::get_dashboard_stats,
+            commands::dashboard::get_business_report_data,
             commands::ledger::get_customer_ledger,
             commands::ledger::create_ledger_entry,
             commands::ledger::update_ledger_entry,

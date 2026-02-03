@@ -11,6 +11,16 @@ pub struct WeeklySales {
     total: Option<i64>,
 }
 
+#[derive(serde::Serialize)]
+pub struct BusinessReportData {
+    pub period_label: String,
+    pub total_sales: i64,
+    pub total_orders: i64,
+    pub new_customers: i64,
+    pub top_products: Vec<ProductSalesStats>,
+    pub top_profitable: Vec<ProfitAnalysisResult>,
+}
+
 #[command]
 pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<DashboardStats> {
     let today = chrono::Local::now().date_naive();
@@ -37,6 +47,89 @@ pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<Das
     .await?;
 
     Ok(stats)
+}
+
+#[command]
+pub async fn get_business_report_data(
+    state: State<'_, DbPool>,
+    period: String, // "weekly" or "monthly"
+) -> MyceliumResult<BusinessReportData> {
+    let today = chrono::Local::now().date_naive();
+    let start_date = if period == "weekly" {
+        today - chrono::Duration::days(7)
+    } else {
+        today - chrono::Duration::days(30)
+    };
+
+    // 1. Basic Stats
+    let stats_row: (Option<i64>, Option<i64>, Option<i64>) = sqlx::query_as(
+        r#"
+        SELECT 
+            (SELECT CAST(SUM(total_amount) AS BIGINT) FROM sales WHERE order_date >= $1 AND status != '취소') as total_sales,
+            (SELECT COUNT(*) FROM sales WHERE order_date >= $1 AND status != '취소') as total_orders,
+            (SELECT COUNT(*) FROM customers WHERE join_date >= $1) as new_customers
+        "#
+    )
+    .bind(start_date)
+    .fetch_one(&*state)
+    .await?;
+
+    // 2. Top Products by Quantity
+    let top_products = sqlx::query_as::<_, ProductSalesStats>(
+        r#"
+        SELECT 
+            COALESCE(s.product_name, p.product_name) || COALESCE(' (' || s.specification || ')', '') as product_name,
+            MAX(p.product_id) as product_id,
+            COUNT(*) as record_count,
+            CAST(SUM(s.quantity) AS BIGINT) as total_quantity, 
+            CAST(SUM(s.total_amount) AS BIGINT) as total_amount
+        FROM sales s
+        LEFT JOIN products p ON (s.product_id = p.product_id OR (s.product_id IS NULL AND s.product_name = p.product_name AND s.specification IS NOT DISTINCT FROM p.specification))
+        WHERE s.order_date >= $1 AND s.status != '취소'
+        GROUP BY 1 ORDER BY total_quantity DESC LIMIT 3
+        "#,
+    )
+    .bind(start_date)
+    .fetch_all(&*state)
+    .await?;
+
+    // 3. Top Profitable Products
+    let top_profitable = sqlx::query_as::<_, ProfitAnalysisResult>(
+        r#"
+        SELECT 
+            COALESCE(s.product_name, p.product_name) || COALESCE(' (' || s.specification || ')', '') as product_name,
+            COUNT(*) as record_count,
+            CAST(SUM(s.quantity) AS BIGINT) as total_quantity,
+            CAST(SUM(s.total_amount) AS BIGINT) as total_revenue,
+            CAST(COALESCE(MAX(p.cost_price), 0) AS BIGINT) as unit_cost,
+            CAST(SUM(s.quantity * COALESCE(p.cost_price, 0)) AS BIGINT) as total_cost,
+            CAST(SUM(s.total_amount) - SUM(s.quantity * COALESCE(p.cost_price, 0)) AS BIGINT) as net_profit,
+            CASE WHEN SUM(s.total_amount) > 0 THEN 
+                (CAST(SUM(s.total_amount) - SUM(s.quantity * COALESCE(p.cost_price, 0)) AS DOUBLE PRECISION) / CAST(SUM(s.total_amount) AS DOUBLE PRECISION)) * 100.0
+            ELSE 0.0 END as margin_rate
+        FROM sales s
+        LEFT JOIN products p ON (s.product_id = p.product_id OR (s.product_id IS NULL AND s.product_name = p.product_name AND s.specification IS NOT DISTINCT FROM p.specification))
+        WHERE s.order_date >= $1 AND s.status != '취소'
+        GROUP BY 1 ORDER BY net_profit DESC LIMIT 3
+        "#,
+    )
+    .bind(start_date)
+    .fetch_all(&*state)
+    .await?;
+
+    Ok(BusinessReportData {
+        period_label: if period == "weekly" {
+            "지난 7일"
+        } else {
+            "지난 30일"
+        }
+        .to_string(),
+        total_sales: stats_row.0.unwrap_or(0),
+        total_orders: stats_row.1.unwrap_or(0),
+        new_customers: stats_row.2.unwrap_or(0),
+        top_products,
+        top_profitable,
+    })
 }
 
 #[command]

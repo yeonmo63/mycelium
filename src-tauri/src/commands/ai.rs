@@ -380,10 +380,61 @@ pub async fn analyze_online_sentiment(_state: State<'_, DbPool>) -> MyceliumResu
 
 #[command]
 pub async fn get_morning_briefing(
-    _app: AppHandle,
-    _state: State<'_, DbPool>,
+    app: AppHandle,
+    state: State<'_, DbPool>,
 ) -> MyceliumResult<String> {
-    Ok("Morning Briefing Stub".to_string())
+    let api_key = get_gemini_api_key(&app).ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let today = chrono::Local::now().date_naive();
+    let yesterday = today - chrono::Duration::days(1);
+
+    // 1. Fetch Stats
+    let stats: (Option<i64>, Option<i64>, Option<i64>, Option<i64>) = sqlx::query_as(
+        r#"
+        SELECT 
+            (SELECT CAST(SUM(total_amount) AS BIGINT) FROM sales WHERE order_date = $1 AND status != '취소') as yesterday_sales,
+            (SELECT COUNT(*) FROM sales WHERE order_date = $1 AND status != '취소') as yesterday_orders,
+            (SELECT COUNT(*) FROM products WHERE stock_quantity <= safety_stock) as low_stock_count,
+            (SELECT COUNT(*) FROM experience_reservations WHERE reservation_date = $2 AND status != '취소') as today_experiences
+        "#,
+    )
+    .bind(yesterday)
+    .bind(today)
+    .fetch_one(&*state)
+    .await?;
+
+    // 2. Fetch Pending Consultations
+    let pending_consults: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM consultations WHERE status IN ('접수', '처리중')")
+            .fetch_one(&*state)
+            .await?;
+
+    let context = format!(
+        "날짜: {}\n어제( {} ) 실적: 매출 {}원, 주문 {}건\n현재 재고 부족 품목: {}건\n오늘({} ) 예정된 체험: {}건\n미처리 고객 상담: {}건",
+        today,
+        yesterday,
+        stats.0.unwrap_or(0).to_string(),
+        stats.1.unwrap_or(0).to_string(),
+        stats.2.unwrap_or(0).to_string(),
+        today,
+        stats.3.unwrap_or(0).to_string(),
+        pending_consults.0
+    );
+
+    let prompt = format!(
+        "당신은 스마트 농장 'Mycelium'의 운영 비서입니다. 아래의 오늘의 핵심 운영 데이터를 보고, 사장님이 기분 좋게 하루를 시작할 수 있도록 긍정적이고 전략적인 '일일 브리핑'을 5줄 이내로 작성해 주세요.\n\n\
+        {}\n\n\
+        [작성 지침]\n\
+        1. 첫 문장은 날씨나 요일에 어울리는 따뜻한 인사로 시작하세요.\n\
+        2. 어제의 실적을 가볍게 칭찬하고, 오늘 가장 먼저 확인해야 할 사항(재고나 예약 등)을 콕 집어주세요.\n\
+        3. 활기차고 신뢰감 있는 한국어로 작성하세요.\n\
+        4. HTML 태그를 사용하지 말고 순수 텍스트로만 작성하세요 (프론트엔드에서 처리함).",
+        context
+    );
+
+    call_gemini_ai_internal(&api_key, &prompt).await
 }
 
 #[command]
