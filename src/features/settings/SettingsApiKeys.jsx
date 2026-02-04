@@ -15,7 +15,9 @@ import {
     MessageSquare,
     Eye,
     EyeOff,
-    ExternalLink
+    ExternalLink,
+    ShoppingBag,
+    Truck
 } from 'lucide-react';
 
 const SettingsApiKeys = () => {
@@ -28,7 +30,10 @@ const SettingsApiKeys = () => {
     const [showKeys, setShowKeys] = useState({
         gemini: false,
         sms: false,
-        naver: false
+        naver: false,
+        mall_naver: false,
+        mall_coupang: false,
+        courier: false
     });
 
     const [formData, setFormData] = useState({
@@ -37,7 +42,17 @@ const SettingsApiKeys = () => {
         sms_sender_number: '',
         sms_provider: 'aligo', // default
         naver_client_id: '',
-        naver_client_secret: ''
+        naver_client_secret: '',
+        // Mall Commerce
+        naver_commerce_id: '',
+        naver_commerce_secret: '',
+        coupang_access_key: '',
+        coupang_secret_key: '',
+        coupang_vendor_id: '',
+        // Courier
+        courier_provider: 'sweettracker',
+        courier_api_key: '',
+        courier_client_id: ''
     });
 
     // --- Admin Guard Check ---
@@ -61,6 +76,8 @@ const SettingsApiKeys = () => {
                     const geminiKey = await invoke('get_gemini_api_key_for_ui');
                     const smsConfig = await invoke('get_sms_config_for_ui');
                     const naverId = await invoke('get_naver_client_id_for_ui');
+                    const mallConfig = await invoke('get_mall_config_for_ui');
+                    const courierConfig = await invoke('get_courier_config_for_ui');
 
                     setFormData(prev => ({
                         ...prev,
@@ -68,7 +85,15 @@ const SettingsApiKeys = () => {
                         sms_api_key: smsConfig?.api_key || '',
                         sms_sender_number: smsConfig?.sender_number || '',
                         sms_provider: smsConfig?.provider || 'aligo',
-                        naver_client_id: naverId || ''
+                        naver_client_id: naverId || '',
+                        naver_commerce_id: mallConfig?.naver_commerce_id || '',
+                        naver_commerce_secret: mallConfig?.naver_commerce_secret || '',
+                        coupang_access_key: mallConfig?.coupang_access_key || '',
+                        coupang_secret_key: mallConfig?.coupang_secret_key || '',
+                        coupang_vendor_id: mallConfig?.coupang_vendor_id || '',
+                        courier_provider: courierConfig?.provider || 'sweettracker',
+                        courier_api_key: courierConfig?.api_key || '',
+                        courier_client_id: courierConfig?.client_id || ''
                     }));
                 } catch (err) {
                     console.error("Failed to load configs:", err);
@@ -136,6 +161,44 @@ const SettingsApiKeys = () => {
                 clientSecret: formData.naver_client_secret
             });
             await showAlert('저장 완료', 'Naver API 키가 저장되었습니다.');
+        } catch (err) {
+            showAlert('저장 실패', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveMall = async () => {
+        setIsLoading(true);
+        try {
+            await invoke('save_mall_keys', {
+                config: {
+                    naver_commerce_id: formData.naver_commerce_id,
+                    naver_commerce_secret: formData.naver_commerce_secret,
+                    coupang_access_key: formData.coupang_access_key,
+                    coupang_secret_key: formData.coupang_secret_key,
+                    coupang_vendor_id: formData.coupang_vendor_id
+                }
+            });
+            await showAlert('저장 완료', '쇼핑몰 연동 키가 저장되었습니다.');
+        } catch (err) {
+            showAlert('저장 실패', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveCourier = async () => {
+        setIsLoading(true);
+        try {
+            await invoke('save_courier_config', {
+                config: {
+                    provider: formData.courier_provider,
+                    api_key: formData.courier_api_key,
+                    client_id: formData.courier_client_id
+                }
+            });
+            await showAlert('저장 완료', '택배 연동 설정이 저장되었습니다.');
         } catch (err) {
             showAlert('저장 실패', err);
         } finally {
@@ -376,6 +439,193 @@ const SettingsApiKeys = () => {
                                         {showKeys.naver ? <EyeOff size={16} /> : <Eye size={16} />}
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Mall Integration Card */}
+                    <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 p-8 text-left transition-all">
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                                    <ShoppingBag size={20} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="text-lg font-black text-slate-700 tracking-tight">E-commerce & Mall Sync</h2>
+                                        <div className="flex gap-2">
+                                            <a href="https://apicenter.commerce.naver.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-600 text-[10px] font-black hover:bg-teal-100 transition-colors">
+                                                네이버 커머스
+                                            </a>
+                                            <a href="https://wing.coupang.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-600 text-[10px] font-black hover:bg-teal-100 transition-colors">
+                                                쿠팡 윙
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-400">쇼핑몰 주문 자동 수집 및 재고 동기화 연동</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleSaveMall}
+                                disabled={isLoading}
+                                className="h-10 px-5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-teal-100 transition-all active:scale-[0.95]"
+                            >
+                                <Save size={14} /> 저장
+                            </button>
+                        </div>
+
+                        <div className="space-y-8">
+                            {/* Naver Commerce */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-l-4 border-teal-500 pl-2">Naver Commerce API (SmartStore)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-slate-500 ml-1">애플리케이션 ID (Client ID)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.naver_commerce_id}
+                                            onChange={e => setFormData({ ...formData, naver_commerce_id: e.target.value })}
+                                            className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-teal-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                            placeholder="Commerce ID"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-slate-500 ml-1">애플리케이션 Secret</label>
+                                        <div className="relative">
+                                            <input
+                                                type={showKeys.mall_naver ? "text" : "password"}
+                                                value={formData.naver_commerce_secret}
+                                                onChange={e => setFormData({ ...formData, naver_commerce_secret: e.target.value })}
+                                                className="w-full h-11 px-4 pr-10 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-teal-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                                placeholder="Commerce Secret"
+                                            />
+                                            <button onClick={() => toggleKeyVisibility('mall_naver')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                {showKeys.mall_naver ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Coupang Wing */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-l-4 border-teal-500 pl-2">Coupang Wing API (Marketplace)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-slate-500 ml-1">액세스 키 (Access Key)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.coupang_access_key}
+                                            onChange={e => setFormData({ ...formData, coupang_access_key: e.target.value })}
+                                            className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-teal-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                            placeholder="Coupang Access Key"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-slate-500 ml-1">시크릿 키 (Secret Key)</label>
+                                        <div className="relative">
+                                            <input
+                                                type={showKeys.mall_coupang ? "text" : "password"}
+                                                value={formData.coupang_secret_key}
+                                                onChange={e => setFormData({ ...formData, coupang_secret_key: e.target.value })}
+                                                className="w-full h-11 px-4 pr-10 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-teal-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                                placeholder="Coupang Secret Key"
+                                            />
+                                            <button onClick={() => toggleKeyVisibility('mall_coupang')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                {showKeys.mall_coupang ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="block text-[10px] font-black text-slate-500 ml-1">업체코드 (Vendor ID)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.coupang_vendor_id}
+                                            onChange={e => setFormData({ ...formData, coupang_vendor_id: e.target.value })}
+                                            className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-teal-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                            placeholder="A00XXXXXX"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Courier Integration Card */}
+                    <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 p-8 text-left transition-all">
+                        <div className="flex justify-between items-center mb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                    <Truck size={20} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="text-lg font-black text-slate-700 tracking-tight">Courier Service Integration</h2>
+                                        <a href="https://www.sweettracker.co.kr/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[10px] font-black hover:bg-blue-100 transition-colors">
+                                            <ExternalLink size={10} /> 서비스 센터
+                                        </a>
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-400">송장 번호 자동 생성 및 배송 추적 서비스 연동</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleSaveCourier}
+                                disabled={isLoading}
+                                className="h-10 px-5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-[0.95]"
+                            >
+                                <Save size={14} /> 저장
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-3 col-span-1 md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">연동 서비스 선택</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {['sweettracker', 'smartparcel', 'delivery'].map(provider => (
+                                        <button
+                                            key={provider}
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, courier_provider: provider })}
+                                            className={`h-12 rounded-xl border-2 font-black text-[11px] capitalize transition-all
+                                                ${formData.courier_provider === provider
+                                                    ? 'bg-blue-50 border-blue-500 text-blue-600 shadow-md transform -translate-y-0.5'
+                                                    : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}
+                                            `}
+                                        >
+                                            {provider === 'sweettracker' ? '스윗트래커' : provider === 'smartparcel' ? '스마트택배' : '기타 API'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">API 키 (API Key)</label>
+                                <div className="relative group">
+                                    <input
+                                        type={showKeys.courier ? "text" : "password"}
+                                        value={formData.courier_api_key}
+                                        onChange={e => setFormData({ ...formData, courier_api_key: e.target.value })}
+                                        className="w-full h-12 px-5 pr-12 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-blue-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleKeyVisibility('courier')}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        {showKeys.courier ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">사용자 ID / 업체코드</label>
+                                <input
+                                    type="text"
+                                    value={formData.courier_client_id}
+                                    onChange={e => setFormData({ ...formData, courier_client_id: e.target.value })}
+                                    className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-blue-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                    placeholder="Client ID 또는 업체코드"
+                                />
                             </div>
                         </div>
                     </div>

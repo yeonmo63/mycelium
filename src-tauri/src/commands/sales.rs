@@ -3,8 +3,9 @@ use crate::db::{DbPool, Sales, SalesClaim};
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 use chrono::{NaiveDate, Utc};
+use std::fs;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use tauri::{command, AppHandle, Manager, State};
 
 // SPECIAL SALES BATCH SAVE STRUCTS
 #[derive(serde::Deserialize)]
@@ -981,4 +982,59 @@ pub async fn save_general_sales_batch(
     tx.commit().await?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     Ok(())
+}
+#[derive(serde::Serialize)]
+pub struct MallOrderItem {
+    pub orderId: String,
+    pub customerName: String,
+    pub receiverName: String,
+    pub mobile: String,
+    pub zip: String,
+    pub address: String,
+    pub mallProductName: String,
+    pub qty: i32,
+    pub unitPrice: i32,
+}
+
+#[command]
+pub async fn fetch_external_mall_orders(
+    app: AppHandle,
+    mall_type: String,
+) -> MyceliumResult<Vec<MallOrderItem>> {
+    // 1. Get Keys
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    if !config_path.exists() {
+        return Err(MyceliumError::Internal("설정 파일이 없습니다.".to_string()));
+    }
+
+    let content =
+        fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let json: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+
+    // Placeholder for actual API implementation
+    // Depending on mall_type, we would use naver_commerce_id/secret or coupang keys
+    let _id = json
+        .get(match mall_type.as_str() {
+            "naver" => "naver_commerce_id",
+            "coupang" => "coupang_access_key",
+            _ => "",
+        })
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // For now, return empty or a "not implemented" error if key is missing
+    if _id.is_empty() {
+        return Err(MyceliumError::Internal(format!(
+            "{} 연동 키가 설정되지 않았습니다.",
+            mall_type
+        )));
+    }
+
+    // Actual HTTP fetching would go here...
+    Ok(vec![])
 }

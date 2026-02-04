@@ -332,6 +332,48 @@ const SalesOnlineSync = () => {
     };
 
     // --- Sync Execution ---
+    const [isApiLoading, setIsApiLoading] = useState(false);
+
+    const handleApiSync = async () => {
+        if (mallType === 'generic') {
+            await showAlert("알림", "일반 형식은 실시간 연동을 지원하지 않습니다. 엑셀을 이용해주세요.");
+            return;
+        }
+        setIsApiLoading(true);
+        try {
+            const invoke = window.__TAURI__.core.invoke;
+            const orders = await invoke('fetch_external_mall_orders', { mallType });
+
+            if (!orders || orders.length === 0) {
+                await showAlert("결과", "가져올 새로운 주문 데이터가 없습니다.");
+                return;
+            }
+
+            // identify customers
+            for (const order of orders) {
+                try {
+                    if (!order.mobile) { order.isNewCustomer = true; continue; }
+                    const dups = await invoke('search_customers_by_mobile', { mobile: order.mobile });
+                    if (dups && dups.length > 0) {
+                        order.isNewCustomer = false;
+                        order.existingCustomerId = dups[0].customer_id;
+                        order.existingCustomerName = dups[0].customer_name;
+                    } else {
+                        order.isNewCustomer = true;
+                    }
+                } catch (e) { console.warn(e); order.isNewCustomer = true; }
+                order.internalProductId = matchProduct(order.mallProductName, order.unitPrice);
+            }
+
+            setParsedOrders(orders);
+            setStep('review');
+        } catch (e) {
+            await showAlert("연동 오류", e);
+        } finally {
+            setIsApiLoading(false);
+        }
+    };
+
     const handleSync = async () => {
         const unmatched = parsedOrders.filter(o => !o.internalProductId).length;
         if (unmatched > 0) {
@@ -419,39 +461,62 @@ const SalesOnlineSync = () => {
 
                         <div className="mb-8 relative z-10">
                             <div className="w-24 h-24 mx-auto bg-slate-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                                <span className="material-symbols-rounded text-5xl text-teal-500">cloud_upload</span>
+                                <span className="material-symbols-rounded text-5xl text-teal-500">cloud_sync</span>
                             </div>
-                            <h3 className="text-2xl font-black text-slate-700 mt-2">주문 엑셀 파일 업로드</h3>
-                            <p className="text-slate-400 text-sm font-bold mt-2">네이버 스마트스토어, 쿠팡, 자사몰 엑셀 지원</p>
+                            <h3 className="text-2xl font-black text-slate-700 mt-2">주문 데이터 수집</h3>
+                            <p className="text-slate-400 text-sm font-bold mt-2">실시간 API 연동 또는 엑셀 업로드</p>
                         </div>
 
                         <div className="mb-6 text-left bg-slate-50 p-6 rounded-2xl border border-slate-100">
                             <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-1">쇼핑몰 선택</label>
                             <select value={mallType} onChange={e => setMallType(e.target.value)}
                                 className="w-full h-12 px-4 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 focus:ring-4 focus:ring-teal-500/20 focus:border-teal-500 transition-all outline-none">
-                                <option value="naver">네이버 스마트스토어 (발주발송관리 엑셀)</option>
-                                <option value="coupang">쿠팡 (배송명단 엑셀)</option>
+                                <option value="naver">네이버 스마트스토어 (Commerce API)</option>
+                                <option value="coupang">쿠팡 (윙 API)</option>
                                 <option value="generic">일반 (이름,연락처,주소,상품명)</option>
                             </select>
                         </div>
 
-                        <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50 hover:bg-slate-50 hover:border-teal-400 transition-all cursor-pointer relative group"
-                            onClick={() => document.getElementById('file-upload').click()}>
-                            {file ? (
-                                <div className="text-teal-600 font-bold flex flex-col items-center justify-center gap-2">
-                                    <span className="material-symbols-rounded text-3xl">description</span>
-                                    <span className="text-lg">{file.name}</span>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center gap-2">
-                                    <span className="text-slate-400 font-bold group-hover:text-teal-500 transition-colors">여기를 클릭하여 파일 선택</span>
-                                    <span className="text-[10px] text-slate-300 font-bold uppercase">Supported Files: .csv, .xls</span>
-                                </div>
-                            )}
-                            <input id="file-upload" type="file" onChange={handleFileChange} className="hidden" accept=".csv" />
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={handleApiSync}
+                                    disabled={isApiLoading || mallType === 'generic'}
+                                    className="h-24 rounded-2xl bg-teal-50 border-2 border-teal-100 hover:border-teal-400 hover:bg-teal-100/50 transition-all flex flex-col items-center justify-center gap-2 group disabled:opacity-50 disabled:grayscale"
+                                >
+                                    {isApiLoading ? (
+                                        <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+                                    ) : (
+                                        <span className="material-symbols-rounded text-3xl text-teal-600 group-hover:scale-110 transition-transform">bolt</span>
+                                    )}
+                                    <span className="text-xs font-black text-teal-700">API 실시간 연동</span>
+                                </button>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => document.getElementById('file-upload').click()}
+                                    className="h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 hover:border-teal-400 hover:bg-slate-100/50 transition-all flex flex-col items-center justify-center gap-2 group"
+                                >
+                                    <span className="material-symbols-rounded text-3xl text-slate-400 group-hover:text-teal-600 transition-colors">upload_file</span>
+                                    <span className="text-xs font-black text-slate-500">엑셀 파일 업로드</span>
+                                </button>
+                                <input id="file-upload" type="file" onChange={handleFileChange} className="hidden" accept=".csv" />
+                            </div>
                         </div>
 
-                        <div className="mt-8 flex gap-3">
+                        {file && (
+                            <div className="mb-4 bg-emerald-50 p-3 rounded-xl flex items-center justify-between border border-emerald-100 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-rounded text-emerald-600 text-sm">check_circle</span>
+                                    <span className="text-[11px] font-bold text-emerald-700">{file.name}</span>
+                                </div>
+                                <button onClick={() => setFile(null)} className="text-emerald-400 hover:text-emerald-600">
+                                    <span className="material-symbols-rounded text-sm">close</span>
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="mt-4 flex gap-3">
                             <button className="flex-1 h-12 rounded-xl bg-slate-100 text-slate-500 font-black hover:bg-slate-200 transition-colors"
                                 onClick={() => setIsMappingModalOpen(true)}>
                                 매칭 규칙 관리
@@ -459,7 +524,7 @@ const SalesOnlineSync = () => {
                             <button className="flex-[2] h-12 rounded-xl bg-teal-600 text-white font-black hover:bg-teal-500 shadow-lg shadow-teal-200 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
                                 disabled={!file} onClick={handleParse}>
                                 <div className="flex items-center justify-center gap-2">
-                                    <span>다음 단계 (분석)</span>
+                                    <span>엑셀 분석 시작</span>
                                     <span className="material-symbols-rounded text-lg">arrow_forward</span>
                                 </div>
                             </button>

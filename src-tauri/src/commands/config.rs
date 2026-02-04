@@ -251,6 +251,149 @@ pub async fn save_naver_keys(
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct MallConfig {
+    pub naver_commerce_id: String,
+    pub naver_commerce_secret: String,
+    pub coupang_access_key: String,
+    pub coupang_secret_key: String,
+    pub coupang_vendor_id: String,
+}
+
+#[command]
+pub async fn save_mall_keys(app: AppHandle, config: MallConfig) -> MyceliumResult<()> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    let mut config_data = if config_path.exists() {
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
+
+    config_data["naver_commerce_id"] = Value::String(config.naver_commerce_id);
+    config_data["naver_commerce_secret"] = Value::String(config.naver_commerce_secret);
+    config_data["coupang_access_key"] = Value::String(config.coupang_access_key);
+    config_data["coupang_secret_key"] = Value::String(config.coupang_secret_key);
+    config_data["coupang_vendor_id"] = Value::String(config.coupang_vendor_id);
+
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    Ok(())
+}
+
+#[command]
+pub async fn get_mall_config_for_ui(app: AppHandle) -> MyceliumResult<MallConfig> {
+    let mut config = MallConfig::default();
+
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let config_path = config_dir.join("config.json");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                    config.naver_commerce_id = json
+                        .get("naver_commerce_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.naver_commerce_secret = json
+                        .get("naver_commerce_secret")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.coupang_access_key = json
+                        .get("coupang_access_key")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.coupang_secret_key = json
+                        .get("coupang_secret_key")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.coupang_vendor_id = json
+                        .get("coupang_vendor_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+        }
+    }
+    Ok(config)
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct CourierConfig {
+    pub provider: String,
+    pub api_key: String,
+    pub client_id: Option<String>,
+}
+
+#[command]
+pub async fn save_courier_config(app: AppHandle, config: CourierConfig) -> MyceliumResult<()> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    let mut config_data = if config_path.exists() {
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
+
+    config_data["courier_provider"] = Value::String(config.provider);
+    config_data["courier_api_key"] = Value::String(config.api_key);
+    config_data["courier_client_id"] = Value::String(config.client_id.unwrap_or_default());
+
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    Ok(())
+}
+
+#[command]
+pub async fn get_courier_config_for_ui(app: AppHandle) -> MyceliumResult<CourierConfig> {
+    let mut config = CourierConfig::default();
+
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let config_path = config_dir.join("config.json");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                    config.provider = json
+                        .get("courier_provider")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("sweettracker")
+                        .to_string();
+                    config.api_key = json
+                        .get("courier_api_key")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.client_id = json
+                        .get("courier_client_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+        }
+    }
+    Ok(config)
+}
+
 fn get_default_templates() -> Value {
     json!({
         "default": [

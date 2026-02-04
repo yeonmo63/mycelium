@@ -290,6 +290,11 @@ pub fn run() {
             commands::product::save_product_bom,
             commands::product::convert_stock_bom,
             commands::config::refresh_database_ip,
+            commands::config::get_mall_config_for_ui,
+            commands::config::save_mall_keys,
+            commands::sales::fetch_external_mall_orders,
+            commands::config::save_courier_config,
+            commands::config::get_courier_config_for_ui,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
