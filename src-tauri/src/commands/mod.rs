@@ -12,6 +12,7 @@ pub mod finance;
 pub mod ledger;
 pub mod logistics;
 pub mod product;
+pub mod production;
 pub mod sales;
 pub mod schedule;
 pub mod utility;

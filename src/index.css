@@ -3447,9 +3447,55 @@ code {
   background-color: #cbd5e1;
   /* slate-300 */
   border-radius: 4px;
-}
-
-.custom-gray-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: #94a3b8;
   /* slate-400 */
+}
+
+/* --- Print Styles --- */
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+@media print {
+  /* Hide all UI elements */
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Show only the printable report */
+  #printable-report, #printable-report * {
+    visibility: visible;
+  }
+  
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 1cm;
+    display: block !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Reset layout for print */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Remove headers/footers added by browser (optional) */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+  
+  /* Ensure page breaks are handled */
+  .page-break {
+    page-break-after: always;
+  }
 }

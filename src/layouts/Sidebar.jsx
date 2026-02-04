@@ -130,7 +130,6 @@ const Sidebar = () => {
                         <SubMenuItem to="/sales/online-sync" icon="sync_alt" label="쇼핑몰 주문 연동" />
                         <SubMenuItem to="/sales/daily-receipts" icon="history_edu" label="일일 접수 현황" />
                         <SubMenuItem to="/sales/daily" icon="person_search" label="개인별 판매 현황" />
-                        <SubMenuItem to="/sales/stock" icon="inventory_2" label="재고 관리" />
                         <SubMenuItem to="/customer/event-mgmt" icon="fmd_good" label="행사(특판)장 관리" />
                     </MenuGroup>
 
@@ -142,6 +141,11 @@ const Sidebar = () => {
                         <SubMenuItem to="/customer/consultation" icon="support_agent" label="상담 관리(CRM)" />
                         <SubMenuItem to="/customer/best" icon="grade" label="우수 고객 관리" />
                         <SubMenuItem to="/customer/special-care" icon="priority_high" label="집중 관리 고객" />
+                    </MenuGroup>
+
+                    <MenuGroup id="inventory_prod" icon="potted_plant" label="재고/생산/현장관리" expanded={isExpanded('inventory_prod')} onToggle={toggleMenu} currentPath={location.pathname}>
+                        <SubMenuItem to="/sales/stock" icon="inventory_2" label="재고/생산 관리" />
+                        <SubMenuItem to="/production" icon="verified" label="GAP/HACCP 인증센터" />
                     </MenuGroup>
 
                     <MenuGroup id="finance" icon="account_balance" label="회계/지출 관리" expanded={isExpanded('finance')} onToggle={toggleMenu} currentPath={location.pathname}>

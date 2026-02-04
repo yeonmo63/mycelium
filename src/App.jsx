@@ -49,6 +49,7 @@ import ExperienceReservation from './features/exp/ExperienceReservation';
 import ExperienceStatus from './features/exp/ExperienceStatus';
 import ExperienceSchedule from './features/exp/ExperienceSchedule';
 import ScheduleMgmt from './features/schedule/ScheduleMgmt';
+import ProductionManager from './features/production/ProductionManager';
 import UserManual from './features/manual/UserManual';
 import Placeholder from './components/Placeholder';
 
@@ -86,6 +87,15 @@ const router = createBrowserRouter(
       <Route path="exp/reservation-entry" element={<ExperienceReservation />} />
       <Route path="exp/reservation-status" element={<ExperienceStatus />} />
       <Route path="exp/program-mgmt" element={<ExperienceProgram />} />
+
+      {/* Production Management Routes */}
+      <Route path="production" element={<ProductionManager initialTab="dashboard" />} />
+      <Route path="production/dashboard" element={<ProductionManager initialTab="dashboard" />} />
+      <Route path="production/spaces" element={<ProductionManager initialTab="spaces" />} />
+      <Route path="production/batches" element={<ProductionManager initialTab="batches" />} />
+      <Route path="production/logs" element={<ProductionManager initialTab="logs" />} />
+      <Route path="production/harvest" element={<ProductionManager initialTab="harvest" />} />
+
       <Route path="schedule" element={<ScheduleMgmt />} />
       <Route path="settings/product-list" element={<SettingsProduct />} />
       <Route path="settings/user-list" element={<SettingsUser />} />

@@ -666,7 +666,7 @@ pub async fn adjust_product_stock(
         "조정".to_string()
     };
 
-    sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ADJUST')")
+    sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'MANUAL')")
     .bind(productId).bind(&product.product_name).bind(&product.specification).bind(&product.product_code).bind(log_type).bind(changeQty).bind(new_qty).bind(memo).execute(&mut *tx).await?;
 
     tx.commit().await?;
@@ -683,7 +683,7 @@ pub async fn get_inventory_logs(
     let base_sql = r#"
         SELECT l.* FROM inventory_logs l 
         LEFT JOIN products p ON l.product_id = p.product_id 
-        WHERE l.created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+        WHERE 1=1
     "#;
 
     if let Some(t) = itemType {

@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 use crate::db::{
     CompanyInfo, Consultation, Customer, CustomerAddress, CustomerLedger, CustomerLog, DbPool,
-    Event, Expense, ExperienceProgram, InventoryLog, Product, ProductPriceHistory, Sales, Schedule,
-    User, Vendor,
+    Event, Expense, ExperienceProgram, FarmingLog, HarvestRecord, InventoryLog, Product,
+    ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, User, Vendor,
 };
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::{BACKUP_CANCELLED, DB_MODIFIED, IS_EXITING};
@@ -773,6 +773,25 @@ async fn backup_database_internal(
             .fetch_one(pool)
             .await?
     };
+    let count_prod_spaces: (i64,) = sqlx::query_as(&count_query("production_spaces"))
+        .fetch_one(pool)
+        .await?;
+    let count_prod_batches: (i64,) = sqlx::query_as(&count_query("production_batches"))
+        .fetch_one(pool)
+        .await?;
+    let count_farming_logs: (i64,) = sqlx::query_as(&count_query("farming_logs"))
+        .fetch_one(pool)
+        .await?;
+    let count_harvest: (i64,) = sqlx::query_as(&if let Some(s) = since {
+        format!(
+            "SELECT COUNT(*) FROM harvest_records WHERE created_at > '{}'",
+            s.format("%Y-%m-%d %H:%M:%S")
+        )
+    } else {
+        "SELECT COUNT(*) FROM harvest_records".to_string()
+    })
+    .fetch_one(pool)
+    .await?;
 
     let total_records = count_users.0
         + count_products.0
@@ -794,7 +813,11 @@ async fn backup_database_internal(
         + count_exp_reservations.0
         + count_bom.0
         + count_price_history.0
-        + count_deletions.0;
+        + count_deletions.0
+        + count_prod_spaces.0
+        + count_prod_batches.0
+        + count_farming_logs.0
+        + count_harvest.0;
 
     let mut processed = 0i64;
 
@@ -1084,6 +1107,43 @@ async fn backup_database_internal(
         "deleted_at"
     );
 
+    batch_table_internal!(
+        "production_spaces",
+        ProductionSpace,
+        "SELECT * FROM production_spaces",
+        "production_spaces",
+        "시설 정보 백업 중",
+        count_prod_spaces.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "production_batches",
+        ProductionBatch,
+        "SELECT * FROM production_batches",
+        "production_batches",
+        "생산 배치 백업 중",
+        count_prod_batches.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "farming_logs",
+        FarmingLog,
+        "SELECT * FROM farming_logs",
+        "farming_logs",
+        "영농 일지 백업 중",
+        count_farming_logs.0,
+        "updated_at"
+    );
+    batch_table_internal!(
+        "harvest_records",
+        HarvestRecord,
+        "SELECT * FROM harvest_records",
+        "harvest_records",
+        "수확 기록 백업 중",
+        count_harvest.0,
+        "created_at"
+    );
+
     writeln!(writer, "  \"backup_complete\": true")
         .map_err(|e| MyceliumError::Internal(e.to_string()))?;
     writeln!(writer, "}}").map_err(|e| MyceliumError::Internal(e.to_string()))?;
@@ -1200,7 +1260,7 @@ pub async fn restore_database(
 
         emit_progress(0, total_bytes as i64, "기존 데이터 삭제 중 (전체 복구)...");
         println!("[Restore] Truncating tables for full restore...");
-        sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, consultations, sales_claims, inventory_logs, customer_ledger, customer_logs, vendors, experience_programs, experience_reservations, product_bom, product_price_history, deletion_log RESTART IDENTITY CASCADE")
+        sqlx::query("TRUNCATE TABLE users, products, customers, customer_addresses, sales, event, schedules, company_info, expenses, purchases, consultations, sales_claims, inventory_logs, customer_ledger, customer_logs, vendors, experience_programs, experience_reservations, product_bom, product_price_history, deletion_log, production_spaces, production_batches, farming_logs, harvest_records RESTART IDENTITY CASCADE")
             .execute(&mut *tx)
             .await
             .map_err(|e| {
@@ -1601,6 +1661,62 @@ pub async fn restore_database(
         }
     );
 
+    // PRODUCTION SPACES
+    restore_table!(
+        "production_spaces",
+        ProductionSpace,
+        "시설 정보 복구 중",
+        s,
+        t,
+        {
+            sqlx::query("INSERT INTO production_spaces (space_id, space_name, space_type, location_info, area_size, area_unit, is_active, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (space_id) DO UPDATE SET space_name=EXCLUDED.space_name, updated_at=EXCLUDED.updated_at")
+            .bind(s.space_id).bind(s.space_name).bind(s.space_type).bind(s.location_info).bind(s.area_size).bind(s.area_unit).bind(s.is_active).bind(s.memo).bind(s.created_at).bind(s.updated_at)
+            .execute(&mut **t).await?;
+        }
+    );
+
+    // PRODUCTION BATCHES
+    restore_table!(
+        "production_batches",
+        ProductionBatch,
+        "생산 배치 복구 중",
+        b,
+        t,
+        {
+            sqlx::query("INSERT INTO production_batches (batch_id, batch_code, product_id, space_id, start_date, end_date, expected_harvest_date, status, initial_quantity, unit, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (batch_id) DO UPDATE SET status=EXCLUDED.status, updated_at=EXCLUDED.updated_at")
+            .bind(b.batch_id).bind(b.batch_code).bind(b.product_id).bind(b.space_id).bind(b.start_date).bind(b.end_date).bind(b.expected_harvest_date).bind(b.status).bind(b.initial_quantity).bind(b.unit).bind(b.created_at).bind(b.updated_at)
+            .execute(&mut **t).await?;
+        }
+    );
+
+    // FARMING LOGS
+    restore_table!(
+        "farming_logs",
+        FarmingLog,
+        "영농 일지 복구 중",
+        l,
+        t,
+        {
+            sqlx::query("INSERT INTO farming_logs (log_id, batch_id, space_id, log_date, worker_name, work_type, work_content, input_materials, env_data, photos, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (log_id) DO UPDATE SET work_content=EXCLUDED.work_content, updated_at=EXCLUDED.updated_at")
+            .bind(l.log_id).bind(l.batch_id).bind(l.space_id).bind(l.log_date).bind(l.worker_name).bind(l.work_type).bind(l.work_content).bind(l.input_materials).bind(l.env_data).bind(l.photos).bind(l.created_at).bind(l.updated_at)
+            .execute(&mut **t).await?;
+        }
+    );
+
+    // HARVEST RECORDS
+    restore_table!(
+        "harvest_records",
+        HarvestRecord,
+        "수확 기록 복구 중",
+        r,
+        t,
+        {
+            sqlx::query("INSERT INTO harvest_records (harvest_id, batch_id, harvest_date, quantity, unit, grade, traceability_code, memo, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (harvest_id) DO NOTHING")
+            .bind(r.harvest_id).bind(r.batch_id).bind(r.harvest_date).bind(r.quantity).bind(r.unit).bind(r.grade).bind(r.traceability_code).bind(r.memo).bind(r.created_at)
+            .execute(&mut **t).await?;
+        }
+    );
+
     // DELETIONS
     restore_table!("deletions", DeletionLog, "삭제 이력 반영 중", d, t, {
         // 1. Restore the log entry itself (Audit Trail)
@@ -1614,6 +1730,10 @@ pub async fn restore_database(
                 "sales" => "sales_id",
                 "products" => "product_id",
                 "customers" => "customer_id",
+                "production_spaces" => "space_id",
+                "production_batches" => "batch_id",
+                "farming_logs" => "log_id",
+                "harvest_records" => "harvest_id",
                 _ => "id",
             };
             sqlx::query(&format!(
@@ -1695,6 +1815,7 @@ pub async fn reset_database(state: State<'_, DbPool>) -> MyceliumResult<String> 
         experience_programs, experience_reservations, 
         vendors, purchases, expenses, deletion_log,
         product_price_history, customer_logs,
+        production_spaces, production_batches, farming_logs, harvest_records,
         users, company_info
         RESTART IDENTITY CASCADE";
 

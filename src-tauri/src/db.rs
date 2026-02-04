@@ -707,3 +707,61 @@ pub struct ProductBomJoin {
     pub stock_quantity: i32, // Current stock of material
     pub item_type: Option<String>,
 }
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct ProductionSpace {
+    pub space_id: i32,
+    pub space_name: String,
+    pub space_type: Option<String>,
+    pub location_info: Option<String>,
+    pub area_size: Option<rust_decimal::Decimal>,
+    pub area_unit: Option<String>,
+    pub is_active: bool,
+    pub memo: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct ProductionBatch {
+    pub batch_id: i32,
+    pub batch_code: String,
+    pub product_id: Option<i32>,
+    pub space_id: Option<i32>,
+    pub start_date: NaiveDate,
+    pub end_date: Option<NaiveDate>,
+    pub expected_harvest_date: Option<NaiveDate>,
+    pub status: Option<String>,
+    pub initial_quantity: Option<rust_decimal::Decimal>,
+    pub unit: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct FarmingLog {
+    pub log_id: i32,
+    pub batch_id: Option<i32>,
+    pub space_id: Option<i32>,
+    pub log_date: NaiveDate,
+    pub worker_name: Option<String>,
+    pub work_type: String,
+    pub work_content: String,
+    pub input_materials: Option<serde_json::Value>,
+    pub env_data: Option<serde_json::Value>,
+    pub photos: Option<serde_json::Value>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct HarvestRecord {
+    pub harvest_id: i32,
+    pub batch_id: Option<i32>,
+    pub harvest_date: NaiveDate,
+    pub quantity: rust_decimal::Decimal,
+    pub unit: String,
+    pub grade: Option<String>,
+    pub traceability_code: Option<String>,
+    pub memo: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
+}

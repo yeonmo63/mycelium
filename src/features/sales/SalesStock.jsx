@@ -21,11 +21,23 @@ const SalesStock = () => {
         deductions: [], // Array of { materialId, name, ratio, stock, tQty (theory), rQty (real), type }
         loading: false
     });
-    // Harvest State (Raw Material In)
-    const [harvestModal, setHarvestModal] = useState({ open: false, targetId: '', qty: '', memo: '' });
+    // Harvest State (Raw Material / Product In)
+    const [harvestModal, setHarvestModal] = useState({
+        open: false,
+        items: [{ id: Date.now(), targetId: '', qty: '' }],
+        memo: ''
+    });
+
+    // Manual Adjustment Modal
+    const [adjustModal, setAdjustModal] = useState({
+        open: false,
+        product: null,
+        val: '',
+        reason: '',
+        memo: ''
+    });
 
     const [freshnessMap, setFreshnessMap] = useState({}); // { [productId]: '2023-10-01T...' }
-    const [pendingChanges, setPendingChanges] = useState({});
 
     // --- Effects ---
     useEffect(() => {
@@ -79,40 +91,34 @@ const SalesStock = () => {
     // ... (inside render)
 
     // --- Actions ---
-    const handleAddStockInput = (pid, val) => {
-        setPendingChanges(prev => ({ ...prev, [pid]: { ...prev[pid], val } }));
+    const openAdjustModal = (product) => {
+        setAdjustModal({
+            open: true,
+            product,
+            val: '',
+            reason: '',
+            memo: ''
+        });
     };
 
-    const handleReasonChange = (pid, reason) => {
-        setPendingChanges(prev => ({ ...prev, [pid]: { ...prev[pid], reason } }));
-    };
-
-    const handleSaveStock = async (product) => {
-        const change = pendingChanges[product.product_id];
-        const val = Number(change?.val);
-        if (!change || val === 0) return;
+    const handleAdjustStock = async () => {
+        const { product, val, reason, memo } = adjustModal;
+        const changeQty = Number(val);
+        if (!product || changeQty === 0) return;
 
         try {
             if (window.__TAURI__) {
-                const memoText = val > 0 ? '재고 입고(수동)' : '재고 조정(수동)';
-                const reason = change.reason || '';
-                const fullMemo = reason ? `${memoText} - ${reason}` : memoText;
+                const memoText = changeQty > 0 ? '재고 입고(수동)' : '재고 조정(수동)';
+                const fullMemo = memo ? `${memoText} - ${memo}` : (reason ? `${memoText} - ${reason}` : memoText);
 
                 await window.__TAURI__.core.invoke('adjust_product_stock', {
                     productId: product.product_id,
-                    changeQty: val,
+                    changeQty,
                     memo: fullMemo,
                     reasonCategory: reason || null
                 });
 
-                // Success Feedback
-                // Clear input
-                setPendingChanges(prev => {
-                    const next = { ...prev };
-                    delete next[product.product_id];
-                    return next;
-                });
-
+                setAdjustModal({ ...adjustModal, open: false });
                 await loadData();
             }
         } catch (e) {
@@ -120,31 +126,65 @@ const SalesStock = () => {
         }
     };
 
-    // --- Harvest Logic (New) ---
+    // --- Harvest Logic (Multi-Item) ---
     const openHarvestModal = () => {
-        // Filter only materials (raw or legacy material)
-        const materials = products.filter(p => p.item_type === 'raw_material' || p.item_type === 'material');
-        if (materials.length === 0) {
-            showAlert("알림", "등록된 농산물(원물)이 없습니다.\n[환경 설정 > 상품 관리]에서 '원물(농산물)' 타입으로 품목을 등록해주세요.");
+        // Filter items that are either Products OR Raw Materials (Exclude Aux Materials)
+        const targets = products.filter(p => p.item_type !== 'aux_material');
+        if (targets.length === 0) {
+            showAlert("알림", "등록된 품목이 없습니다.\n[환경 설정]에서 먼저 상품이나 원물을 등록해주세요.");
             return;
         }
-        setHarvestModal({ open: true, targetId: materials[0].product_id, qty: '', memo: '' });
+        setHarvestModal({
+            open: true,
+            items: [{ id: Date.now(), targetId: targets[0].product_id, qty: '' }],
+            memo: ''
+        });
+    };
+
+    const addHarvestItem = () => {
+        const targets = products.filter(p => p.item_type !== 'aux_material');
+        setHarvestModal(prev => ({
+            ...prev,
+            items: [...prev.items, { id: Date.now(), targetId: targets[0]?.product_id || '', qty: '' }]
+        }));
+    };
+
+    const removeHarvestItem = (id) => {
+        if (harvestModal.items.length <= 1) return;
+        setHarvestModal(prev => ({
+            ...prev,
+            items: prev.items.filter(item => item.id !== id)
+        }));
+    };
+
+    const updateHarvestItem = (id, field, value) => {
+        setHarvestModal(prev => ({
+            ...prev,
+            items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
+        }));
     };
 
     const handleHarvest = async () => {
-        const { targetId, qty, memo } = harvestModal;
-        if (!targetId) return showAlert("알림", "수확한 품목을 선택해주세요.");
-        if (Number(qty) <= 0) return showAlert("알림", "수확량을 0보다 크게 입력해주세요.");
+        const { items, memo } = harvestModal;
+
+        // Validation
+        const validItems = items.filter(i => i.targetId && Number(i.qty) > 0);
+        if (validItems.length === 0) {
+            return showAlert("알림", "정확한 수확 품목과 수량을 입력해주세요.");
+        }
 
         try {
             if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('adjust_product_stock', {
-                    productId: Number(targetId),
-                    changeQty: Number(qty),
-                    memo: memo ? `수확 입고 - ${memo}` : '수확 입고',
-                    reasonCategory: '수확'
-                });
-                await showAlert("완료", "수확 입고 처리가 완료되었습니다.");
+                await Promise.all(validItems.map(item =>
+                    window.__TAURI__.core.invoke('adjust_product_stock', {
+                        productId: Number(item.targetId),
+                        changeQty: Number(item.qty),
+                        memo: memo ? `수확 입고 - ${memo}` : '수확 입고',
+                        reasonCategory: '수확'
+                    })
+                ));
+
+                await showAlert("완료", `${validItems.length}건의 수확 입고 처리가 완료되었습니다.`);
                 setHarvestModal({ ...harvestModal, open: false });
                 loadData();
             }
@@ -353,10 +393,10 @@ const SalesStock = () => {
     // --- Derived ---
     const filteredProducts = useMemo(() => {
         let list = products;
-        if (tab === 'raw_material') {
-            list = list.filter(p => p.item_type === 'raw_material' || p.item_type === 'material');
+        if (tab === 'harvest_item') {
+            list = list.filter(p => p.item_type === 'harvest_item');
         } else if (tab === 'aux_material') {
-            list = list.filter(p => p.item_type === 'aux_material');
+            list = list.filter(p => p.item_type === 'aux_material' || p.item_type === 'raw_material' || p.item_type === 'material');
         } else {
             // product
             list = list.filter(p => !p.item_type || p.item_type === 'product');
@@ -369,7 +409,7 @@ const SalesStock = () => {
     const filteredLogs = useMemo(() => {
         let list = logs;
         if (hideAutoLogs) {
-            list = list.filter(l => l.reference_id === 'MANUAL' || (l.change_type !== '출고' && l.change_type !== '취소반품'));
+            list = list.filter(l => l.reference_id === 'MANUAL' || (l.change_type !== '출고' && l.change_type !== '취소반품' && l.change_type !== '생산출고'));
         }
         if (logSearchQuery) {
             const q = logSearchQuery.toLowerCase();
@@ -430,8 +470,33 @@ const SalesStock = () => {
                             <span className="text-[9px] font-black tracking-[0.2em] text-indigo-600 uppercase">Inventory Management</span>
                         </div>
                         <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
-                            재고 관리 & Farm <span className="text-slate-300 font-light ml-1 text-xl">Stock Control</span>
+                            재고/생산 관리 <span className="text-slate-300 font-light ml-1 text-xl">Stock & Production</span>
                         </h1>
+                    </div>
+                </div>
+
+                {/* Quick Info Box */}
+                <div className="mb-6 flex flex-wrap gap-4">
+                    <div className="flex-1 min-w-[200px] bg-indigo-50/50 border border-indigo-100 p-3 rounded-2xl flex items-center gap-3">
+                        <span className="material-symbols-rounded text-indigo-600 bg-white p-1.5 rounded-xl text-lg shadow-sm">potted_plant</span>
+                        <div>
+                            <p className="text-[10px] font-black text-indigo-900">완제품</p>
+                            <p className="text-[9px] text-indigo-500 font-bold leading-tight">포장이 완료되어 판매 대기 중인 최종 상품</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 min-w-[200px] bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl flex items-center gap-3">
+                        <span className="material-symbols-rounded text-emerald-600 bg-white p-1.5 rounded-xl text-lg shadow-sm">spa</span>
+                        <div>
+                            <p className="text-[10px] font-black text-emerald-900">농산물 (수확물)</p>
+                            <p className="text-[9px] text-emerald-500 font-bold leading-tight">송고버섯 등 현장에서 직접 수확한 원물</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 min-w-[200px] bg-orange-50/50 border border-orange-100 p-3 rounded-2xl flex items-center gap-3">
+                        <span className="material-symbols-rounded text-orange-600 bg-white p-1.5 rounded-xl text-lg shadow-sm">layers</span>
+                        <div>
+                            <p className="text-[10px] font-black text-orange-900">부자재 (포장재)</p>
+                            <p className="text-[9px] text-orange-500 font-bold leading-tight">박스, 라벨 및 종균/배지 등 각종 자재</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -448,27 +513,27 @@ const SalesStock = () => {
                         {/* Tabs */}
                         <div className="flex gap-2">
                             <div className="flex bg-slate-100 p-1 rounded-xl">
-                                <button onClick={() => setTab('product')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${tab === 'product' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                    <span className="material-symbols-rounded text-base">potted_plant</span> 완제품 (Product)
+                                <button onClick={() => setTab('product')} className={`px-4 py-3 rounded-lg text-sm font-black flex items-center gap-2 transition-all ${tab === 'product' ? 'bg-white text-indigo-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    <span className="material-symbols-rounded text-xl">potted_plant</span> 완제품
                                 </button>
-                                <button onClick={() => setTab('raw_material')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${tab === 'raw_material' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                    <span className="material-symbols-rounded text-base">spa</span> 원물 (농산물)
+                                <button onClick={() => setTab('harvest_item')} className={`px-4 py-3 rounded-lg text-sm font-black flex items-center gap-2 transition-all ${tab === 'harvest_item' ? 'bg-white text-emerald-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    <span className="material-symbols-rounded text-xl">spa</span> 농산물 (수확물)
                                 </button>
-                                <button onClick={() => setTab('aux_material')} className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${tab === 'aux_material' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                    <span className="material-symbols-rounded text-base">layers</span> 부자재 (포장재)
+                                <button onClick={() => setTab('aux_material')} className={`px-4 py-3 rounded-lg text-sm font-black flex items-center gap-2 transition-all ${tab === 'aux_material' ? 'bg-white text-orange-600 shadow-sm scale-[1.02]' : 'text-slate-500 hover:text-slate-700'}`}>
+                                    <span className="material-symbols-rounded text-xl">layers</span> 부자재 (포장재)
                                 </button>
                             </div>
 
                             {/* Action Buttons based on Tab */}
                             <div className="flex gap-2">
-                                {(tab === 'product' || tab === 'raw_material') && (
-                                    <button onClick={openConvertModal} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-200 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 animate-in fade-in zoom-in duration-300">
-                                        <span className="material-symbols-rounded text-base">inventory_2</span> 상품화 (포장/소분)
+                                {(tab === 'product' || tab === 'harvest_item') && (
+                                    <button onClick={openConvertModal} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-100 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95 animate-in fade-in zoom-in duration-300">
+                                        <span className="material-symbols-rounded text-lg">inventory_2</span> 상품화 (포장 완료)
                                     </button>
                                 )}
-                                {tab === 'raw_material' && (
-                                    <button onClick={openHarvestModal} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-200 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 animate-in fade-in zoom-in duration-300">
-                                        <span className="material-symbols-rounded text-base">spa</span> 수확 입고 (농산물)
+                                {tab === 'harvest_item' && (
+                                    <button onClick={openHarvestModal} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-100 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-95 animate-in fade-in zoom-in duration-300">
+                                        <span className="material-symbols-rounded text-lg">spa</span> 수확 입고 등록
                                     </button>
                                 )}
                             </div>
@@ -496,21 +561,15 @@ const SalesStock = () => {
                                         {tab === 'raw_material' ? '품목명 (원물)' : tab === 'aux_material' ? '자재명 (부자재)' : '상품명 (완제품)'}
                                     </th>
                                     <th className="px-2 py-3 text-center w-[12%] border-b border-slate-100">규격</th>
-                                    <th className="px-2 py-3 text-right w-[13%] border-b border-slate-100 bg-indigo-50/30 text-indigo-900">현재고</th>
-                                    <th className="px-2 py-3 w-[12%] border-b border-slate-100 bg-orange-50/30 text-orange-900 border-l border-orange-100/50">수량 조정</th>
-                                    <th className="px-2 py-3 w-[20%] border-b border-slate-100 bg-orange-50/30 text-orange-900">사유</th>
-                                    <th className="px-2 py-3 text-right w-[12%] border-b border-slate-100 bg-emerald-50/30 text-emerald-900 border-l border-emerald-100/50">예상재고</th>
-                                    <th className="px-2 py-3 text-center w-[6%] border-b border-slate-100">저장</th>
+                                    <th className="px-2 py-3 text-right w-[15%] border-b border-slate-100 bg-indigo-50/30 text-indigo-900">현재고</th>
+                                    <th className="px-2 py-3 text-center w-[15%] border-b border-slate-100 italic text-slate-400">최근 입출고일</th>
+                                    <th className="px-2 py-3 text-center w-[13%] border-b border-slate-100">작업</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {filteredProducts.map((p, idx) => {
                                     const current = p.stock_quantity || 0;
-                                    const change = pendingChanges[p.product_id] || { val: '', reason: '' };
-                                    const changeVal = Number(change.val) || 0;
-                                    const after = current + changeVal;
                                     const isLow = current <= (p.safety_stock || 10);
-                                    const hasChange = changeVal !== 0;
 
                                     // Freshness Logic (Only for products and raw materials)
                                     const freshInfo = getFreshnessInfo(p.product_id);
@@ -539,50 +598,23 @@ const SalesStock = () => {
                                             <td className="px-2 py-3 text-center text-slate-500 truncate">{p.specification || '-'}</td>
 
                                             {/* Current Stock */}
-                                            <td className={`px-2 py-3 text-right font-black text-sm bg-indigo-50/10 ${isLow ? 'text-red-500' : 'text-slate-700'}`}>
+                                            <td className={`px-2 py-3 text-right font-black text-sm bg-indigo-50/5 ${isLow ? 'text-red-500' : 'text-slate-700'}`}>
                                                 {formatCurrency(current)}
                                                 {isLow && <span className="material-symbols-rounded text-sm align-middle ml-1 text-red-500 animate-pulse" title="안전재고 부족">error</span>}
                                             </td>
 
-                                            {/* Adjust Input */}
-                                            <td className="px-2 py-2 bg-orange-50/10 border-l border-orange-50">
-                                                <input
-                                                    type="number"
-                                                    className={`w-full h-10 px-2 rounded-lg border text-right font-bold outline-none transition-all ${hasChange ? 'border-orange-300 bg-white ring-2 ring-orange-100' : 'border-slate-200 bg-white/50 focus:bg-white focus:border-orange-300'}`}
-                                                    placeholder="0"
-                                                    value={change.val || ''}
-                                                    onChange={e => handleAddStockInput(p.product_id, e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && handleSaveStock(p)}
-                                                />
-                                            </td>
-                                            {/* Reason Select */}
-                                            <td className="px-2 py-2 bg-orange-50/10">
-                                                <select
-                                                    className="w-full h-10 pl-1 pr-8 rounded-lg border border-slate-200 bg-white/50 text-xs text-slate-600 outline-none focus:border-orange-300 focus:bg-white cursor-pointer appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAyNCAyNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZT0iIzY0NzQ4YiIgY2xhc3M9InNpemUtNiI+PHBhdGggc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBkPSJtMTkuNSA4LjI1LTcuNSA3LjUtNy41LTcuNSIgLz48L3N2Zz4=')] bg-[length:16px_16px] bg-[right_8px_center] bg-no-repeat"
-                                                    value={change.reason || ''}
-                                                    onChange={e => handleReasonChange(p.product_id, e.target.value)}
-                                                >
-                                                    <option value="">일반조정</option>
-                                                    <option value="상품생산">완제품생산</option>
-                                                    <option value="폐기손실">폐기(손실)</option>
-                                                    <option value="마케팅증정">증정(마케팅)</option>
-                                                    <option value="재고입고">입고(구매)</option>
-                                                    <option value="자가소비">자가소비</option>
-                                                </select>
+                                            {/* Last Date */}
+                                            <td className="px-2 py-3 text-center text-slate-400 text-[10px] font-medium">
+                                                {freshInfo?.dateStr ? formatDateTime(freshInfo.dateStr).split(' ')[0] : '-'}
                                             </td>
 
-                                            {/* After Stock */}
-                                            <td className="px-2 py-3 text-right font-black text-sm text-emerald-600 bg-emerald-50/10 border-l border-emerald-50">
-                                                {formatCurrency(after)}
-                                            </td>
-                                            {/* Save Btn */}
-                                            <td className="px-2 py-2 text-center">
+                                            {/* Action Btn */}
+                                            <td className="px-2 py-3 text-center">
                                                 <button
-                                                    onClick={() => handleSaveStock(p)}
-                                                    disabled={!hasChange}
-                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${hasChange ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700 hover:scale-105' : 'text-slate-200 bg-slate-100 cursor-not-allowed'}`}
+                                                    onClick={() => openAdjustModal(p)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 font-bold text-[10px] hover:bg-orange-100 transition-all active:scale-95 shadow-sm border border-orange-100"
                                                 >
-                                                    <span className="material-symbols-rounded text-lg">save</span>
+                                                    <span className="material-symbols-rounded text-base">edit_note</span> 재고 조정
                                                 </button>
                                             </td>
                                         </tr>
@@ -672,9 +704,10 @@ const SalesStock = () => {
 
                                                 if (log.change_type === '입고') { typeColor = "bg-blue-50 text-blue-600 border-blue-100"; typeIcon = "login"; }
                                                 else if (log.change_type === '출고') { typeColor = "bg-rose-50 text-rose-600 border-rose-100"; typeIcon = "logout"; }
-                                                else if (log.change_type === '수확') { typeColor = "bg-emerald-50 text-emerald-600 border-emerald-100"; typeIcon = "spa"; }
+                                                else if (log.change_type === '수확' || log.change_type === '생산입고') { typeColor = "bg-emerald-50 text-emerald-600 border-emerald-100"; typeIcon = "spa"; }
                                                 else if (log.change_type === '취소반품') { typeColor = "bg-green-50 text-green-600 border-green-100"; typeIcon = "keyboard_return"; }
                                                 else if (log.change_type === '상품생산') { typeColor = "bg-purple-50 text-purple-600 border-purple-100"; typeIcon = "inventory_2"; }
+                                                else if (log.change_type === '조정') { typeColor = "bg-amber-50 text-amber-600 border-amber-100"; typeIcon = "edit_note"; }
 
                                                 return (
                                                     <div key={idx} className="group relative bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all">
@@ -747,9 +780,11 @@ const SalesStock = () => {
                                     >
                                         <option value="">-- 원재료를 선택하세요 --</option>
                                         {products
-                                            .filter(p => p.item_type === 'raw_material' || p.item_type === 'material')
+                                            .filter(p => p.item_type === 'harvest_item' || p.item_type === 'raw_material' || p.item_type === 'material')
                                             .map(p => (
-                                                <option key={p.product_id} value={p.product_id}>{p.product_name} ({p.specification || '원본'})</option>
+                                                <option key={p.product_id} value={p.product_id}>
+                                                    [{p.item_type === 'harvest_item' ? '농산물' : '원자재'}] {p.product_name} ({p.specification || '원본'})
+                                                </option>
                                             ))
                                         }
                                     </select>
@@ -890,64 +925,177 @@ const SalesStock = () => {
                 </div>
             )}
 
-            {/* Harvest Modal (Material Tab) */}
+            {/* Harvest Modal (Material / Product Tab) */}
             {harvestModal.open && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setHarvestModal({ ...harvestModal, open: false })}></div>
-                    <div className="bg-white rounded-2xl w-full max-w-[400px] shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 text-white relative overflow-hidden">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity" onClick={() => setHarvestModal({ ...harvestModal, open: false })}></div>
+                    <div className="bg-white rounded-2xl w-full max-w-[480px] shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 text-white relative overflow-hidden shrink-0">
                             <span className="material-symbols-rounded absolute -right-6 -top-6 text-[120px] text-white/10 pointer-events-none">spa</span>
                             <h3 className="text-lg font-black flex items-center gap-2 relative z-10">
-                                <span className="material-symbols-rounded">spa</span> 농산물 수확 (입고)
+                                <span className="material-symbols-rounded">spa</span> 농산물 수확 입고 (Multi-Entry)
                             </h3>
-                            <p className="text-xs text-white/80 mt-1 relative z-10 font-medium">당일 수확한 농산물을 원자재 창고에 등록합니다.</p>
+                            <p className="text-xs text-white/80 mt-1 relative z-10 font-medium">당일 수확한 품목들을 한 번에 등록합니다.</p>
                         </div>
 
-                        <div className="p-6">
-                            <div className="mb-5">
-                                <label className="text-xs font-bold text-slate-500 block mb-1.5 ml-1">수확 품목 (원물)</label>
-                                <div className="relative">
-                                    <select
-                                        className="w-full h-11 pl-3 pr-8 rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 appearance-none transition-all"
-                                        value={harvestModal.targetId}
-                                        onChange={e => setHarvestModal({ ...harvestModal, targetId: e.target.value })}
-                                    >
-                                        {products.filter(p => p.item_type === 'raw_material' || p.item_type === 'material').map(p => (
-                                            <option key={p.product_id} value={p.product_id}>{p.product_name} ({p.specification || '규격없음'})</option>
-                                        ))}
-                                    </select>
-                                    <span className="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                        <div className="p-6 overflow-y-auto stylish-scrollbar flex-1">
+                            <div className="space-y-4">
+                                {harvestModal.items.map((item, idx) => (
+                                    <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative group animate-in slide-in-from-top-2 duration-200">
+                                        <div className="grid grid-cols-12 gap-3 items-end">
+                                            <div className="col-span-12 md:col-span-8">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">수확 품목 {idx + 1}</label>
+                                                <div className="relative">
+                                                    <select
+                                                        className="w-full h-11 pl-3 pr-8 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 appearance-none transition-all"
+                                                        value={item.targetId}
+                                                        onChange={e => updateHarvestItem(item.id, 'targetId', e.target.value)}
+                                                    >
+                                                        {products.filter(p => p.item_type === 'harvest_item' || !p.item_type || p.item_type === 'product').map(p => (
+                                                            <option key={p.product_id} value={p.product_id}>
+                                                                [{p.item_type === 'harvest_item' ? '농산물' : '완제품'}] {p.product_name} ({p.specification || '규격없음'})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <span className="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                                                </div>
+                                            </div>
+                                            <div className="col-span-12 md:col-span-4 flex items-center gap-2">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1 text-right">수량 ({products.find(p => p.product_id === Number(item.targetId))?.specification || '단위'})</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        className="w-full h-11 rounded-xl border border-slate-200 bg-white text-right font-black text-lg text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 transition-all placeholder:text-slate-200"
+                                                        value={item.qty}
+                                                        onChange={e => updateHarvestItem(item.id, 'qty', e.target.value)}
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                                {harvestModal.items.length > 1 && (
+                                                    <button
+                                                        onClick={() => removeHarvestItem(item.id)}
+                                                        className="h-11 w-11 rounded-xl bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all flex items-center justify-center shrink-0"
+                                                    >
+                                                        <span className="material-symbols-rounded text-lg">delete</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                <button
+                                    onClick={addHarvestItem}
+                                    className="w-full py-3 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-emerald-200 hover:text-emerald-500 transition-all"
+                                >
+                                    <span className="material-symbols-rounded text-base">add_circle</span> 수확 품목 추가
+                                </button>
+                            </div>
+
+                            <div className="mt-8">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1 italic">수확 비고 (Harvest Memo)</label>
+                                <textarea
+                                    className="w-full h-20 p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 transition-all resize-none"
+                                    value={harvestModal.memo}
+                                    onChange={e => setHarvestModal({ ...harvestModal, memo: e.target.value })}
+                                    placeholder="상세 내용을 기록하세요."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
+                            <div className="flex gap-3">
+                                <button onClick={() => setHarvestModal({ ...harvestModal, open: false })} className="flex-1 h-12 rounded-xl bg-white border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-100 transition-colors">취소</button>
+                                <button onClick={handleHarvest} className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all flex items-center justify-center">
+                                    수확 입고 완료
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Manual Adjust Modal */}
+            {adjustModal.open && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity" onClick={() => setAdjustModal({ ...adjustModal, open: false })}></div>
+                    <div className="bg-white rounded-[2rem] w-full max-w-[400px] shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="bg-gradient-to-r from-orange-500 to-amber-600 p-6 text-white relative">
+                            <span className="material-symbols-rounded absolute -right-6 -top-6 text-[120px] text-white/10 pointer-events-none">edit_note</span>
+                            <h3 className="text-xl font-black flex items-center gap-2 relative z-10">
+                                <span className="material-symbols-rounded">edit_note</span> 재고 직접 조정
+                            </h3>
+                            <p className="text-xs text-white/80 mt-1 relative z-10 font-bold">[{adjustModal.product?.product_name}] 수량을 수정합니다.</p>
+                        </div>
+
+                        <div className="p-8">
+                            <div className="flex justify-between items-center mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="text-center flex-1">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">현재고</p>
+                                    <p className="text-xl font-black text-slate-700">{formatCurrency(adjustModal.product?.stock_quantity || 0)}</p>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+                                    <span className="material-symbols-rounded text-slate-300">double_arrow</span>
+                                </div>
+                                <div className="text-center flex-1">
+                                    <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-1">조정 후</p>
+                                    <p className="text-xl font-black text-orange-600">{formatCurrency((adjustModal.product?.stock_quantity || 0) + (Number(adjustModal.val) || 0))}</p>
                                 </div>
                             </div>
 
-                            <div className="mb-5">
-                                <label className="text-xs font-bold text-slate-500 block mb-1.5 ml-1">수확량 ({harvestModal.targetId && products.find(p => p.product_id === Number(harvestModal.targetId))?.specification || 'kg'})</label>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        className="w-full h-14 rounded-xl border border-slate-200 text-center font-black text-2xl text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-50 focus:border-emerald-300 transition-all placeholder:text-slate-200"
-                                        value={harvestModal.qty}
-                                        onChange={e => setHarvestModal({ ...harvestModal, qty: e.target.value })}
-                                        placeholder="0"
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">조정 수량 (+입고, -출고)</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            className="w-full h-14 rounded-2xl border-2 border-slate-200 bg-white text-center font-black text-2xl text-slate-700 outline-none focus:border-orange-500 transition-all placeholder:text-slate-200"
+                                            value={adjustModal.val}
+                                            onChange={e => setAdjustModal({ ...adjustModal, val: e.target.value })}
+                                            placeholder="0"
+                                            autoFocus
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
+                                            {adjustModal.product?.specification || '단위'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">조정 사유 (Category)</label>
+                                    <div className="relative">
+                                        <select
+                                            className="w-full h-12 pl-4 pr-10 rounded-xl border border-slate-200 bg-white font-bold text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 appearance-none transition-all"
+                                            value={adjustModal.reason}
+                                            onChange={e => setAdjustModal({ ...adjustModal, reason: e.target.value })}
+                                        >
+                                            <option value="">일반 조정</option>
+                                            <option value="폐기손실">폐기(손실)</option>
+                                            <option value="마케팅증정">증정(마케팅)</option>
+                                            <option value="재고입고">입고(구매)</option>
+                                            <option value="자가소비">자가소비</option>
+                                            <option value="상품생산">완제품생산용</option>
+                                        </select>
+                                        <span className="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">상세 비고 (Memo)</label>
+                                    <textarea
+                                        className="w-full h-20 p-4 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all resize-none"
+                                        value={adjustModal.memo}
+                                        onChange={e => setAdjustModal({ ...adjustModal, memo: e.target.value })}
+                                        placeholder="상세 내용을 입력하세요."
                                     />
                                 </div>
                             </div>
 
-                            <div className="mb-6">
-                                <label className="text-xs font-bold text-slate-500 block mb-1.5 ml-1">메모 (선택)</label>
-                                <input
-                                    type="text"
-                                    className="w-full h-11 px-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 transition-all placeholder:text-slate-400"
-                                    placeholder="예: 오전 수확분, 상태 최상 등"
-                                    value={harvestModal.memo}
-                                    onChange={e => setHarvestModal({ ...harvestModal, memo: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="flex gap-3">
-                                <button onClick={() => setHarvestModal({ ...harvestModal, open: false })} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors">취소</button>
-                                <button onClick={handleHarvest} className="flex-1 h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-200 transition-all hover:scale-[1.02] active:scale-95">수확 등록</button>
+                            <div className="flex gap-3 mt-8">
+                                <button onClick={() => setAdjustModal({ ...adjustModal, open: false })} className="flex-1 h-14 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 font-black text-sm transition-colors">취소</button>
+                                <button onClick={handleAdjustStock} className="flex-1 h-14 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-black text-sm shadow-lg shadow-orange-200 transition-all hover:scale-[1.02] active:scale-95">저장 완료</button>
                             </div>
                         </div>
                     </div>

@@ -227,7 +227,7 @@ const SettingsProduct = () => {
             .filter(b => selectedImports.includes(b.material_id))
             .map(b => {
                 const material = allProducts.find(p => p.product_id === b.material_id);
-                const type = (material?.item_type === 'raw_material' || material?.item_type === 'material') ? 'raw' : 'aux';
+                const type = (material?.item_type === 'raw_material' || material?.item_type === 'material' || material?.item_type === 'harvest_item') ? 'raw' : 'aux';
                 return {
                     materialId: b.material_id,
                     ratio: b.ratio,
@@ -356,10 +356,11 @@ const SettingsProduct = () => {
         let filtered = allProducts;
 
         // Tab filter
-        if (tabMode === 'raw_material') {
-            filtered = filtered.filter(p => p.item_type === 'raw_material' || p.item_type === 'material'); // Legacy 'material' treated as raw for compatibility
+        if (tabMode === 'harvest_item') {
+            filtered = filtered.filter(p => p.item_type === 'harvest_item');
         } else if (tabMode === 'aux_material') {
-            filtered = filtered.filter(p => p.item_type === 'aux_material');
+            // 부자재 탭에는 원자재와 부자재 모두 포함
+            filtered = filtered.filter(p => p.item_type === 'aux_material' || p.item_type === 'raw_material' || p.item_type === 'material');
         } else {
             // product
             filtered = filtered.filter(p => !p.item_type || p.item_type === 'product');
@@ -379,7 +380,7 @@ const SettingsProduct = () => {
         return filtered;
     }, [allProducts, tabMode, searchQuery, showDiscontinued]);
 
-    const rawMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'material' || p.item_type === 'raw_material'), [allProducts]);
+    const rawMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'material' || p.item_type === 'raw_material' || p.item_type === 'harvest_item'), [allProducts]);
     const auxMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'aux_material'), [allProducts]);
 
     const suggestedRecipeSource = useMemo(() => {
@@ -428,6 +429,37 @@ const SettingsProduct = () => {
                         </h1>
                     </div>
                 </div>
+
+                {/* Definition Guide Section */}
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100">
+                            <Package size={16} />
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-indigo-900 mb-0.5">완제품</h4>
+                            <p className="text-[10px] text-indigo-600 font-bold leading-relaxed">판매 주력 결과물입니다.<br />(선물세트, 1kg 박스 등)</p>
+                        </div>
+                    </div>
+                    <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-100">
+                            <TrendingUp size={16} />
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-emerald-900 mb-0.5">농산물 (수확물)</h4>
+                            <p className="text-[10px] text-emerald-600 font-bold leading-relaxed">수확하는 버섯 그 자체입니다.<br />(수확 입고의 대상입니다)</p>
+                        </div>
+                    </div>
+                    <div className="bg-orange-50/50 border border-orange-100 p-4 rounded-2xl flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-100">
+                            <Layers size={16} />
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-orange-900 mb-0.5">부자재 (포장재)</h4>
+                            <p className="text-[10px] text-orange-600 font-bold leading-relaxed">종균/배지부터 박스/라벨까지<br />모든 자재를 통합 관리합니다</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Main Content Area */}
@@ -441,27 +473,27 @@ const SettingsProduct = () => {
                             <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-auto">
                                 <button
                                     onClick={() => setTabMode('product')}
-                                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
+                                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
                                         ${tabMode === 'product' ? 'bg-white text-indigo-600 shadow-lg shadow-indigo-500/10' : 'text-slate-400 hover:text-slate-600'}
                                     `}
                                 >
-                                    <Package size={16} /> 완제품
+                                    <Package size={14} /> 완제품
                                 </button>
                                 <button
-                                    onClick={() => setTabMode('raw_material')}
-                                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
-                                        ${tabMode === 'raw_material' ? 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/10' : 'text-slate-400 hover:text-slate-600'}
+                                    onClick={() => setTabMode('harvest_item')}
+                                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
+                                        ${tabMode === 'harvest_item' ? 'bg-white text-emerald-600 shadow-lg shadow-emerald-500/10' : 'text-slate-400 hover:text-slate-600'}
                                     `}
                                 >
-                                    <Layers size={16} /> 원물 (농산물)
+                                    <TrendingUp size={14} /> 농산물 (수확물)
                                 </button>
                                 <button
                                     onClick={() => setTabMode('aux_material')}
-                                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
+                                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-[1.25rem] font-black text-xs transition-all flex items-center justify-center gap-2
                                         ${tabMode === 'aux_material' ? 'bg-white text-orange-600 shadow-lg shadow-orange-500/10' : 'text-slate-400 hover:text-slate-600'}
                                     `}
                                 >
-                                    <Layers size={16} /> 부자재 (포장재)
+                                    <Layers size={14} /> 부자재 (포장재)
                                 </button>
                             </div>
 
@@ -614,7 +646,7 @@ const SettingsProduct = () => {
             {/* Modal */}
             {isModalOpen && (
                 <div className="absolute inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={!isLoading ? closeModal : undefined}></div>
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={!isLoading ? closeModal : undefined}></div>
                     <div className="relative bg-white w-[560px] rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-slate-900/10">
                         {/* Loading Overlay */}
                         {isLoading && (
@@ -641,7 +673,7 @@ const SettingsProduct = () => {
                                     </span>
                                 </div>
                                 <h3 className="text-2xl font-black text-slate-800 tracking-tight">
-                                    {editingProduct ? '정보 수정' : `${formData.type === 'raw_material' ? '원물(농산물)' : formData.type === 'aux_material' ? '부자재(포장재)' : '완제품'} 등록`}
+                                    {editingProduct ? '정보 수정' : `${formData.type === 'raw_material' ? '원자재(구매)' : formData.type === 'aux_material' ? '부자재(포장재)' : formData.type === 'harvest_item' ? '농산물(수확)' : '완제품'} 등록`}
                                 </h3>
                             </div>
                             <button onClick={closeModal} disabled={isLoading} className="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-100 hover:text-slate-600 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
@@ -837,7 +869,7 @@ const SettingsProduct = () => {
                                                                                 <span className="text-[10px] text-slate-400 ml-2 font-mono">x {b.ratio}</span>
                                                                             </div>
                                                                             <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${mat?.item_type === 'raw_material' || mat?.item_type === 'material' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
-                                                                                {mat?.item_type === 'raw_material' || mat?.item_type === 'material' ? '원물' : '부자재'}
+                                                                                {mat?.item_type === 'harvest_item' ? '농산물' : (mat?.item_type === 'raw_material' || mat?.item_type === 'material' ? '원자재' : '부자재')}
                                                                             </span>
                                                                         </label>
                                                                     );
@@ -862,7 +894,7 @@ const SettingsProduct = () => {
                                         <div className="bg-emerald-50/50 rounded-2xl border border-emerald-100/50 p-4">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                                                    <Layers size={14} /> 필요 원물 (농산물)
+                                                    <Layers size={14} /> 필요 원재료 (농산물/자재)
                                                 </span>
                                                 <button type="button" onClick={() => handleAddBom('raw')} disabled={isLoading} className="text-[10px] font-black bg-white border border-emerald-200 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm disabled:opacity-50">
                                                     + 원물 추가
@@ -883,7 +915,7 @@ const SettingsProduct = () => {
                                                                 className="w-full h-10 px-3 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-emerald-500 transition-all ring-1 ring-inset ring-emerald-200 disabled:opacity-70"
                                                                 disabled={isLoading}
                                                             >
-                                                                <option value="">원물 선택...</option>
+                                                                <option value="">원재료 선택...</option>
                                                                 {rawMaterials.map(m => <option key={m.product_id} value={m.product_id}>{m.product_name} {m.specification && `(${m.specification})`}</option>)}
                                                             </select>
                                                         </div>

@@ -1105,3 +1105,65 @@ pub async fn delete_user(state: State<'_, crate::db::DbPool>, id: i32) -> Myceli
         .await?;
     Ok(())
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct TaxConfig {
+    pub vat_rate: f64,
+    pub is_vat_included: bool,
+    pub tax_office_number: Option<String>,
+}
+
+#[tauri::command]
+pub async fn save_tax_config(app: AppHandle, config: TaxConfig) -> MyceliumResult<()> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    let mut config_data = if config_path.exists() {
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
+
+    config_data["tax_vat_rate"] = json!(config.vat_rate);
+    config_data["tax_is_vat_included"] = json!(config.is_vat_included);
+    config_data["tax_office_number"] = json!(config.tax_office_number.unwrap_or_default());
+
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_tax_config_for_ui(app: AppHandle) -> MyceliumResult<TaxConfig> {
+    let mut config = TaxConfig::default();
+
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let config_path = config_dir.join("config.json");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                    config.vat_rate = json
+                        .get("tax_vat_rate")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.1);
+                    config.is_vat_included = json
+                        .get("tax_is_vat_included")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+                    config.tax_office_number = json
+                        .get("tax_office_number")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+        }
+    }
+    Ok(config)
+}
