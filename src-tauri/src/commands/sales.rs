@@ -34,6 +34,53 @@ pub struct SpecialSaleInput {
     pub memo: Option<String>,
 }
 
+async fn calculate_bom_tax_distribution(
+    pool: &sqlx::PgPool,
+    product_id: i32,
+    total_amount: i32,
+) -> MyceliumResult<Option<(i32, i32, i32)>> {
+    let rows: Vec<(f64, String, i32)> = sqlx::query_as(
+        r#"
+        SELECT b.ratio, p.tax_type, p.unit_price
+        FROM product_bom b
+        JOIN products p ON b.material_id = p.product_id
+        WHERE b.product_id = $1
+        "#,
+    )
+    .bind(product_id)
+    .fetch_all(pool)
+    .await?;
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let mut total_bom_value = 0.0;
+    let mut taxable_bom_value = 0.0;
+
+    for (ratio, tax_type, unit_price) in rows {
+        let val = ratio * (unit_price as f64);
+        total_bom_value += val;
+        if tax_type == "과세" {
+            taxable_bom_value += val;
+        }
+    }
+
+    if total_bom_value <= 0.0 {
+        return Ok(None);
+    }
+
+    let taxable_portion_ratio = taxable_bom_value / total_bom_value;
+    let total_f = total_amount as f64;
+    let taxable_total = total_f * taxable_portion_ratio;
+
+    let vat = (taxable_total / 1.1 * 0.1).round() as i32;
+    let taxable_supply = (taxable_total - vat as f64).round() as i32;
+    let exempt_amount = total_amount - vat - taxable_supply;
+
+    Ok(Some((taxable_supply, vat, exempt_amount)))
+}
+
 pub fn parse_date_safe(date_str: &str) -> Option<NaiveDate> {
     if date_str.trim().is_empty() {
         return None;
@@ -79,17 +126,39 @@ pub async fn create_sale(
 
     let mut supply_value = total_amount;
     let mut vat_amount = 0;
+    let mut tax_exempt_value = 0;
+    let mut actual_tax_type = tax_type.clone();
 
-    if tax_type == "과세" {
+    if let Some(pid) = product_id {
+        if let Some((s, v, e)) = calculate_bom_tax_distribution(&*state, pid, total_amount).await? {
+            supply_value = s;
+            vat_amount = v;
+            tax_exempt_value = e;
+            actual_tax_type = if e > 0 && (s + v) > 0 {
+                "복합".to_string()
+            } else if e > 0 {
+                "면세".to_string()
+            } else {
+                "과세".to_string()
+            };
+        } else if tax_type == "과세" {
+            let total = total_amount as f64;
+            let supply = (total / 1.1).round() as i32;
+            vat_amount = total_amount - supply;
+            supply_value = supply;
+            tax_exempt_value = 0;
+        }
+    } else if tax_type == "과세" {
         let total = total_amount as f64;
         let supply = (total / 1.1).round() as i32;
         vat_amount = total_amount - supply;
         supply_value = supply;
+        tax_exempt_value = 0;
     }
 
     sqlx::query(
-        "INSERT INTO sales (sales_id, customer_id, product_name, specification, quantity, unit_price, total_amount, order_date, memo, status, product_id, supply_value, vat_amount)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)"
+        "INSERT INTO sales (sales_id, customer_id, product_name, specification, quantity, unit_price, total_amount, order_date, memo, status, product_id, supply_value, vat_amount, tax_type, tax_exempt_value)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)"
     )
     .bind(&sale_id)
     .bind(customer_id)
@@ -104,6 +173,8 @@ pub async fn create_sale(
     .bind(product_id)
     .bind(supply_value)
     .bind(vat_amount)
+    .bind(actual_tax_type)
+    .bind(tax_exempt_value)
     .execute(&*state)
     .await?;
 
@@ -292,6 +363,48 @@ pub async fn update_sale(
         .await?;
     let product_id = p_id_row.map(|r| r.0);
 
+    // Recalculate Tax
+    let mut supply_value = total_amount;
+    let mut vat_amount = 0;
+    let mut tax_exempt_value = 0;
+    let mut actual_tax_type = "면세".to_string();
+
+    let p_info: Option<(String,)> =
+        sqlx::query_as("SELECT tax_type FROM products WHERE product_id = $1")
+            .bind(product_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let tax_type = p_info.map(|r| r.0).unwrap_or_else(|| "면세".to_string());
+
+    if let Some(pid) = product_id {
+        if let Some((s, v, e)) = calculate_bom_tax_distribution(&*state, pid, total_amount).await? {
+            supply_value = s;
+            vat_amount = v;
+            tax_exempt_value = e;
+            actual_tax_type = if e > 0 && (s + v) > 0 {
+                "복합".to_string()
+            } else if e > 0 {
+                "면세".to_string()
+            } else {
+                "과세".to_string()
+            };
+        } else if tax_type == "과세" {
+            let total = total_amount as f64;
+            let supply = (total / 1.1).round() as i32;
+            vat_amount = total_amount - supply;
+            supply_value = supply;
+            tax_exempt_value = 0;
+            actual_tax_type = "과세".to_string();
+        }
+    } else if tax_type == "과세" {
+        let total = total_amount as f64;
+        let supply = (total / 1.1).round() as i32;
+        vat_amount = total_amount - supply;
+        supply_value = supply;
+        tax_exempt_value = 0;
+        actual_tax_type = "과세".to_string();
+    }
+
     // Update
     sqlx::query(
         "UPDATE sales SET
@@ -299,8 +412,8 @@ pub async fn update_sale(
             discount_rate = $6, memo = $7, shipping_name = $8, shipping_zip_code = $9,
             shipping_address_primary = $10, shipping_address_detail = $11, shipping_mobile_number = $12,
             status = $13, payment_status = $14, paid_amount = $15, shipping_date = $16,
-            customer_id = $17, order_date = $18, product_id = $19
-        WHERE sales_id = $20"
+            customer_id = $17, order_date = $18, product_id = $19, supply_value = $20, vat_amount = $21, tax_type = $22, tax_exempt_value = $23
+        WHERE sales_id = $24"
     )
     .bind(product_name)
     .bind(specification)
@@ -321,6 +434,10 @@ pub async fn update_sale(
     .bind(customer_id)
     .bind(order_date_parsed)
     .bind(product_id)
+    .bind(supply_value)
+    .bind(vat_amount)
+    .bind(actual_tax_type)
+    .bind(tax_exempt_value)
     .bind(sales_id)
     .execute(&mut *tx)
     .await?;
@@ -800,17 +917,41 @@ pub async fn save_special_sales_batch(
 
                 let mut supply_value = total;
                 let mut vat_amount = 0;
+                let mut tax_exempt_value = 0;
+                let mut actual_tax_type = tax_type.clone();
 
-                if tax_type == "과세" {
+                if let Some(pid) = p_id {
+                    if let Some((s, v, e)) =
+                        calculate_bom_tax_distribution(&*state, pid, total).await?
+                    {
+                        supply_value = s;
+                        vat_amount = v;
+                        tax_exempt_value = e;
+                        actual_tax_type = if e > 0 && (s + v) > 0 {
+                            "복합".to_string()
+                        } else if e > 0 {
+                            "면세".to_string()
+                        } else {
+                            "과세".to_string()
+                        };
+                    } else if tax_type == "과세" {
+                        let t = total as f64;
+                        let s = (t / 1.1).round() as i32;
+                        vat_amount = total - s;
+                        supply_value = s;
+                        tax_exempt_value = 0;
+                    }
+                } else if tax_type == "과세" {
                     let t = total as f64;
                     let s = (t / 1.1).round() as i32;
                     vat_amount = total - s;
                     supply_value = s;
+                    tax_exempt_value = 0;
                 }
 
                 // Update Sale Record
                 // We use '현장판매완료' status to distinguish from '배송완료'
-                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10, product_id=$11, supply_value=$12, vat_amount=$13 WHERE sales_id=$14")
+                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10, product_id=$11, supply_value=$12, vat_amount=$13, tax_type=$14, tax_exempt_value=$15 WHERE sales_id=$16")
                     .bind(sale_date)
                     .bind(&sale.product_name)
                     .bind(&sale.specification)
@@ -824,6 +965,8 @@ pub async fn save_special_sales_batch(
                     .bind(p_id)
                     .bind(supply_value)
                     .bind(vat_amount)
+                    .bind(actual_tax_type)
+                    .bind(tax_exempt_value)
                     .bind(sid)
                     .execute(&mut *tx)
                     .await?;
@@ -846,15 +989,37 @@ pub async fn save_special_sales_batch(
 
         let mut supply_value = total;
         let mut vat_amount = 0;
+        let mut tax_exempt_value = 0;
+        let mut actual_tax_type = tax_type.clone();
 
-        if tax_type == "과세" {
+        if let Some(pid) = p_id {
+            if let Some((s, v, e)) = calculate_bom_tax_distribution(&*state, pid, total).await? {
+                supply_value = s;
+                vat_amount = v;
+                tax_exempt_value = e;
+                actual_tax_type = if e > 0 && (s + v) > 0 {
+                    "복합".to_string()
+                } else if e > 0 {
+                    "면세".to_string()
+                } else {
+                    "과세".to_string()
+                };
+            } else if tax_type == "과세" {
+                let t = total as f64;
+                let s = (t / 1.1).round() as i32;
+                vat_amount = total - s;
+                supply_value = s;
+                tax_exempt_value = 0;
+            }
+        } else if tax_type == "과세" {
             let t = total as f64;
             let s = (t / 1.1).round() as i32;
             vat_amount = total - s;
             supply_value = s;
+            tax_exempt_value = 0;
         }
 
-        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date, product_id, supply_value, vat_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11, $12, $13, $14)")
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date, product_id, supply_value, vat_amount, tax_type, tax_exempt_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11, $12, $13, $14, $15, $16)")
         .bind(&new_sid)
         .bind(&event_id) // Link to Event ID
         .bind(sale_date)
@@ -869,6 +1034,8 @@ pub async fn save_special_sales_batch(
         .bind(p_id)
         .bind(supply_value)
         .bind(vat_amount)
+        .bind(actual_tax_type)
+        .bind(tax_exempt_value)
         .execute(&mut *tx)
         .await?;
     }
@@ -963,12 +1130,36 @@ pub async fn save_general_sales_batch(
 
         let mut supply_value = item.totalAmount;
         let mut vat_amount = 0;
+        let mut tax_exempt_value = 0;
+        let mut actual_tax_type = tax_type.clone();
 
-        if tax_type == "과세" {
+        if let Some(pid) = product_id {
+            if let Some((s, v, e)) =
+                calculate_bom_tax_distribution(&*state, pid, item.totalAmount).await?
+            {
+                supply_value = s;
+                vat_amount = v;
+                tax_exempt_value = e;
+                actual_tax_type = if e > 0 && (s + v) > 0 {
+                    "복합".to_string()
+                } else if e > 0 {
+                    "면세".to_string()
+                } else {
+                    "과세".to_string()
+                };
+            } else if tax_type == "과세" {
+                let total = item.totalAmount as f64;
+                let supply = (total / 1.1).round() as i32;
+                vat_amount = item.totalAmount - supply;
+                supply_value = supply;
+                tax_exempt_value = 0;
+            }
+        } else if tax_type == "과세" {
             let total = item.totalAmount as f64;
             let supply = (total / 1.1).round() as i32;
             vat_amount = item.totalAmount - supply;
             supply_value = supply;
+            tax_exempt_value = 0;
         }
 
         if let Some(sid) = &item.salesId {
@@ -981,8 +1172,8 @@ pub async fn save_general_sales_batch(
                         shipping_name = $10, shipping_zip_code = $11, shipping_address_primary = $12,
                         shipping_address_detail = $13, shipping_mobile_number = $14,
                         paid_amount = $15, payment_status = $16, discount_rate = $17, product_id = $18,
-                        supply_value = $19, vat_amount = $20
-                    WHERE sales_id = $21"
+                        supply_value = $19, vat_amount = $20, tax_type = $21, tax_exempt_value = $22
+                    WHERE sales_id = $23"
                 )
                 .bind(&item.customerId)
                 .bind(&item.productName)
@@ -1004,6 +1195,8 @@ pub async fn save_general_sales_batch(
                 .bind(product_id)
                 .bind(supply_value)
                 .bind(vat_amount)
+                .bind(actual_tax_type)
+                .bind(tax_exempt_value)
                 .bind(sid)
                 .execute(&mut *tx).await?;
 
@@ -1020,8 +1213,8 @@ pub async fn save_general_sales_batch(
                 sales_id, customer_id, product_name, specification, quantity, unit_price,
                 total_amount, status, memo, order_date,
                 shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number,
-                paid_amount, payment_status, discount_rate, product_id, supply_value, vat_amount
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)"
+                paid_amount, payment_status, discount_rate, product_id, supply_value, vat_amount, tax_type, tax_exempt_value
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"
         )
         .bind(&new_sid)
         .bind(&item.customerId)
@@ -1044,6 +1237,8 @@ pub async fn save_general_sales_batch(
         .bind(product_id)
         .bind(supply_value)
         .bind(vat_amount)
+        .bind(actual_tax_type)
+        .bind(tax_exempt_value)
         .execute(&mut *tx).await?;
     }
 

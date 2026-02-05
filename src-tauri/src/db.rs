@@ -61,6 +61,14 @@ pub async fn init_database(pool: &DbPool) -> MyceliumResult<()> {
         .execute(pool)
         .await?;
 
+    // 6. Ensure tax columns exist (for mixed tax BOM support)
+    sqlx::query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_exempt_value INTEGER DEFAULT 0")
+        .execute(pool)
+        .await?;
+    sqlx::query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
 
@@ -119,6 +127,8 @@ pub struct Sales {
     pub vat_amount: Option<i32>,
     #[sqlx(default)]
     pub tax_type: Option<String>,
+    #[sqlx(default)]
+    pub tax_exempt_value: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

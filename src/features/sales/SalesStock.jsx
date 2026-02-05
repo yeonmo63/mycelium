@@ -343,7 +343,7 @@ const SalesStock = () => {
                                 name: b.product_name,
                                 stock: b.stock_quantity,
                                 tQty: 0,
-                                type: b.item_type === 'aux_material' ? 'aux' : 'raw'
+                                type: b.item_type === 'product' ? 'prod' : (b.item_type === 'aux_material' ? 'aux' : 'raw')
                             };
                         }
                         aggregation[b.material_id].tQty += Math.ceil(qty * b.ratio);
@@ -769,19 +769,21 @@ const SalesStock = () => {
                                             {/* Action Btn */}
                                             <td className="px-2 py-3 text-center">
                                                 <div className="flex items-center justify-center gap-1.5">
-                                                    {tab === 'harvest_item' && (
+                                                    {(tab === 'harvest_item' || tab === 'product') && (
                                                         <>
-                                                            <button
-                                                                onClick={() => openHarvestModal(p.product_id)}
-                                                                className="inline-flex items-center justify-center p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all active:scale-95 shadow-sm border border-emerald-100"
-                                                                title="수확 입고"
-                                                            >
-                                                                <span className="material-symbols-rounded text-base">spa</span>
-                                                            </button>
+                                                            {tab === 'harvest_item' && (
+                                                                <button
+                                                                    onClick={() => openHarvestModal(p.product_id)}
+                                                                    className="inline-flex items-center justify-center p-2 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all active:scale-95 shadow-sm border border-emerald-100"
+                                                                    title="수확 입고"
+                                                                >
+                                                                    <span className="material-symbols-rounded text-base">spa</span>
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={() => openConvertModal(p.product_id)}
                                                                 className="inline-flex items-center justify-center p-2 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all active:scale-95 shadow-sm border border-indigo-100"
-                                                                title="상품화 (포장)"
+                                                                title={tab === 'product' ? '세트 구성/생산' : '상품화 (포장)'}
                                                             >
                                                                 <span className="material-symbols-rounded text-base">inventory_2</span>
                                                             </button>
@@ -1154,8 +1156,10 @@ const SalesStock = () => {
                                                             return (
                                                                 <div key={d.id} className={`flex items-center justify-between p-3 rounded-2xl border bg-white shadow-sm hover:border-indigo-200 transition-all ${isShort ? 'border-rose-200 bg-rose-50/30' : 'border-slate-100'}`}>
                                                                     <div className="flex items-center gap-2">
-                                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${d.type === 'aux' ? 'bg-orange-50 text-orange-500' : 'bg-indigo-50 text-indigo-500'}`}>
-                                                                            <span className="material-symbols-rounded text-base">{d.type === 'aux' ? 'package_2' : 'shopping_basket'}</span>
+                                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${d.type === 'aux' ? 'bg-orange-50 text-orange-500' : d.type === 'prod' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                                                                            <span className="material-symbols-rounded text-base">
+                                                                                {d.type === 'aux' ? 'package_2' : d.type === 'prod' ? 'box' : 'spa'}
+                                                                            </span>
                                                                         </div>
                                                                         <div>
                                                                             <p className="text-[11px] font-black text-slate-700">{d.name}</p>

@@ -423,6 +423,10 @@ const SettingsProduct = () => {
 
     const rawMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'harvest_item'), [allProducts]);
     const auxMaterials = useMemo(() => allProducts.filter(p => p.item_type === 'aux_material' || p.item_type === 'raw_material' || p.item_type === 'material'), [allProducts]);
+    const productMaterials = useMemo(() =>
+        allProducts.filter(p => p.item_type === 'product' && p.product_id !== editingProduct?.product_id),
+        [allProducts, editingProduct]
+    );
 
     const suggestedRecipeSource = useMemo(() => {
         if (editingProduct || !formData.name || formData.name.length < 2 || formData.bomList.length > 0) return null;
@@ -1170,6 +1174,54 @@ const SettingsProduct = () => {
                                                     );
                                                 });
                                             })()}
+                                        </div>
+
+                                        {/* Product Materials Section (Sets) */}
+                                        <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100/50 p-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs font-bold text-indigo-800 flex items-center gap-1.5">
+                                                    <Box size={14} /> 포함 완제품 (세트 구성품)
+                                                </span>
+                                                <button type="button" onClick={() => handleAddBom('prod')} disabled={isLoading} className="text-[10px] font-black bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors shadow-sm disabled:opacity-50">
+                                                    + 완제품 추가
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {formData.bomList.filter(b => b.type === 'prod').length === 0 && (
+                                                    <div className="text-center py-4 bg-white/50 rounded-xl border border-dashed border-indigo-200/50 text-xs text-indigo-400">
+                                                        연결된 완제품 구성품이 없습니다.
+                                                    </div>
+                                                )}
+                                                {formData.bomList.filter(b => b.type === 'prod').map(bom => (
+                                                    <div key={bom.key} className="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200">
+                                                        <div className="flex-1">
+                                                            <select
+                                                                value={bom.materialId}
+                                                                onChange={e => handleBomChange(bom.key, 'materialId', e.target.value)}
+                                                                className="w-full h-10 px-3 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-indigo-500 transition-all ring-1 ring-inset ring-indigo-200 disabled:opacity-70"
+                                                                disabled={isLoading}
+                                                            >
+                                                                <option value="">구성 상품 선택...</option>
+                                                                {productMaterials.map(m => <option key={m.product_id} value={m.product_id}>{m.product_name} {m.specification && `(${m.specification})`}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="w-24 relative">
+                                                            <input
+                                                                type="number"
+                                                                step="0.1"
+                                                                value={bom.ratio}
+                                                                onChange={e => handleBomChange(bom.key, 'ratio', e.target.value)}
+                                                                className="w-full h-10 px-3 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-indigo-500 transition-all ring-1 ring-inset ring-indigo-200 text-right pr-8 disabled:opacity-70"
+                                                                disabled={isLoading}
+                                                            />
+                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-indigo-300 font-bold">개</span>
+                                                        </div>
+                                                        <button type="button" onClick={() => handleRemoveBom(bom.key)} disabled={isLoading} className="w-10 h-10 flex items-center justify-center text-indigo-300 hover:text-rose-500 transition-colors disabled:opacity-50">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 )}

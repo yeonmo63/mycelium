@@ -1472,10 +1472,10 @@ pub async fn restore_database(
 
     // SALES
     restore_table!("sales", Sales, "판매 내역 복구 중", s, t, {
-        sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at, product_code, product_id, supply_value, vat_amount) 
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) 
-             ON CONFLICT (sales_id) DO UPDATE SET status=EXCLUDED.status, supply_value=EXCLUDED.supply_value, vat_amount=EXCLUDED.vat_amount, updated_at=EXCLUDED.updated_at")
-            .bind(&s.sales_id).bind(&s.customer_id).bind(&s.status).bind(s.order_date).bind(&s.product_name).bind(&s.specification).bind(s.unit_price).bind(s.quantity).bind(s.total_amount).bind(s.discount_rate).bind(&s.courier_name).bind(&s.tracking_number).bind(&s.memo).bind(&s.shipping_name).bind(&s.shipping_zip_code).bind(&s.shipping_address_primary).bind(&s.shipping_address_detail).bind(&s.shipping_mobile_number).bind(s.shipping_date).bind(s.paid_amount).bind(&s.payment_status).bind(s.updated_at).bind(&s.product_code).bind(s.product_id).bind(s.supply_value).bind(s.vat_amount)
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at, product_code, product_id, supply_value, vat_amount, tax_type, tax_exempt_value) 
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) 
+             ON CONFLICT (sales_id) DO UPDATE SET status=EXCLUDED.status, supply_value=EXCLUDED.supply_value, vat_amount=EXCLUDED.vat_amount, tax_type=EXCLUDED.tax_type, tax_exempt_value=EXCLUDED.tax_exempt_value, updated_at=EXCLUDED.updated_at")
+            .bind(&s.sales_id).bind(&s.customer_id).bind(&s.status).bind(s.order_date).bind(&s.product_name).bind(&s.specification).bind(s.unit_price).bind(s.quantity).bind(s.total_amount).bind(s.discount_rate).bind(&s.courier_name).bind(&s.tracking_number).bind(&s.memo).bind(&s.shipping_name).bind(&s.shipping_zip_code).bind(&s.shipping_address_primary).bind(&s.shipping_address_detail).bind(&s.shipping_mobile_number).bind(s.shipping_date).bind(s.paid_amount).bind(&s.payment_status).bind(s.updated_at).bind(&s.product_code).bind(s.product_id).bind(s.supply_value).bind(s.vat_amount).bind(&s.tax_type).bind(s.tax_exempt_value)
             .execute(&mut **t).await?;
     });
 

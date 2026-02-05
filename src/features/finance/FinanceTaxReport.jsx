@@ -36,10 +36,23 @@ const FinanceTaxReport = () => {
             (data || []).forEach(item => {
                 const taxType = item.tax_type || '면세';
                 const amt = item.total_amount || 0;
-                const supply = item.supply_value || amt;
+                const supply = item.supply_value || 0;
                 const vat = item.vat_amount || 0;
+                const exemptPart = (item.tax_exempt_value !== undefined && item.tax_exempt_value !== null) ? item.tax_exempt_value : (taxType === '면세' ? amt : 0);
+                const taxablePart = (taxType === '과세') ? amt : (supply + vat);
 
-                if (taxType === '과세') {
+                if (taxType === '복합') {
+                    if (taxablePart > 0) {
+                        taxable.push({ ...item, display_amount: taxablePart, display_tax_type: '과세(분분)' });
+                        sum.taxableAmt += taxablePart;
+                        sum.taxableSupply += supply;
+                        sum.taxableVat += vat;
+                    }
+                    if (exemptPart > 0) {
+                        exempt.push({ ...item, display_amount: exemptPart, display_tax_type: '면세(분분)' });
+                        sum.exemptAmt += exemptPart;
+                    }
+                } else if (taxType === '과세') {
                     taxable.push(item);
                     sum.taxableAmt += amt;
                     sum.taxableSupply += supply;
@@ -244,9 +257,9 @@ const FinanceTaxReport = () => {
                                     <tr key={i} className="hover:bg-indigo-50/30 transition-colors group">
                                         <td className="p-3 font-mono text-slate-400">{r.order_date}</td>
                                         <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.product_name}>{r.product_name}</td>
-                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.supply_value || r.total_amount)}</td>
+                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.supply_value || r.display_amount || r.total_amount)}</td>
                                         <td className="p-3 text-right font-black text-indigo-500">{formatCurrency(r.vat_amount || 0)}</td>
-                                        <td className="p-3 text-right font-black text-slate-800 tabular-nums">{formatCurrency(r.total_amount)}</td>
+                                        <td className="p-3 text-right font-black text-slate-800 tabular-nums">{formatCurrency(r.display_amount || r.total_amount)}</td>
                                     </tr>
                                 ))}
                                 {reportData.taxable.length === 0 && (
@@ -280,8 +293,8 @@ const FinanceTaxReport = () => {
                                     <tr key={i} className="hover:bg-emerald-50/30 transition-colors group">
                                         <td className="p-3 font-mono text-slate-400">{r.order_date}</td>
                                         <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.product_name}>{r.product_name}</td>
-                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.total_amount)}</td>
-                                        <td className="p-3 text-right font-black text-emerald-600 tabular-nums">{formatCurrency(r.total_amount)}</td>
+                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.display_amount || r.total_amount)}</td>
+                                        <td className="p-3 text-right font-black text-emerald-600 tabular-nums">{formatCurrency(r.display_amount || r.total_amount)}</td>
                                     </tr>
                                 ))}
                                 {reportData.exempt.length === 0 && (

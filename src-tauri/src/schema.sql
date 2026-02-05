@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS sales (
     tracking_number VARCHAR(50),
     supply_value INTEGER DEFAULT 0,
     vat_amount INTEGER DEFAULT 0,
+    tax_exempt_value INTEGER DEFAULT 0,
+    tax_type VARCHAR(20),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
