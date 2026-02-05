@@ -771,4 +771,6 @@ pub struct HarvestRecord {
     pub traceability_code: Option<String>,
     pub memo: Option<String>,
     pub created_at: Option<NaiveDateTime>,
+    #[sqlx(default)]
+    pub updated_at: Option<NaiveDateTime>,
 }

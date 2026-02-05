@@ -215,6 +215,22 @@ CREATE TABLE IF NOT EXISTS consultations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Sales Claims (Returns/Cancellations)
+CREATE TABLE IF NOT EXISTS sales_claims (
+    claim_id SERIAL PRIMARY KEY,
+    sales_id VARCHAR(20) NOT NULL,
+    customer_id VARCHAR(20),
+    claim_type VARCHAR(50) NOT NULL,    -- '취소', '반품', '교환'
+    claim_status VARCHAR(50) DEFAULT '접수', -- '접수', '처리중', '완료', '거부'
+    reason_category VARCHAR(100),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    refund_amount INTEGER DEFAULT 0,
+    is_inventory_recovered BOOLEAN DEFAULT FALSE,
+    memo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Vendors
 CREATE TABLE IF NOT EXISTS vendors (
     vendor_id       SERIAL PRIMARY KEY,

@@ -1,5 +1,6 @@
--- Database Schema for mushroomfarm
--- Generated based on src-tauri/src/db.rs and src-tauri/src/lib.rs analysis
+-- Database Schema for Mycelium
+-- This file serves as a reference for the current database structure.
+-- The actual schema is managed via migrations in src-tauri/migrations.
 
 -- 1. Users Table (Admin & Staff)
 CREATE TABLE IF NOT EXISTS users (
@@ -18,21 +19,26 @@ CREATE TABLE IF NOT EXISTS products (
     specification VARCHAR(100),
     unit_price INTEGER NOT NULL DEFAULT 0,
     stock_quantity INTEGER DEFAULT 0,
-    safety_stock INTEGER DEFAULT 10, -- 안전 재고 (권장 최소 보유량)
-    material_id INTEGER REFERENCES products(product_id), -- 연결된 자재 품목 ID
-    material_ratio FLOAT DEFAULT 1.0,  -- 전환 시 자재 소모 비율 (예: 1.0)
+    safety_stock INTEGER DEFAULT 10,
+    material_id INTEGER REFERENCES products(product_id),
+    material_ratio FLOAT DEFAULT 1.0,
+    aux_material_id INTEGER REFERENCES products(product_id),
+    aux_material_ratio DOUBLE PRECISION DEFAULT 1.0,
     cost_price INTEGER DEFAULT 0,
     item_type VARCHAR(20) DEFAULT 'product',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     product_code VARCHAR(50) UNIQUE,
-    status VARCHAR(20) DEFAULT '판매중' -- '판매중', '단종상품'
+    status VARCHAR(20) DEFAULT '판매중', -- '판매중', '단종상품'
+    category VARCHAR(50),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2.1 Inventory Logs (Stock Ledger)
+-- 3. Inventory Logs (Stock Ledger)
 CREATE TABLE IF NOT EXISTS inventory_logs (
     log_id          SERIAL PRIMARY KEY,
+    product_id      INTEGER REFERENCES products(product_id),
     product_name    VARCHAR(100) NOT NULL,
     specification   VARCHAR(100),
+    product_code    VARCHAR(50),
     change_type     VARCHAR(20) NOT NULL, -- '입고', '출고', '조정', '취소반품'
     change_quantity INTEGER NOT NULL,      -- 변동량 (+ or -)
     current_stock   INTEGER NOT NULL,      -- 변동 후 재고
@@ -42,7 +48,7 @@ CREATE TABLE IF NOT EXISTS inventory_logs (
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Customers Table
+-- 4. Customers Table (CRM)
 CREATE TABLE IF NOT EXISTS customers (
     customer_id VARCHAR(20) PRIMARY KEY, -- Format: YYYYMMDD-XXXX
     customer_name VARCHAR(50) NOT NULL,
@@ -53,21 +59,16 @@ CREATE TABLE IF NOT EXISTS customers (
     zip_code VARCHAR(10),
     address_primary VARCHAR(255),
     address_detail VARCHAR(255),
-    
-    -- Added CRM Fields
-    anniversary_date    DATE,           -- 기념일 날짜
-    anniversary_type    VARCHAR(50),    -- 기념일 종류 (생일, 결혼기념일 등)
-    marketing_consent   BOOLEAN DEFAULT FALSE, -- 마케팅 수신 동의
-    acquisition_channel VARCHAR(100),   -- 유입 경로 (SNS, 검색 등)
-    
-    -- Preference Fields
-    pref_product_type   VARCHAR(100),   -- 선호 상품군
-    pref_package_type   VARCHAR(100),   -- 선호 포장형태
-    family_type         VARCHAR(100),   -- 가족 구성 특징
-    health_concern      TEXT,           -- 건강 관심사
-    sub_interest        BOOLEAN DEFAULT FALSE, -- 정기배송(구독) 관심 여부
-    purchase_cycle      VARCHAR(100),   -- 구매 주기
-    
+    anniversary_date DATE,
+    anniversary_type VARCHAR(50),
+    marketing_consent BOOLEAN DEFAULT FALSE,
+    acquisition_channel VARCHAR(100),
+    pref_product_type VARCHAR(100),
+    pref_package_type VARCHAR(100),
+    family_type VARCHAR(100),
+    health_concern TEXT,
+    sub_interest BOOLEAN DEFAULT FALSE,
+    purchase_cycle VARCHAR(100),
     memo TEXT,
     current_balance INTEGER DEFAULT 0,
     join_date DATE DEFAULT CURRENT_DATE,
@@ -76,37 +77,39 @@ CREATE TABLE IF NOT EXISTS customers (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3.1 Customer Addresses Table
+-- 5. Customer Addresses
 CREATE TABLE IF NOT EXISTS customer_addresses (
     address_id       SERIAL PRIMARY KEY,
-    customer_id      VARCHAR(20) NOT NULL,
-    address_alias    VARCHAR(100) NOT NULL,             -- 별칭 (예: 집, 직장)
-    recipient_name   VARCHAR(50) NOT NULL,              -- 받는 사람 성함
-    mobile_number    VARCHAR(20) NOT NULL,              -- 받는 사람 연락처
-    zip_code         VARCHAR(10),                       -- 우편번호
-    address_primary  VARCHAR(255) NOT NULL,             -- 주소
-    address_detail   VARCHAR(255),                      -- 상세주소
-    is_default       BOOLEAN DEFAULT FALSE,             -- 기본 배송지
-    shipping_memo    TEXT,                              -- 배송 요청사항
+    customer_id      VARCHAR(20) NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
+    address_alias    VARCHAR(100) NOT NULL,
+    recipient_name   VARCHAR(50) NOT NULL,
+    mobile_number    VARCHAR(20) NOT NULL,
+    zip_code         VARCHAR(10),
+    address_primary  VARCHAR(255) NOT NULL,
+    address_detail   VARCHAR(255),
+    is_default       BOOLEAN DEFAULT FALSE,
+    shipping_memo    TEXT,
     created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Sales Table
+-- 6. Sales Table
 CREATE TABLE IF NOT EXISTS sales (
-    sales_id VARCHAR(20) PRIMARY KEY, -- Format: YYYYMMDD-XXXXX
-    customer_id VARCHAR(20), -- FK to customers removed to allow linking to Event IDs
+    sales_id VARCHAR(20) PRIMARY KEY,
+    customer_id VARCHAR(20),
+    product_id INTEGER REFERENCES products(product_id),
     product_name VARCHAR(100) NOT NULL,
+    product_code VARCHAR(50),
     specification VARCHAR(100),
     unit_price INTEGER NOT NULL,
     quantity INTEGER NOT NULL,
     total_amount INTEGER NOT NULL,
-    status VARCHAR(20) DEFAULT '결제완료', -- '결제완료', '배송준비', '배송완료' etc.
+    discount_rate INTEGER DEFAULT 0,
+    paid_amount INTEGER DEFAULT 0,
+    payment_status VARCHAR(20) DEFAULT '입금완료',
+    status VARCHAR(20) DEFAULT '결제완료',
     order_date DATE DEFAULT CURRENT_DATE,
     memo TEXT,
-    
-    -- Shipping Info
     shipping_name VARCHAR(50),
     shipping_zip_code VARCHAR(10),
     shipping_address_primary VARCHAR(255),
@@ -115,17 +118,12 @@ CREATE TABLE IF NOT EXISTS sales (
     shipping_date DATE,
     courier_name VARCHAR(50),
     tracking_number VARCHAR(50),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    product_code VARCHAR(50),
-    product_id INTEGER,
-    discount_rate INTEGER DEFAULT 0,
-    paid_amount INTEGER DEFAULT 0,
-    payment_status VARCHAR(20) DEFAULT '입금완료'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Events Table (Special Sales / Occasions)
+-- 7. Event Table (Special Sales Groups)
 CREATE TABLE IF NOT EXISTS event (
-    event_id VARCHAR(20) PRIMARY KEY, -- Format: YYYYMMDD-1XXXX
+    event_id VARCHAR(20) PRIMARY KEY,
     event_name VARCHAR(100) NOT NULL,
     organizer VARCHAR(100),
     manager_name VARCHAR(50),
@@ -139,7 +137,7 @@ CREATE TABLE IF NOT EXISTS event (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Schedule Table (Calendar)
+-- 8. Schedules Table
 CREATE TABLE IF NOT EXISTS schedules (
     schedule_id SERIAL PRIMARY KEY,
     title VARCHAR(100) NOT NULL,
@@ -153,7 +151,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Company Info Table (Singleton)
+-- 9. Company Info Table (Singleton)
 CREATE TABLE IF NOT EXISTS company_info (
     id SERIAL PRIMARY KEY,
     company_name VARCHAR(100) NOT NULL,
@@ -167,10 +165,10 @@ CREATE TABLE IF NOT EXISTS company_info (
     business_type VARCHAR(100),
     item VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. Experience Programs
+-- 10. Experience Programs & Reservations
 CREATE TABLE IF NOT EXISTS experience_programs (
     program_id SERIAL PRIMARY KEY,
     program_name VARCHAR(100) NOT NULL,
@@ -183,7 +181,6 @@ CREATE TABLE IF NOT EXISTS experience_programs (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Experience Reservations
 CREATE TABLE IF NOT EXISTS experience_reservations (
     reservation_id SERIAL PRIMARY KEY,
     program_id INTEGER REFERENCES experience_programs(program_id),
@@ -201,31 +198,20 @@ CREATE TABLE IF NOT EXISTS experience_reservations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_sales_order_date ON sales(order_date);
-CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);
-CREATE INDEX IF NOT EXISTS idx_sales_product_name ON sales(product_name);
-CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
-CREATE INDEX IF NOT EXISTS idx_customers_join_date ON customers(join_date);
-CREATE INDEX IF NOT EXISTS idx_customers_membership ON customers(membership_level);
-CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock_quantity);
-CREATE INDEX IF NOT EXISTS idx_experience_reservations_status ON experience_reservations(status);
-CREATE INDEX IF NOT EXISTS idx_schedules_time ON schedules(start_time, end_time);
-
 -- 11. Consultations Table (CRM)
 CREATE TABLE IF NOT EXISTS consultations (
     consult_id SERIAL PRIMARY KEY,
-    customer_id VARCHAR(20), -- REFERENCES customers(customer_id) removed for flexibility
+    customer_id VARCHAR(20),
     guest_name VARCHAR(50) NOT NULL,
     contact VARCHAR(20) NOT NULL,
-    channel VARCHAR(20) NOT NULL DEFAULT '전화', -- '전화', '문자', '방문', '기타'
+    channel VARCHAR(20) NOT NULL DEFAULT '전화',
     counselor_name VARCHAR(50) NOT NULL DEFAULT '',
-    category VARCHAR(50) NOT NULL, -- '상품문의', '대량구매', '체험문의', '클레임', '기타'
+    category VARCHAR(50) NOT NULL,
     title VARCHAR(200) NOT NULL,
     content TEXT NOT NULL,
     answer TEXT,
-    status VARCHAR(20) DEFAULT '접수', -- '접수', '처리중', '완료', '보류'
-    priority VARCHAR(10) DEFAULT '보통', -- '낮음', '보통', '높음', '긴급'
+    status VARCHAR(20) DEFAULT '접수',
+    priority VARCHAR(10) DEFAULT '보통',
     sentiment VARCHAR(20),
     consult_date DATE DEFAULT CURRENT_DATE,
     follow_up_date DATE,
@@ -233,10 +219,7 @@ CREATE TABLE IF NOT EXISTS consultations (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_consultations_date ON consultations(consult_date);
-CREATE INDEX IF NOT EXISTS idx_consultations_customer ON consultations(customer_id);
-
--- 12. Vendors Table (Suppliers)
+-- 12. Vendors & Purchases
 CREATE TABLE IF NOT EXISTS vendors (
     vendor_id       SERIAL PRIMARY KEY,
     vendor_name     VARCHAR(100) NOT NULL,
@@ -245,14 +228,13 @@ CREATE TABLE IF NOT EXISTS vendors (
     mobile_number   VARCHAR(20),
     email           VARCHAR(100),
     address         VARCHAR(255),
-    main_items      TEXT, -- 주요 취급 품목
+    main_items      TEXT,
     memo            TEXT,
     is_active       BOOLEAN DEFAULT TRUE,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 13. Purchases Table (Raw materials / Inventory input from vendors)
 CREATE TABLE IF NOT EXISTS purchases (
     purchase_id     SERIAL PRIMARY KEY,
     vendor_id       INTEGER REFERENCES vendors(vendor_id),
@@ -262,50 +244,66 @@ CREATE TABLE IF NOT EXISTS purchases (
     quantity        INTEGER NOT NULL DEFAULT 1,
     unit_price      INTEGER NOT NULL DEFAULT 0,
     total_amount    INTEGER NOT NULL DEFAULT 0,
-    payment_status  VARCHAR(20) DEFAULT '미지급', -- '현금', '카드', '미지급(외상)'
+    payment_status  VARCHAR(20) DEFAULT '미지급',
     memo            TEXT,
-    inventory_synced BOOLEAN DEFAULT FALSE, -- 재고 연동 여부
-    material_item_id INTEGER REFERENCES products(product_id), -- 구매한 자재 품목 ID
+    inventory_synced BOOLEAN DEFAULT FALSE,
+    material_item_id INTEGER REFERENCES products(product_id),
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 14. Expenses Table (Operating Expenses / G&A)
+-- 13. Expenses Table
 CREATE TABLE IF NOT EXISTS expenses (
     expense_id      SERIAL PRIMARY KEY,
     expense_date    DATE DEFAULT CURRENT_DATE,
-    category        VARCHAR(50) NOT NULL, -- '인건비', '포장재', '수도광열비', '임대료', '광고비', '기타'
+    category        VARCHAR(50) NOT NULL,
     amount          INTEGER NOT NULL DEFAULT 0,
-    payment_method  VARCHAR(20), -- '카드', '계좌이체', '현금'
+    payment_method  VARCHAR(20),
     memo            TEXT,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 15. Financial Indexes
-CREATE INDEX IF NOT EXISTS idx_purchases_date ON purchases(purchase_date);
-CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
-CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
-
--- 16. Customer Ledger Table (Receivables / Accounts Receivable)
+-- 14. Customer Ledger (Accounts Receivable)
 CREATE TABLE IF NOT EXISTS customer_ledger (
     ledger_id       SERIAL PRIMARY KEY,
     customer_id     VARCHAR(20) NOT NULL REFERENCES customers(customer_id),
     transaction_date DATE DEFAULT CURRENT_DATE,
-    transaction_type VARCHAR(30) NOT NULL, -- '매출(배송)', '입금', '반품/취소', '이월'
-    amount          INTEGER NOT NULL DEFAULT 0, -- 발생 금액 (매출은 +, 입금도 +로 기록하되 로직에서 처리, or 매출+, 입금-)
-                                                 -- 일반적 장부: 차변(매출) / 대변(입금). 여기서는 단일 컬럼 + Type으로 구분 권장.
-                                                 -- 여기서는 미수금 증가(매출) = Positive, 미수금 감소(입금) = Negative로 저장하거나,
-                                                 -- deposit(입금), withdrawal(매출) 컬럼을 분리할 수도 있음.
-                                                 -- 편의상: amount(거래금액), balance(잔액)
+    transaction_type VARCHAR(30) NOT NULL,
+    amount          INTEGER NOT NULL DEFAULT 0,
     description     VARCHAR(255),
-    reference_id    VARCHAR(50), -- sales_id or other ref
+    reference_id    VARCHAR(50),
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_ledger_customer ON customer_ledger(customer_id);
 
--- 17. Product Price History (For Auditing)
+-- 15. Sales Claims (Returns/Cancellations)
+CREATE TABLE IF NOT EXISTS sales_claims (
+    claim_id SERIAL PRIMARY KEY,
+    sales_id VARCHAR(20) NOT NULL,
+    customer_id VARCHAR(20),
+    claim_type VARCHAR(50) NOT NULL,
+    claim_status VARCHAR(50) DEFAULT '접수',
+    reason_category VARCHAR(100),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    refund_amount INTEGER DEFAULT 0,
+    is_inventory_recovered BOOLEAN DEFAULT FALSE,
+    memo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 16. Product BOM (Bill of Materials)
+CREATE TABLE IF NOT EXISTS product_bom (
+    id SERIAL PRIMARY KEY,
+    product_id INTEGER NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
+    ratio DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_bom_item UNIQUE (product_id, material_id)
+);
+
+-- 17. Auditing Tables
 CREATE TABLE IF NOT EXISTS product_price_history (
     history_id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
@@ -314,9 +312,7 @@ CREATE TABLE IF NOT EXISTS product_price_history (
     reason TEXT,
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_history_product_id ON product_price_history(product_id);
 
--- 18. Customer Change Logs (For Auditing)
 CREATE TABLE IF NOT EXISTS customer_logs (
     log_id          SERIAL PRIMARY KEY,
     customer_id     VARCHAR(20) NOT NULL,
@@ -324,6 +320,80 @@ CREATE TABLE IF NOT EXISTS customer_logs (
     old_value       TEXT,
     new_value       TEXT,
     changed_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    changed_by      VARCHAR(50) -- Optional: record user who changed it
+    changed_by      VARCHAR(50)
 );
-CREATE INDEX IF NOT EXISTS idx_customer_logs_customer_id ON customer_logs(customer_id);
+
+CREATE TABLE IF NOT EXISTS deletion_log (
+    log_id SERIAL PRIMARY KEY,
+    table_name VARCHAR(100) NOT NULL,
+    record_id VARCHAR(100) NOT NULL,
+    deleted_info TEXT,
+    deleted_by VARCHAR(100),
+    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 18. Production Management (GAP/HACCP)
+CREATE TABLE IF NOT EXISTS production_spaces (
+    space_id SERIAL PRIMARY KEY,
+    space_name VARCHAR(100) NOT NULL,
+    space_type VARCHAR(50),
+    location_info TEXT,
+    area_size NUMERIC(10, 2),
+    area_unit VARCHAR(20) DEFAULT 'm2',
+    is_active BOOLEAN DEFAULT TRUE,
+    memo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS production_batches (
+    batch_id SERIAL PRIMARY KEY,
+    batch_code VARCHAR(50) UNIQUE NOT NULL,
+    product_id INTEGER REFERENCES products(product_id),
+    space_id INTEGER REFERENCES production_spaces(space_id),
+    start_date DATE NOT NULL,
+    end_date DATE,
+    expected_harvest_date DATE,
+    status VARCHAR(50) DEFAULT 'initialized',
+    initial_quantity NUMERIC(10, 2),
+    unit VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS farming_logs (
+    log_id SERIAL PRIMARY KEY,
+    batch_id INTEGER REFERENCES production_batches(batch_id),
+    space_id INTEGER REFERENCES production_spaces(space_id),
+    log_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    worker_name VARCHAR(100),
+    work_type VARCHAR(50) NOT NULL,
+    work_content TEXT NOT NULL,
+    input_materials JSONB, 
+    env_data JSONB,
+    photos JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS harvest_records (
+    harvest_id SERIAL PRIMARY KEY,
+    batch_id INTEGER REFERENCES production_batches(batch_id),
+    harvest_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    quantity NUMERIC(10, 2) NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    grade VARCHAR(50),
+    traceability_code VARCHAR(100),
+    memo TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 19. Indexes
+CREATE INDEX IF NOT EXISTS idx_sales_order_date ON sales(order_date);
+CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customers_mobile ON customers(mobile_number);
+CREATE INDEX IF NOT EXISTS idx_products_code ON products(product_code);
+CREATE INDEX IF NOT EXISTS idx_inventory_logs_date ON inventory_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_farming_logs_date ON farming_logs(log_date);
+CREATE INDEX IF NOT EXISTS idx_harvest_records_date ON harvest_records(harvest_date);

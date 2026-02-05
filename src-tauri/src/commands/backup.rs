@@ -784,7 +784,7 @@ async fn backup_database_internal(
         .await?;
     let count_harvest: (i64,) = sqlx::query_as(&if let Some(s) = since {
         format!(
-            "SELECT COUNT(*) FROM harvest_records WHERE created_at > '{}'",
+            "SELECT COUNT(*) FROM harvest_records WHERE updated_at > '{}'",
             s.format("%Y-%m-%d %H:%M:%S")
         )
     } else {
@@ -1141,7 +1141,7 @@ async fn backup_database_internal(
         "harvest_records",
         "수확 기록 백업 중",
         count_harvest.0,
-        "created_at"
+        "updated_at"
     );
 
     writeln!(writer, "  \"backup_complete\": true")
@@ -1711,8 +1711,8 @@ pub async fn restore_database(
         r,
         t,
         {
-            sqlx::query("INSERT INTO harvest_records (harvest_id, batch_id, harvest_date, quantity, unit, grade, traceability_code, memo, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (harvest_id) DO NOTHING")
-            .bind(r.harvest_id).bind(r.batch_id).bind(r.harvest_date).bind(r.quantity).bind(r.unit).bind(r.grade).bind(r.traceability_code).bind(r.memo).bind(r.created_at)
+            sqlx::query("INSERT INTO harvest_records (harvest_id, batch_id, harvest_date, quantity, unit, grade, traceability_code, memo, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (harvest_id) DO UPDATE SET quantity=EXCLUDED.quantity, updated_at=EXCLUDED.updated_at")
+            .bind(r.harvest_id).bind(r.batch_id).bind(r.harvest_date).bind(r.quantity).bind(r.unit).bind(r.grade).bind(r.traceability_code).bind(r.memo).bind(r.created_at).bind(r.updated_at)
             .execute(&mut **t).await?;
         }
     );
@@ -1814,7 +1814,7 @@ pub async fn reset_database(state: State<'_, DbPool>) -> MyceliumResult<String> 
         sales_claims, customer_ledger, customer_addresses,
         experience_programs, experience_reservations, 
         vendors, purchases, expenses, deletion_log,
-        product_price_history, customer_logs,
+        product_price_history, customer_logs, product_bom,
         production_spaces, production_batches, farming_logs, harvest_records,
         users, company_info
         RESTART IDENTITY CASCADE";
