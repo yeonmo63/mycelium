@@ -117,6 +117,8 @@ pub struct Sales {
     pub supply_value: Option<i32>,
     #[sqlx(default)]
     pub vat_amount: Option<i32>,
+    #[sqlx(default)]
+    pub tax_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

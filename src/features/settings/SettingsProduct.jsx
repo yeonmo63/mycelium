@@ -53,7 +53,8 @@ const SettingsProduct = () => {
         safety: 10,
         type: 'product',
         bomList: [], // Array of { materialId, ratio, type: 'raw'|'aux' (ui only), key: rand }
-        sync: false
+        sync: false,
+        taxType: '면세'
     });
 
     // --- Recipe Import State ---
@@ -113,7 +114,8 @@ const SettingsProduct = () => {
                 bomList: [],
                 sync: false,
                 productCode: '',
-                category: ''
+                category: '',
+                taxType: '면세'
             };
 
             if (product) {
@@ -163,7 +165,8 @@ const SettingsProduct = () => {
                     bomList: initialBoms,
                     sync: false,
                     productCode: product.product_code || '',
-                    category: product.category || ''
+                    category: product.category || '',
+                    taxType: product.tax_type || '면세'
                 };
             }
 
@@ -283,7 +286,8 @@ const SettingsProduct = () => {
                 auxMaterialRatio: firstAux ? Number(firstAux.ratio) : 1.0,
                 itemType: formData.type,
                 productCode: formData.productCode || null,
-                category: formData.category || null
+                category: formData.category || null,
+                taxType: formData.taxType
             };
 
             let productId;
@@ -819,6 +823,30 @@ const SettingsProduct = () => {
                                     </div>
                                 </div>
 
+                                {/* Tax Type Selection */}
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">과세 구분 (Tax Type)</label>
+                                    <div className="flex p-1 bg-slate-100 rounded-xl">
+                                        {[
+                                            { id: '면세', label: '免 면세 (Exempt)' },
+                                            { id: '과세', label: '税 과세 (Taxable)' }
+                                        ].map(tax => (
+                                            <button
+                                                key={tax.id}
+                                                type="button"
+                                                disabled={isLoading}
+                                                onClick={() => setFormData(prev => ({ ...prev, taxType: tax.id }))}
+                                                className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${formData.taxType === tax.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'} disabled:opacity-50`}
+                                            >
+                                                {tax.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1.5 ml-2 leading-tight">
+                                        * 신선 농산물/가공되지 않은 식료품은 면세, 가공 공정을 거친 제품은 과세를 선택하세요.
+                                    </p>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">상품 코드</label>
@@ -828,6 +856,7 @@ const SettingsProduct = () => {
                                             onChange={e => setFormData({ ...formData, productCode: e.target.value })}
                                             className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-indigo-500 transition-all ring-1 ring-inset ring-slate-200"
                                             placeholder="없음"
+                                            disabled={isLoading}
                                         />
                                     </div>
                                     {(formData.type === 'aux_material' || formData.type === 'raw_material' || formData.type === 'material') && (

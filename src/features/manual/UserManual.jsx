@@ -41,12 +41,13 @@ const UserManual = () => {
         { id: 'dashboard', label: '1. 대시보드', icon: <LayoutDashboard size={18} /> },
         { id: 'sales', label: '2. 판매 관리', icon: <ShoppingCart size={18} /> },
         { id: 'customer', label: '3. 고객 관리', icon: <Users size={18} /> },
-        { id: 'finance', label: '4. 회계/지출 관리', icon: <Calculator size={18} /> },
-        { id: 'intel', label: '5. 판매 인텔리전스', icon: <BrainCircuit size={18} /> },
-        { id: 'exp', label: '6. 체험 프로그램', icon: <Zap size={18} /> },
-        { id: 'schedule', label: '7. 통합 일정 관리', icon: <Calendar size={18} /> },
-        { id: 'settings', label: '8. 설정 및 관리', icon: <Settings size={18} /> },
-        { id: 'rescue', label: '9. 제니의 긴급 구조', icon: <HelpCircle size={18} /> },
+        { id: 'inventory_prod', label: '4. 재고/생산/현장관리', icon: <Clock size={18} /> },
+        { id: 'finance', label: '5. 회계/지출 관리', icon: <Calculator size={18} /> },
+        { id: 'intel', label: '6. 판매 인텔리전스', icon: <BrainCircuit size={18} /> },
+        { id: 'exp', label: '7. 체험 프로그램', icon: <Zap size={18} /> },
+        { id: 'schedule', label: '8. 통합 일정 관리', icon: <Calendar size={18} /> },
+        { id: 'settings', label: '9. 설정 및 관리', icon: <Settings size={18} /> },
+        { id: 'rescue', label: '10. 제니의 긴급 구조', icon: <HelpCircle size={18} /> },
     ];
 
     const handleScroll = (id) => {
@@ -119,7 +120,7 @@ const UserManual = () => {
                 </div>
                 <div>
                     <span className="text-indigo-600 font-black text-xs uppercase tracking-widest block mb-1">Chapter {number}</span>
-                    <h2 className="text-3xl font-black text-slate-800 tracking-tighter">{title}</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter">{title}</h2>
                 </div>
             </div>
         </div>
@@ -127,7 +128,7 @@ const UserManual = () => {
 
     const SubSection = ({ number, title, children }) => (
         <div className="mb-16 last:mb-0">
-            <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
+            <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3">
                 <span className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 text-xs font-black">{number}</span>
                 {title}
             </h3>
@@ -169,7 +170,7 @@ const UserManual = () => {
                         <button
                             key={section.id}
                             onClick={() => handleScroll(section.id)}
-                            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[0.92rem] font-black transition-all group ${activeSection === section.id
+                            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-[0.88rem] font-black transition-all group ${activeSection === section.id
                                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-[1.02]'
                                 : 'text-slate-500 hover:bg-slate-50 hover:text-indigo-600'
                                 }`}
@@ -220,7 +221,7 @@ const UserManual = () => {
                             </span>
                             Mycelium Enterprise Platform Guidance
                         </div>
-                        <h1 className="text-5xl font-black text-slate-900 tracking-tighter mb-8 leading-[1.05]" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
+                        <h1 className="text-4xl font-black text-slate-900 tracking-tighter mb-8 leading-[1.05]" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>
                             Mycelium 운영의 모든 것,<br />
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">완벽 가이드북</span>
                         </h1>
@@ -238,7 +239,7 @@ const UserManual = () => {
                                 <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-800 mb-6 group-hover:rotate-12 transition-transform duration-500">
                                     <BookOpen size={32} />
                                 </div>
-                                <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Mycelium 운영 프로세스 흐름도</h2>
+                                <h2 className="text-2xl font-black text-slate-800 tracking-tighter">Mycelium 운영 프로세스 흐름도</h2>
                                 <p className="text-slate-400 font-bold mt-2">Smart Farm Integrated Workflow</p>
                             </div>
 
@@ -247,7 +248,7 @@ const UserManual = () => {
                                 <div className="flex items-center justify-center gap-8 w-full">
                                     <div className="w-64 p-6 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-emerald-900 shadow-sm hover:translate-y-[-5px] transition-transform">
                                         <div className="text-2xl mb-2">⚙️</div>
-                                        <div className="font-black text-sm">8. 설정 및 관리</div>
+                                        <div className="font-black text-sm">9. 설정 및 관리</div>
                                         <div className="text-[11px] font-bold opacity-60 mt-1">상품 마스터 / 보안 / 업체 정보</div>
                                     </div>
                                 </div>
@@ -270,7 +271,7 @@ const UserManual = () => {
                                     <div className="flex items-center text-slate-200"><ChevronRight size={32} /></div>
                                     <div className="w-60 p-6 bg-sky-50 rounded-2xl border-2 border-sky-200 text-sky-900 shadow-sm hover:translate-y-[-5px] transition-transform">
                                         <div className="text-2xl mb-2">📅</div>
-                                        <div className="font-black text-sm">7. 통합 일정 관리</div>
+                                        <div className="font-black text-sm">8. 통합 일정 관리</div>
                                         <div className="text-[11px] font-bold opacity-60 mt-1">배송 / 체험예약 캘린더 연동</div>
                                     </div>
                                 </div>
@@ -281,7 +282,7 @@ const UserManual = () => {
                                 <div className="flex items-center justify-center gap-12 w-full">
                                     <div className="w-64 p-6 bg-rose-50 rounded-2xl border-2 border-rose-200 text-rose-900 shadow-sm hover:translate-y-[-5px] transition-transform">
                                         <div className="text-2xl mb-2">🧠</div>
-                                        <div className="font-black text-sm">5. 판매 인텔리전스</div>
+                                        <div className="font-black text-sm">6. 판매 인텔리전스</div>
                                         <div className="text-[11px] font-bold opacity-60 mt-1">수요예측 / RFM / 지역 히트맵</div>
                                     </div>
                                     <div className="flex items-center text-slate-200 text-2xl">🔄</div>
@@ -354,246 +355,185 @@ const UserManual = () => {
                     {/* Section 2: Sales */}
                     <SectionTitle number="02" title="판매 관리 (Sales Control)" id="sales" icon={<ShoppingCart size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
-                        <SubSection number="2.1" title="일반 접수 가이드 (Manual Entry)">
+                        <SubSection number="2.1" title="판매 접수 가이드 (Manual/Special Entry)">
                             <div className="space-y-4">
-                                <p className="text-slate-500 font-medium leading-relaxed">전화 주문이나 방문 고객 응대 시 사용하는 핵심 메뉴입니다. 접수부터 저장까지 6단계를 거칩니다.</p>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-300 transition-colors">
-                                        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-indigo-600 font-black shrink-0">1</div>
-                                        <div className="text-sm">
-                                            <div className="font-black text-slate-800">고객 정보 찾기</div>
-                                            <div className="text-slate-500 font-medium mt-1">성함/연락처로 기존 고객을 불러옵니다. 신규 고객은 바로 입력을 시작하세요.</div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-300 transition-colors">
-                                        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-indigo-600 font-black shrink-0">2</div>
-                                        <div className="text-sm">
-                                            <div className="font-black text-slate-800">상품 및 단가 설정</div>
-                                            <div className="text-slate-500 font-medium mt-1">상품 선택 시 기본 단가가 로드되나, 사장님 재량으로 단가를 낮춰 할인을 적용할 수 있습니다.</div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-300 transition-colors">
-                                        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-indigo-600 font-black shrink-0">3</div>
-                                        <div className="text-sm">
-                                            <div className="font-black text-slate-800">입금 상태 및 배송지 확인</div>
-                                            <div className="text-slate-500 font-medium mt-1">주소 검색 아이콘을 눌러 정확한 주소를 입력하세요. <span className="bg-violet-100 text-violet-700 px-1 rounded">보라색 배경 필드</span>는 직접 수기 입력이 가능합니다.</div>
-                                        </div>
-                                    </div>
+                                <p className="text-slate-500 font-medium leading-relaxed">전화 주문이나 방문 고객 응대 시 사용하는 핵심 메뉴입니다. 접수 방식에 따라 일반 접수와 특판(행사) 접수를 선택할 수 있습니다.</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FeatureBox title="일반 접수">성함/연락처로 고객을 조회하고 상품, 단가, 수량, 배송지를 입력하여 주문을 생성합니다.</FeatureBox>
+                                    <FeatureBox title="특판/행사 접수">행사장(백화점, 팝업 등) 모바일 환경에 최적화된 UI로 QR 스캔을 통한 퀵 등록과 행사지별 자동 분류가 가능합니다.</FeatureBox>
                                 </div>
                                 <LogicBox title="일괄 저장의 중요성">
-                                    화면의 [+ 추가] 버튼은 임시 장바구니에 담는 행위입니다. 반드시 우측 하단의 <b>[일괄 저장]</b> 버튼을 눌러야 데이터베이스에 영구 기록됩니다.
+                                    화면의 [+ 추가] 버튼은 임시 장바구니에 담는 행위입니다. 반드시 하단의 <b>[일괄 저장]</b> 버튼을 눌러야 데이터베이스에 영구 기록됩니다.
                                 </LogicBox>
                             </div>
                         </SubSection>
 
-                        <SubSection number="2.2" title="특판/행사장 접수 (Special Events)">
-                            <LogicBox color="amber">
-                                <b>QR 스캔 지원:</b> 축제나 팝업 현장에서 스마트폰 카메라를 이용해 상품 QR을 찍으면 즉시 리스트에 추가됩니다.
-                                <b>행사별 집계:</b> 어떤 백화점 팝업에서 수익이 가장 많이 났는지 별도의 정산 리포트를 제공합니다.
+                        <SubSection number="2.2" title="배송 관리 & 운송장 자동화">
+                            <LogicBox color="indigo">
+                                <b>🚚 통합 배송 처리:</b> 입금 확인된 주문을 필터링하여 일괄적으로 택배사 및 송장 번호를 입력할 수 있습니다.
+                                <b>🏢 송장 추출:</b> 엑셀 파일 업로드(스마트 스토어 등) 시 주소를 자동 분석해 지역별/택배사별 배송 목록을 생성합니다.
                             </LogicBox>
                         </SubSection>
 
-                        <SubSection number="2.3" title="쇼핑몰 주문 연동 (Smart Uploader)">
-                            <div className="space-y-6">
-                                <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2rem] bg-indigo-50/20 text-center">
-                                    <Truck size={48} className="mx-auto text-indigo-300 mb-4" />
-                                    <div className="font-black text-slate-800 text-xl mb-2">Drag & Drop 인터페이스</div>
-                                    <p className="text-sm text-slate-500 font-bold leading-relaxed whitespace-pre-line">네이버/쿠팡의 CSV 주문 파일을 끌어다 놓으세요.{"\n"}제니의 매칭 엔진이 상품명과 수량을 자동 분석합니다.</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-6">
-                                    <FeatureBox title="지능형 상품 매칭">"꿀버섯 1kg"와 "특상품 버섯 1000g"를 동일 제품으로 인식해 연결 규칙을 저장합니다.</FeatureBox>
-                                    <FeatureBox title="간편 신규 등록">파일에 있는 새로운 수취인 정보를 0.1초 만에 고객 데이터베이스에 자동 가입시킵니다.</FeatureBox>
-                                </div>
+                        <SubSection number="2.3" title="취소 / 반품 / 교환 (Claims)">
+                            <div className="space-y-4">
+                                <p className="text-slate-500 font-medium leading-relaxed">잘못된 주문이나 단순 변심 등 클레임 발생 시 사후 처리를 관리합니다.</p>
+                                <FeatureBox title="재고 자동 복구">반품 처리 시 '재고 복구' 옵션을 선택하면 차감되었던 상품 수량이 창고 재고로 자동 환원됩니다.</FeatureBox>
+                                <FeatureBox title="환불 연동">미수금 장부와 연동되어 환불 시 고객의 예치금이나 잔액이 정확히 차감/증액됩니다.</FeatureBox>
                             </div>
                         </SubSection>
 
-                        <SubSection number="2.8" title="스마트 재고 관리 (Inventory Control)">
-                            <p className="text-slate-500 font-medium mb-6">판매 시 완제품 재고는 자동으로 차감됩니다. 생산 공정(박싱 등)에 따른 자재 연동 관리가 핵심입니다.</p>
-
-                            <div id="stock-tutorial" className="p-8 bg-violet-50 rounded-[2.5rem] border-2 border-violet-100 relative group">
-                                <div className="absolute -top-4 -right-4 w-12 h-12 bg-white rounded-2xl shadow-lg flex items-center justify-center text-violet-600 group-hover:rotate-12 transition-transform">
-                                    <Star size={24} fill="currentColor" />
-                                </div>
-                                <h4 className="text-xl font-black text-violet-800 mb-6 flex items-center gap-2">
-                                    <ShieldCheck /> 2.8.5 [튜토리얼] 하이브리드 재고 관리 로직
-                                </h4>
-                                <div className="space-y-8">
-                                    <div className="relative pl-8 border-l-2 border-violet-200">
-                                        <div className="absolute -left-[11px] top-0 w-5 h-5 bg-violet-500 rounded-full border-4 border-white" />
-                                        <b className="block text-violet-900 mb-1">1단계: 자재 연결 (최초 설정)</b>
-                                        <span className="text-sm text-violet-700 font-medium">상품 관리에서 "1kg 선물세트"가 "대형 박스 1개"를 사용한다고 비율(1.0)을 설정합니다.</span>
-                                    </div>
-                                    <div className="relative pl-8 border-l-2 border-violet-200">
-                                        <div className="absolute -left-[11px] top-0 w-5 h-5 bg-violet-500 rounded-full border-4 border-white" />
-                                        <b className="block text-violet-900 mb-1">2단계: 매입 및 자동 입고</b>
-                                        <span className="text-sm text-violet-700 font-medium">회계 메뉴에서 박스 500개를 살 때 '재고 연동' 스위치를 켜면 자재 창고 재고가 500개 즉시 늘어납니다.</span>
-                                    </div>
-                                    <div className="relative pl-8 border-l-2 border-violet-200">
-                                        <div className="absolute -left-[11px] top-0 w-5 h-5 bg-violet-500 rounded-full border-4 border-white" />
-                                        <b className="block text-violet-900 mb-1">3단계: 생산 전환 기록</b>
-                                        <span className="text-sm text-violet-700 font-medium">재고 관리 상단의 [완제품 생산] 버튼을 누르면 자재는 줄어들고 판매용 버섯 세트는 늘어나는 자동 전환이 일어납니다.</span>
-                                    </div>
-                                </div>
+                        <SubSection number="2.4" title="판매 현황 리포트">
+                            <div className="grid grid-cols-2 gap-6">
+                                <FeatureBox title="일일 접수 현황">오늘 총 몇 건이 접수되었고, 입금/배송 상태가 어떠한지 실시간 타임라인으로 보여줍니다.</FeatureBox>
+                                <FeatureBox title="개인별 판매 성과">상담원이나 직원별로 누가 얼마나 기여했는지 성과 지표를 제공합니다.</FeatureBox>
                             </div>
                         </SubSection>
-
-                        <JennyTip title="제니의 재고 팁">
-                            퇴근 전, 대시보드의 <b>재고 주의 알림</b>을 확인하세요. 소모 속도를 분석해 앞으로 며칠 뒤면 박스가 동날지 제니가 미리 알려드립니다. 발주 타이밍을 놓치지 마세요! 🍄
-                        </JennyTip>
                     </div>
 
                     {/* Section 3: Customer */}
                     <SectionTitle number="03" title="고객 관리 (CRM)" id="customer" icon={<Users size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
-                        <SubSection number="3.1" title="조회 및 수정 모드 분리 (Safety Guard)">
-                            <LogicBox color="emerald" title="데이터 보호 로직">
-                                중요한 정보의 고의/실수 삭제를 방지하기 위해 고객 정보 창은 기본적으로 <b>'조회(View)'</b> 모드로 열립니다.
-                                수정이 필요할 때만 명시적으로 <b>[수정하기]</b> 버튼을 누르세요.
-                                수정 취소 시 입력하던 내용이 무시되고 기존 정보로 자동 롤백됩니다.
+                        <SubSection number="3.1" title="고객 성장 관리 & CRM">
+                            <LogicBox color="emerald" title="360도 고객 프로필">
+                                한 명의 고객이 언제 처음 구매했는지, 주로 어떤 상품을 찾는지, 어떤 상담을 남겼는지 모든 이력을 한 창에서 확인합니다.
+                                <b>수정 모드 분리:</b> 오입력을 방지하기 위해 기본 조회 모드로 열리며, [수정하기] 버튼을 눌러야만 편집이 활성화됩니다.
                             </LogicBox>
                         </SubSection>
 
-                        <SubSection number="3.3" title="스마트 외상(미수금) 통합 장부">
-                            <div className="grid grid-cols-2 gap-8 items-start">
-                                <div className="space-y-4">
-                                    <p className="text-[0.95rem] text-slate-500 font-medium leading-relaxed">
-                                        고객별로 외상이 얼마인지, 언제 갚았는지 복식부기 형태로 정밀 기록합니다.
-                                        판매 접수 시 '입금 대기'로 설정된 금액은 자동으로 이 장부의 <b>'청구액'</b>에 합산됩니다.
-                                    </p>
-                                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 font-black text-xs space-y-3">
-                                        <div className="flex justify-between text-rose-500"><span>청구액 (Debit)</span> <span>매출 발생 (+)</span></div>
-                                        <div className="flex justify-between text-emerald-500"><span>입금액 (Credit)</span> <span>송금 확인 (-)</span></div>
-                                        <div className="h-px bg-slate-200" />
-                                        <div className="flex justify-between text-indigo-600 text-sm"><span>최종 미수금</span> <span>잔액 (Balance)</span></div>
-                                    </div>
-                                </div>
-                                <FeatureBox title="이월금 조정 기능">장부 도입 전의 과거 외상값은 [이월금] 항목으로 등록하여 시작점을 맞출 수 있습니다.</FeatureBox>
-                            </div>
-                        </SubSection>
-
-                        <SubSection number="3.5" title="상담 관리 & AI 감성 분석">
+                        <SubSection number="3.2" title="VIP 및 집중 관리 (Special Care)">
                             <div className="grid grid-cols-2 gap-6">
-                                <FeatureBox title="AI 감성 엔진">상담 텍스트에서 불만, 실망 키워드를 감지하면 리스트 옆에 🚨 배지를 붙여 최우선 케어 대상으로 분류합니다.</FeatureBox>
-                                <FeatureBox title="AI 상담 요약">수백 건의 상담 내역을 일일이 읽을 필요 없이, 제니가 핵심 불만 사항을 한 문장으로 브리핑해 드립니다.</FeatureBox>
+                                <FeatureBox title="우수 고객(VIP) 선정">구매 금액과 빈도를 분석해 상위 3% 고객을 자동 추출합니다. 특별 혜택을 제공하세요.</FeatureBox>
+                                <FeatureBox title="집중 관리 고객">클레임이 잦거나 세심한 응대가 필요한 고객을 따로 분류해 접수 시 🚨 주의 경고를 띄웁니다.</FeatureBox>
                             </div>
                         </SubSection>
 
-                        <SubSection number="3.8" title="AI 안부 문자 (Heart-to-Heart)">
-                            <JennyTip title="고민 없는 마케팅">
-                                "눈이 온다는데 고객님께 뭐라고 문자 보내지?" 고민하지 마세요. 제니가 <b>현재 날씨와 시즌 이슈</b>를 조합해 따뜻한 안부 문구 3가지를 매일 새롭게 작성해 드립니다.
-                            </JennyTip>
+                        <SubSection number="3.3" title="미수금(외상) 통합 관리">
+                            <p className="text-slate-500 font-medium leading-relaxed">입금 전 배송되거나 후불 결제인 거래를 위한 복식부기 장부입니다.</p>
+                            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 font-black text-xs space-y-3">
+                                <div className="flex justify-between text-rose-500"><span>청구액 (Debit)</span> <span>매출 발생 시 자동 합산 (+)</span></div>
+                                <div className="flex justify-between text-emerald-500"><span>입금액 (Credit)</span> <span>실제 입금 시 차감 (-)</span></div>
+                                <div className="h-px bg-slate-200" />
+                                <div className="flex justify-between text-indigo-600 text-sm"><span>최종 미수금</span> <span>고객이 갚아야 할 잔액</span></div>
+                            </div>
                         </SubSection>
                     </div>
 
-                    {/* Section 4: Finance */}
-                    <SectionTitle number="04" title="회계/지출 관리 (Finance)" id="finance" icon={<Calculator size={28} />} />
+                    {/* Section 4: Inventory & Production */}
+                    <SectionTitle number="04" title="재고 / 생산 / 현장 관리" id="inventory_prod" icon={<Clock size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
-                        <SubSection number="4.1" title="매입 등록 및 자재 입고">
+                        <SubSection number="4.1" title="재고 및 생산 전환 (BOM)">
+                            <LogicBox color="violet">
+                                <b>자재 &rarr; 완제품 전환:</b> "건표고 500g 세트" 1개를 생산하면 소요되는 "박스 1개", "라벨 1개"가 자재 창고에서 자동으로 차감됩니다.
+                                <b>예측 소진일:</b> 현재 재고량과 최근 소모 속도를 비교해 며칠 뒤에 자재가 동날지 미리 경고해 줍니다.
+                            </LogicBox>
+                        </SubSection>
+
+                        <SubSection number="4.2" title="GAP / HACCP 인증센터">
+                            <div className="grid grid-cols-1 gap-4">
+                                <FeatureBox title="영농일지 자동 생성">현장 직원이 모바일로 기록한 작업 내용(관전, 시비, 수확 등)이 인증 기준에 맞는 일지로 자동 변환됩니다.</FeatureBox>
+                                <FeatureBox title="이력 추적 관리">수확물별로 고유 코드를 부여해 어느 라인에서 나온 제품인지 출하부터 판매까지 추적이 가능합니다.</FeatureBox>
+                            </div>
+                        </SubSection>
+                    </div>
+
+                    {/* Section 5: Finance */}
+                    <SectionTitle number="05" title="회계 / 지출 관리 (Finance)" id="finance" icon={<Calculator size={28} />} />
+                    <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
+                        <SubSection number="5.1" title="매입 및 지출 통합">
                             <LogicBox color="indigo">
-                                <b>📦 창고 재고 자동 입고:</b> 매입 등록 시 '연계 재고' 품목을 지정하면 장부 기록과 동시에 실제 창고의 박스 수량이 늘어납니다.
-                                <b>🔢 스마트 숫자 입력:</b> 큰 금액도 헷갈리지 않게 천 단위 콤마(,)가 실시간으로 포맷팅됩니다.
+                                <b>📦 매입 연동:</b> 자재(박스 등)를 사올 때 '재고 연계'를 켜면 장부에 기록됨과 동시에 창고 수량이 늘어납니다.
+                                <b>� 일반 지출:</b> 식비, 유류비 등 영수증 항목을 분류별로 기록해 세무 처리를 단순화합니다.
                             </LogicBox>
                         </SubSection>
 
-                        <SubSection number="4.4" title="경영 성적표 (손익 분석 센터)">
-                            <div className="flex gap-10 items-center">
-                                <div className="flex-1 space-y-6">
-                                    <h4 className="text-xl font-black text-slate-800">지능형 자금 흐름 리포트</h4>
-                                    <p className="text-slate-500 font-medium leading-relaxed">
-                                        단순 매출이 아닌, 매입과 지출 항목을 모두 고려한 <b>실질 순이익(P&L)</b>을 매월 자동으로 산출합니다.
-                                        비용 구조 도넛 차트를 통해 불필요하게 새는 비용(식비, 소모품 등)을 찾아보세요.
-                                    </p>
-                                </div>
-                                <div className="w-80 h-80 bg-gradient-to-br from-indigo-50 to-violet-50 rounded-[3rem] flex flex-col items-center justify-center text-center p-8 border border-indigo-100">
-                                    <BarChart3 size={64} className="text-indigo-600 mb-6" />
-                                    <div className="font-black text-slate-800 text-lg mb-2">실질 수익성 기반<br />경영 리포트 제공</div>
-                                    <div className="text-[11px] font-black text-indigo-400 uppercase tracking-widest">Financial Intelligence</div>
-                                </div>
+                        <SubSection number="5.2" title="✨ 세무 / 부가세 신고 센터 (New)">
+                            <LogicBox color="amber">
+                                <b>국세청 홈택스 대응:</b> 모든 매출을 '과세'와 '면세'로 자동 분류하여 리포트를 생성합니다.
+                                <b>공급가액 자동 역산:</b> 합계 금액만 입력하면 부가세(10%)를 별도로 나눠서 저장해주므로, 신고 시 엑셀 다운로드 한 번으로 끝납니다.
+                            </LogicBox>
+                        </SubSection>
+
+                        <SubSection number="5.3" title="순이익(P&L) 분석">
+                            <p className="text-slate-500 font-medium leading-[1.8]">
+                                매출에서 매입 원가와 지출 비용을 뺀 <b>'진짜 남은 돈'</b>을 계산해 줍니다. 월별 수익 구조 변화를 시각화된 그래프로 관리하세요.
+                            </p>
+                        </SubSection>
+                    </div>
+
+                    {/* Section 6: Intelligence */}
+                    <SectionTitle number="06" title="판매 인텔리전스 (AI Intelligence)" id="intel" icon={<BrainCircuit size={28} />} />
+                    <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
+                        <SubSection number="6.1" title="AI 미래 수요 예측">
+                            <FeatureBox title="지능형 수요 곡선">과거 3년 데이터를 머신러닝으로 분석해 향후 90일간 필요한 재고량을 미리 제안합니다.</FeatureBox>
+                            <FeatureBox title="지역별 판매 히드맵">우리 농장 제품이 전국 어느 동네에서 가장 많이 팔리는지 지도로 시각화하여 타겟팅 광고를 돕습니다.</FeatureBox>
+                        </SubSection>
+
+                        <SubSection number="6.2" title="상품 연관 & AI 평판">
+                            <div className="grid grid-cols-2 gap-6">
+                                <FeatureBox title="연관 구매 분석">A 상품을 산 고객이 B 상품도 많이 산다면, 묶음 상품 구성을 제안해 드립니다.</FeatureBox>
+                                <FeatureBox title="온라인 AI 평판">쇼핑몰 리뷰를 AI가 요약해 긍정/부정 여론과 개선해야 할 점을 짚어줍니다.</FeatureBox>
                             </div>
                         </SubSection>
                     </div>
 
-                    {/* Section 5: Intel */}
-                    <SectionTitle number="05" title="판매 인텔리전스 (Intelligence)" id="intel" icon={<BrainCircuit size={28} />} />
+                    {/* Section 7: Experience */}
+                    <SectionTitle number="07" title="체험 프로그램 관리" id="exp" icon={<Zap size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
-                        <SubSection number="5.1" title="AI 수요 예측 & 마진 분석">
-                            <FeatureBox title="AI 미래 예측 모델">과거 3년의 주문 패턴을 머신러닝으로 분석해 향후 30~180일간의 예상 수요 곡선을 보여줍니다.</FeatureBox>
-                            <LogicBox color="rose" title="진짜 효자 상품 찾기">
-                                단순 판매량이 아닌 <b>'남긴 돈(순수익)'</b> 기준으로 1~3위 순위를 매깁니다.
-                                원가가 입력된 제품은 실시간 마진율을 시각화하여 수익 구조를 정밀 진단합니다.
-                            </LogicBox>
-                        </SubSection>
+                        <p className="text-slate-500 font-medium mb-6">농장 방문 체험 예약과 인원 통계를 관리하는 시스템입니다.</p>
+                        <div className="grid grid-cols-2 gap-6">
+                            <FeatureBox title="예약 접수/현황">일자별 예약 가능 인원을 체크하고, 성인을 비롯한 참가 인원 정보를 등록합니다.</FeatureBox>
+                            <FeatureBox title="통합 일정 연동">예약 정보는 '일정 관리' 캘린더에 자동으로 표시되어 배송 업무와 겹치지 않게 관리됩니다.</FeatureBox>
+                        </div>
+                    </div>
 
-                        <SubSection number="5.5" title="🗺️ AI 지능형 판매 히트맵">
-                            <div className="flex gap-8">
-                                <div className="w-2/3 space-y-4">
-                                    <p className="text-slate-500 font-medium leading-[1.8]">
-                                        엑셀 숫자로만 보던 매출을 지도로 시각화합니다. <b>보라색이 진할수록</b> 여러분 농장의 핵심 시장이며, 흰색에 가까운 지역은 앞으로 개척해야 할 블루오션입니다.
-                                    </p>
-                                    <LogicBox title="제니의 지역 마케팅 컨설팅">
-                                        "수도권 주문량이 급증하고 있습니다. 명절 선물세트 광고를 해당 지역에 집중해 보세요." 같은 지리적 통찰을 제공합니다.
-                                    </LogicBox>
-                                </div>
-                                <div className="w-1/3 bg-slate-900 rounded-3xl p-6 flex flex-col items-center justify-center text-white relative overflow-hidden">
-                                    <MapIcon size={80} className="text-indigo-400 mb-4 opacity-50" />
-                                    <div className="font-black text-sm">전국 매출 밀도 시각화</div>
-                                    <div className="absolute top-2 right-2 flex gap-1">
-                                        <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                                        <div className="w-2 h-2 rounded-full bg-violet-500"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </SubSection>
-
-                        <SubSection number="5.7" title="타겟팅 판촉 발송 엔진">
+                    {/* Section 8: Schedule */}
+                    <SectionTitle number="08" title="통합 일정 관리 (Schedule)" id="schedule" icon={<Calendar size={28} />} />
+                    <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
+                        <SubSection number="8.1" title="스마트 캘린더 운용">
                             <LogicBox color="indigo">
-                                <b>💬 카카오 알림톡:</b> 저렴한 비용으로 브랜드 로고가 담긴 고급 메시지를 발송합니다.
-                                <b>📱 하이브리드 발송:</b> 고객의 연령대나 상황에 맞춰 SMS와 알림톡을 지능적으로 혼합 사용해 광고 효율을 높입니다.
+                                <b>📦 배송 일정 자동 반영:</b> 판매 접수 시 '배송 희망일'을 지정하면 캘린더에 택배 아이콘과 함께 자동 등록됩니다.
+                                <b>🎨 카테고리별 색상:</b> 개인 일정, 배송 업무, 체험 예약이 서로 다른 색상으로 표시되어 업무 중복을 방지합니다.
                             </LogicBox>
                         </SubSection>
                     </div>
 
-                    {/* Section 8: Settings */}
-                    <SectionTitle number="08" title="설정 및 관리 (System Admin)" id="settings" icon={<Settings size={28} />} />
+                    {/* Section 9: Settings */}
+                    <SectionTitle number="09" title="설정 및 관리 (System Admin)" id="settings" icon={<Settings size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
-                        <SubSection number="8.1" title="단종 상품 통폐합 (Database Purge)">
-                            <LogicBox color="rose" title="데이터 정규화 도구">
-                                1,000만 건의 데이터 속에서도 과거의 구형 상품 기록을 현재 정식 상품명으로 0.5초 만에 일괄 통합합니다. 중복 데이터를 제거해 통계의 정확도를 획기적으로 높이세요.
+                        <SubSection number="8.1" title="마스터 데이터 관리">
+                            <LogicBox color="emerald">
+                                <b>상품 마스터:</b> 상품별 원가, 단가, 과세 여부(면세/과세), 소요 자재(BOM)를 설정하는 가장 기본적이고 중요한 단계입니다.
+                                <b>API 연동:</b> 외부 문자 발송(카카오 알림톡), 쇼핑몰 동기화 등을 위한 인증키를 관리합니다.
                             </LogicBox>
                         </SubSection>
 
-                        <SubSection number="8.5" title="데이터 보안 및 백업/복구 (Security)">
+                        <SubSection number="8.2" title="보안 및 백업/초기화">
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100">
-                                    <Cloud className="text-sky-500 mb-4" size={32} />
-                                    <h4 className="font-black text-slate-800 mb-2">실시간 클라우드 연동</h4>
-                                    <p className="text-xs text-slate-500 font-bold leading-relaxed">OneDrive/Google Drive와 연동하세요. PC가 고장 나거나 바이러스에 걸려도 인터넷 공간에 매일 2중으로 데이터를 보호합니다.</p>
+                                    <Database className="text-indigo-500 mb-4" size={32} />
+                                    <h4 className="font-black text-slate-800 mb-2">백업 및 복구</h4>
+                                    <p className="text-xs text-slate-500 font-bold leading-relaxed">매일 자동으로 데이터가 압축되어 저장됩니다. PC 교체 시 이 파일 하나로 모든 기록을 되살릴 수 있습니다.</p>
                                 </div>
-                                <div className="p-8 bg-slate-50 rounded-3xl border border-slate-100">
-                                    <RefreshCw className="text-indigo-500 mb-4" size={32} />
-                                    <h4 className="font-black text-slate-800 mb-2">화면 전환 자동 저장</h4>
-                                    <p className="text-xs text-slate-500 font-bold leading-relaxed">창을 닫거나 메뉴를 이동할 때마다 제니가 몰래 백업을 진행합니다. 작업 중이던 내용이 어이없게 유실될 걱정은 이제 끝!</p>
+                                <div className="p-8 bg-rose-50/50 rounded-3xl border border-rose-100">
+                                    <Trash2 className="text-rose-500 mb-4" size={32} />
+                                    <h4 className="font-black text-slate-800 mb-2">데이터 초기화</h4>
+                                    <p className="text-xs text-slate-500 font-bold leading-relaxed">연습용 데이터를 지우고 실제 운영을 시작할 때 사용합니다. <b>영구 삭제</b>되므로 주의가 필요합니다.</p>
                                 </div>
                             </div>
                         </SubSection>
-
-                        <SubSection number="8.8" title="⚠️ 데이터 초기화 (공장 초기화)">
-                            <LogicBox color="rose" title="비가역적 작업 주의">
-                                [데이터 초기화]는 공장 출하 상태로 되돌리는 기능입니다. 버튼을 누르는 순간 모든 고객, 판매, 상담 기록이 <b>영구 삭제</b>되며 절대 복구할 수 없습니다. 실행 전 반드시 <b>수동 백업</b>을 진행하세요.
-                            </LogicBox>
-                        </SubSection>
                     </div>
 
-                    {/* Section 9: Rescue */}
-                    <SectionTitle number="09" title="제니의 긴급 구조 센터 (Rescue)" id="rescue" icon={<HelpCircle size={28} />} />
+                    {/* Section 10: Rescue */}
+                    <SectionTitle number="10" title="제니의 긴급 구조 센터 (Rescue)" id="rescue" icon={<HelpCircle size={28} />} />
                     <div className="bg-white rounded-[3rem] border border-slate-200/80 p-12 shadow-sm space-y-12 mb-32">
                         <div className="grid grid-cols-1 gap-8">
-                            <SubSection number="9.1" title="OCR 및 입력 오류 대처">
+                            <SubSection number="10.1" title="OCR 및 입력 오류 대처">
                                 <LogicBox color="amber">
                                     명함 인식 시 '0'과 'O'를 혼동할 수 있습니다. 이미 입력된 텍스트는 언제든 마우스로 클릭해 수정이 가능하니, 저장 전 한 번 더 검토해 주세요.
                                 </LogicBox>
                             </SubSection>
-                            <SubSection number="9.2" title="화면이 멈추거나 백색 화면이 뜰 때">
+                            <SubSection number="10.2" title="화면이 멈추거나 백색 화면이 뜰 때">
                                 <div className="flex gap-4 items-start p-6 bg-slate-100 rounded-2xl">
                                     <AlertTriangle className="text-orange-500 shrink-0" size={24} />
                                     <div className="text-sm font-bold text-slate-700 leading-relaxed">
@@ -601,7 +541,7 @@ const UserManual = () => {
                                     </div>
                                 </div>
                             </SubSection>
-                            <SubSection number="9.3" title="장부 금액과 실재고가 안 맞아요">
+                            <SubSection number="10.3" title="장부 금액과 실재고가 안 맞아요">
                                 <LogicBox title="영점 조절 가이드">
                                     과거의 누락된 데이터를 찾으려 애쓰기보다, [재고 조정] 메뉴에서 현재 시점의 실물 데이터로 '현행화' 하세요. 오늘을 기준으로 영점을 맞추고 기록을 새로 시작하는 것이 더 현명한 관리법입니다.
                                 </LogicBox>

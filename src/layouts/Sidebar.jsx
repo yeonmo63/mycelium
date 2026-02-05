@@ -151,6 +151,7 @@ const Sidebar = () => {
                     <MenuGroup id="finance" icon="account_balance" label="회계/지출 관리" expanded={isExpanded('finance')} onToggle={toggleMenu} currentPath={location.pathname}>
                         <SubMenuItem to="/finance/purchase" icon="shopping_bag" label="매입 등록/내역" />
                         <SubMenuItem to="/finance/expense" icon="payments" label="일반 지출 관리" />
+                        <SubMenuItem to="/finance/tax-report" icon="request_quote" label="세무/부가세 신고" />
                         <SubMenuItem to="/finance/vendor" icon="factory" label="공급/거래처 관리" />
                         <SubMenuItem to="/status/financial-analysis" icon="analytics" label="손익/재무 분석" />
                     </MenuGroup>

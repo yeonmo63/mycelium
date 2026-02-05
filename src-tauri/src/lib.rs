@@ -311,6 +311,7 @@ pub fn run() {
             commands::sales::fetch_external_mall_orders,
             commands::config::save_courier_config,
             commands::config::get_courier_config_for_ui,
+            commands::sales::get_tax_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

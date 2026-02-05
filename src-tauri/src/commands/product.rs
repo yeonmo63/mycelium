@@ -12,7 +12,7 @@ use tauri::{command, State};
 #[command]
 pub async fn get_product_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Product>> {
     let products = sqlx::query_as::<_, Product>(
-        "SELECT product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, product_code, status, category FROM products ORDER BY product_name"
+        "SELECT product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, product_code, status, category, tax_type FROM products ORDER BY product_name"
     )
     .fetch_all(&*state)
     .await?;
@@ -177,27 +177,32 @@ pub async fn create_product(
     itemType: Option<String>,
     productCode: Option<String>,
     category: Option<String>,
+    taxType: Option<String>,
 ) -> MyceliumResult<i32> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
     let row: (i32,) = sqlx::query_as(
-        "INSERT INTO products (product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, product_code, category) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING product_id"
+        "INSERT INTO products (
+            product_name, specification, unit_price, stock_quantity, safety_stock, 
+            cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, 
+            item_type, product_code, category, tax_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING product_id"
     )
     .bind(&productName)
     .bind(&specification)
     .bind(unitPrice)
     .bind(stockQuantity.unwrap_or(0))
-    .bind(safetyStock.unwrap_or(0))
+    .bind(safetyStock.unwrap_or(10))
     .bind(costPrice.unwrap_or(0))
     .bind(materialId)
     .bind(materialRatio)
     .bind(auxMaterialId)
     .bind(auxMaterialRatio)
-    .bind(itemType.unwrap_or("product".to_string()))
+    .bind(itemType.unwrap_or_else(|| "product".to_string()))
     .bind(&productCode)
     .bind(&category)
+    .bind(taxType.unwrap_or_else(|| "면세".to_string()))
     .fetch_one(&mut *tx)
     .await?;
 
@@ -240,6 +245,7 @@ pub async fn update_product(
     status: Option<String>,
     syncSalesNames: Option<bool>,
     category: Option<String>,
+    taxType: Option<String>,
 ) -> MyceliumResult<()> {
     let mut tx = state.begin().await?;
     let sync = syncSalesNames.unwrap_or(false);
@@ -247,6 +253,7 @@ pub async fn update_product(
     let ratio = materialRatio.unwrap_or(1.0);
     let aux_ratio = auxMaterialRatio.unwrap_or(1.0);
     let status_val = status.unwrap_or_else(|| "판매중".to_string());
+    let tax_type_val = taxType.unwrap_or_else(|| "면세".to_string());
 
     let old: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(productId)
@@ -255,15 +262,34 @@ pub async fn update_product(
 
     if let Some(qty) = stockQuantity {
         sqlx::query(
-            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, stock_quantity = $4, safety_stock = $5, cost_price = $6, material_id = $7, material_ratio = $8, aux_material_id = $9, aux_material_ratio = $10, item_type = $11, status = $12, category = $13 WHERE product_id = $14",
+            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, stock_quantity = $4, safety_stock = $5, cost_price = $6, material_id = $7, material_ratio = $8, aux_material_id = $9, aux_material_ratio = $10, item_type = $11, status = $12, category = $13, tax_type = $14 WHERE product_id = $15",
         )
-        .bind(&productName).bind(&specification).bind(unitPrice).bind(qty).bind(safetyStock.unwrap_or(10)).bind(cost).bind(materialId).bind(ratio).bind(auxMaterialId).bind(aux_ratio).bind(itemType.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(&category).bind(productId)
+        .bind(&productName).bind(&specification).bind(unitPrice).bind(qty).bind(safetyStock.unwrap_or(10)).bind(cost).bind(materialId).bind(ratio).bind(auxMaterialId).bind(aux_ratio).bind(itemType.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(&category).bind(&tax_type_val).bind(productId)
         .execute(&mut *tx).await?;
     } else {
         sqlx::query(
-            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, safety_stock = $4, cost_price = $5, material_id = $6, material_ratio = $7, aux_material_id = $8, aux_material_ratio = $9, item_type = $10, status = $11, category = $12 WHERE product_id = $13",
+            "UPDATE products SET 
+                product_name = $1, specification = $2, unit_price = $3, 
+                safety_stock = $4, cost_price = $5, material_id = $6, material_ratio = $7, 
+                aux_material_id = $8, aux_material_ratio = $9, item_type = $10, 
+                status = $11, product_code = $12, category = $13, tax_type = $14
+             WHERE product_id = $15"
         )
-        .bind(&productName).bind(&specification).bind(unitPrice).bind(safetyStock.unwrap_or(10)).bind(cost).bind(materialId).bind(ratio).bind(auxMaterialId).bind(aux_ratio).bind(itemType.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(&category).bind(productId)
+        .bind(&productName)
+        .bind(&specification)
+        .bind(unitPrice)
+        .bind(safetyStock.unwrap_or(10))
+        .bind(costPrice.unwrap_or(0))
+        .bind(materialId)
+        .bind(materialRatio)
+        .bind(auxMaterialId)
+        .bind(auxMaterialRatio)
+        .bind(itemType.unwrap_or_else(|| "product".to_string()))
+        .bind(&status_val)
+        .bind(&old.product_code) // product_code is not an argument to update_product, use old value
+        .bind(&category)
+        .bind(&tax_type_val)
+        .bind(productId)
         .execute(&mut *tx).await?;
     }
 

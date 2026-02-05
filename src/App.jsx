@@ -20,6 +20,7 @@ import CustomerSpecialCare from './features/customer/CustomerSpecialCare';
 import CustomerSms from './features/customer/CustomerSms';
 import FinancePurchase from './features/finance/FinancePurchase';
 import FinanceExpense from './features/finance/FinanceExpense';
+import FinanceTaxReport from './features/finance/FinanceTaxReport';
 import FinanceVendor from './features/finance/FinanceVendor';
 import FinanceAnalysis from './features/finance/FinanceAnalysis';
 import SettingsProduct from './features/settings/SettingsProduct';
@@ -75,6 +76,7 @@ const router = createBrowserRouter(
       <Route path="customer/special-care" element={<CustomerSpecialCare />} />
       <Route path="finance/purchase" element={<FinancePurchase />} />
       <Route path="finance/expense" element={<FinanceExpense />} />
+      <Route path="finance/tax-report" element={<FinanceTaxReport />} />
       <Route path="finance/vendor" element={<FinanceVendor />} />
       <Route path="status/financial-analysis" element={<FinanceAnalysis />} />
       <Route path="intel/sales" element={<SalesIntelligence />} />

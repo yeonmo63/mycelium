@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS products (
     product_code VARCHAR(50) UNIQUE,
     status VARCHAR(20) DEFAULT '판매중', -- '판매중', '단종상품'
     category VARCHAR(50),
+    tax_type VARCHAR(20) DEFAULT '면세',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -118,6 +119,8 @@ CREATE TABLE IF NOT EXISTS sales (
     shipping_date DATE,
     courier_name VARCHAR(50),
     tracking_number VARCHAR(50),
+    supply_value INTEGER DEFAULT 0,
+    vat_amount INTEGER DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

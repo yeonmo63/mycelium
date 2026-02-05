@@ -91,6 +91,8 @@ const SalesReception = () => {
                 price: s.unit_price,
                 discountRate: s.discount_rate || 0,
                 amount: s.total_amount,
+                supplyValue: s.supply_value,
+                vatAmount: s.vat_amount,
                 status: s.status,
                 shipName: s.shipping_name || '',
                 shipZip: s.shipping_zip_code || '',
@@ -404,37 +406,40 @@ const SalesReception = () => {
                 <table class="main-table">
                     <tr style="background:#eee; text-align:center; height: 30px; font-weight:bold;">
                         <td class="row-cell row-num">No</td>
-                        <td class="row-cell">품명 및 규격</td>
+                        <td class="row-cell" style="width:200px;">품명 및 규격</td>
                         <td class="row-cell row-qty">수량</td>
                         <td class="row-cell row-price">단가</td>
-                        <td class="row-cell row-disc">할인</td>
-                        <td class="row-cell row-amt">금액</td>
+                        <td class="row-cell" style="width:80px; text-align:right;">공급가액</td>
+                        <td class="row-cell" style="width:70px; text-align:right;">부가세</td>
+                        <td class="row-cell row-amt">합계금액</td>
                         <td class="row-cell row-rem">비고</td>
                     </tr>
-                    ${Array.from({ length: 10 }).map((_, i) => {
+                    ${Array.from({ length: 15 }).map((_, i) => {
             const row = salesRows[i];
             if (row) {
                 return `
-                            <tr style="height: 40px;">
+                            <tr style="height: 35px;">
                                 <td class="row-cell row-num">${i + 1}</td>
                                 <td class="row-cell row-item">
-                                    <div style="font-weight:bold; font-size:12px;">${row.product}</div>
-                                    <div style="font-size:10px; color:#555;">${row.spec || '-'}</div>
+                                    <div style="font-weight:bold; font-size:11px;">${row.product}</div>
+                                    <div style="font-size:9px; color:#555;">${row.spec || '-'}</div>
                                 </td>
                                 <td class="row-cell row-qty">${row.qty}</td>
                                 <td class="row-cell row-price">${formatCurrency(row.price)}</td>
-                                <td class="row-cell row-disc">${row.discountRate > 0 ? row.discountRate + '%' : '-'}</td>
+                                <td class="row-cell" style="text-align:right;">${formatCurrency(row.supplyValue || row.amount)}</td>
+                                <td class="row-cell" style="text-align:right;">${formatCurrency(row.vatAmount || 0)}</td>
                                 <td class="row-cell row-amt">${formatCurrency(row.amount)}</td>
-                                <td class="row-cell row-rem" style="font-size:9px;">${row.shipAddr1 ? `[배송] ${row.shipAddr1}` : ''}</td>
+                                <td class="row-cell row-rem" style="font-size:8px;">${row.discountRate > 0 ? `할인 ${row.discountRate}% ` : ''}${row.shipAddr1 ? `[배송] ${row.shipAddr1}` : ''}</td>
                             </tr>`;
             } else {
                 return `
-                            <tr style="height: 40px;">
+                            <tr style="height: 35px;">
                                 <td class="row-cell row-num"></td>
                                 <td class="row-cell"></td>
                                 <td class="row-cell row-qty"></td>
                                 <td class="row-cell row-price"></td>
-                                <td class="row-cell row-disc"></td>
+                                <td class="row-cell"></td>
+                                <td class="row-cell"></td>
                                 <td class="row-cell row-amt"></td>
                                 <td class="row-cell row-rem"></td>
                             </tr>`;
@@ -442,8 +447,11 @@ const SalesReception = () => {
         }).join('')}
                 </table>
                 <div class="total-box">
-                    <span>합계금액 (일금 ${numberToKorean(summary.amount)}원정)</span>
-                    <span>￦ ${formatCurrency(summary.amount)}</span>
+                    <div style="font-size: 11px;">
+                        <div>총 공급가액: ￦ ${formatCurrency(summary.supply)}</div>
+                        <div>총 부 가 세: ￦ ${formatCurrency(summary.vat)}</div>
+                    </div>
+                    <span>합계금액 (일금 ${numberToKorean(summary.amount)}원정) ￦ ${formatCurrency(summary.amount)}</span>
                 </div>
                 <div style="margin-top:20px; text-align:center; color:#888; font-size:11px;">위 금액을 정히 영수(청구)함.</div>
             </body>

@@ -789,14 +789,28 @@ pub async fn save_special_sales_batch(
 
         if let Some(sid) = &sale.sales_id {
             if !sid.is_empty() {
-                // Find product_id
-                let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+                // Find product_id and tax_type
+                let p_info: Option<(i32, Option<String>)> = sqlx::query_as("SELECT product_id, tax_type FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
                     .bind(&sale.product_name).bind(&sale.specification).fetch_optional(&mut *tx).await?;
-                let p_id = p_id_row.map(|r| r.0);
+                let p_id = p_info.as_ref().map(|r| r.0);
+                let tax_type = p_info
+                    .as_ref()
+                    .and_then(|r| r.1.clone())
+                    .unwrap_or_else(|| "면세".to_string());
+
+                let mut supply_value = total;
+                let mut vat_amount = 0;
+
+                if tax_type == "과세" {
+                    let t = total as f64;
+                    let s = (t / 1.1).round() as i32;
+                    vat_amount = total - s;
+                    supply_value = s;
+                }
 
                 // Update Sale Record
                 // We use '현장판매완료' status to distinguish from '배송완료'
-                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10, product_id=$11 WHERE sales_id=$12")
+                sqlx::query("UPDATE sales SET order_date=$1, product_name=$2, specification=$3, quantity=$4, unit_price=$5, total_amount=$6, discount_rate=$7, memo=$8, status='현장판매완료', shipping_date=$9, customer_id=$10, product_id=$11, supply_value=$12, vat_amount=$13 WHERE sales_id=$14")
                     .bind(sale_date)
                     .bind(&sale.product_name)
                     .bind(&sale.specification)
@@ -808,6 +822,8 @@ pub async fn save_special_sales_batch(
                     .bind(today_naive)
                     .bind(&event_id) // Link to Event ID
                     .bind(p_id)
+                    .bind(supply_value)
+                    .bind(vat_amount)
                     .bind(sid)
                     .execute(&mut *tx)
                     .await?;
@@ -819,12 +835,26 @@ pub async fn save_special_sales_batch(
         let new_sid = format!("{}{:05}", sl_prefix, next_seq);
         next_seq += 1;
 
-        // Find product_id
-        let p_id_row: Option<(i32,)> = sqlx::query_as("SELECT product_id FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
+        // Find product_id and tax_type
+        let p_info: Option<(i32, Option<String>)> = sqlx::query_as("SELECT product_id, tax_type FROM products WHERE product_name = $1 AND specification IS NOT DISTINCT FROM $2")
             .bind(&sale.product_name).bind(&sale.specification).fetch_optional(&mut *tx).await?;
-        let p_id = p_id_row.map(|r| r.0);
+        let p_id = p_info.as_ref().map(|r| r.0);
+        let tax_type = p_info
+            .as_ref()
+            .and_then(|r| r.1.clone())
+            .unwrap_or_else(|| "면세".to_string());
 
-        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date, product_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11, $12)")
+        let mut supply_value = total;
+        let mut vat_amount = 0;
+
+        if tax_type == "과세" {
+            let t = total as f64;
+            let s = (t / 1.1).round() as i32;
+            vat_amount = total - s;
+            supply_value = s;
+        }
+
+        sqlx::query("INSERT INTO sales (sales_id, customer_id, order_date, product_name, specification, quantity, unit_price, total_amount, discount_rate, memo, status, shipping_date, product_id, supply_value, vat_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '현장판매완료', $11, $12, $13, $14)")
         .bind(&new_sid)
         .bind(&event_id) // Link to Event ID
         .bind(sale_date)
@@ -837,6 +867,8 @@ pub async fn save_special_sales_batch(
         .bind(&sale.memo)
         .bind(today_naive) // shipping_date = today for spot sales
         .bind(p_id)
+        .bind(supply_value)
+        .bind(vat_amount)
         .execute(&mut *tx)
         .await?;
     }
@@ -1073,4 +1105,24 @@ pub async fn fetch_external_mall_orders(
 
     // Actual HTTP fetching would go here...
     Ok(vec![])
+}
+
+#[command]
+pub async fn get_tax_report(
+    state: State<'_, DbPool>,
+    startDate: String,
+    endDate: String,
+) -> MyceliumResult<Vec<Sales>> {
+    let rows = sqlx::query_as::<_, Sales>(
+        "SELECT s.*, COALESCE(p.tax_type, '면세') as tax_type
+         FROM sales s 
+         LEFT JOIN products p ON s.product_id = p.product_id
+         WHERE s.order_date BETWEEN $1::DATE AND $2::DATE 
+         ORDER BY s.order_date ASC",
+    )
+    .bind(startDate)
+    .bind(endDate)
+    .fetch_all(&*state)
+    .await?;
+    Ok(rows)
 }

@@ -15,7 +15,7 @@ const SalesDailyReceipts = () => {
     // Derived Stats
     const stats = useMemo(() => {
         const s = {
-            total: { count: 0, qty: 0, amt: 0 },
+            total: { count: 0, qty: 0, amt: 0, supply: 0, vat: 0 },
             gen: { count: 0, qty: 0, amt: 0 },
             mall: { count: 0, qty: 0, amt: 0 },
             status: { receipt: 0, paid: 0, shipped: 0 }
@@ -24,6 +24,8 @@ const SalesDailyReceipts = () => {
         receipts.forEach(r => {
             const qty = r.quantity || 0;
             const amt = r.total_amount || 0;
+            const supply = r.supply_value || 0;
+            const vat = r.vat_amount || 0;
             const isMall = (r.memo || '').includes('[쇼핑몰주문]');
             const status = r.status || '접수';
 
@@ -31,6 +33,8 @@ const SalesDailyReceipts = () => {
             s.total.count++;
             s.total.qty += qty;
             s.total.amt += amt;
+            s.total.supply += supply;
+            s.total.vat += vat;
 
             // Type
             if (isMall) {
@@ -103,7 +107,7 @@ const SalesDailyReceipts = () => {
             return;
         }
 
-        let csv = '\uFEFFNo,상태,접수일자,고객명,휴대번호,배송처,상품명,규격,수량,금액,메모\n';
+        let csv = '\uFEFFNo,상태,접수일자,고객명,휴대번호,배송처,상품명,규격,수량,공급가액,부가세,합계금액,메모\n';
         receipts.forEach((r, idx) => {
             const row = [
                 idx + 1,
@@ -115,6 +119,8 @@ const SalesDailyReceipts = () => {
                 r.product_name,
                 r.specification || '-',
                 r.quantity,
+                r.supply_value || r.total_amount,
+                r.vat_amount || 0,
                 r.total_amount,
                 (r.memo || '').replace(/,/g, ' ').replace(/\n/g, ' ')
             ].map(v => `"${v}"`).join(',');
@@ -241,7 +247,15 @@ const SalesDailyReceipts = () => {
                                         <span className="text-sm font-black text-slate-800">{stats.total.count} <span className="text-[10px] font-normal text-slate-400">건</span></span>
                                     </div>
                                     <div className="flex justify-between items-baseline">
-                                        <span className="text-xs font-bold text-slate-500">총 금액</span>
+                                        <span className="text-xs font-bold text-slate-500">공급가액</span>
+                                        <span className="text-sm font-black text-slate-700">{formatCurrency(stats.total.supply)}원</span>
+                                    </div>
+                                    <div className="flex justify-between items-baseline border-b border-slate-100 pb-1 mb-1">
+                                        <span className="text-xs font-bold text-slate-500">부가세</span>
+                                        <span className="text-sm font-black text-slate-700">{formatCurrency(stats.total.vat)}원</span>
+                                    </div>
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-xs font-bold text-slate-500">합계</span>
                                         <span className="text-lg font-black text-indigo-600 tracking-tight">{formatCurrency(stats.total.amt)}<span className="text-[10px] font-normal text-slate-400 ml-0.5">원</span></span>
                                     </div>
                                 </div>
@@ -322,7 +336,9 @@ const SalesDailyReceipts = () => {
                                 <th className="py-3 text-left pl-4 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[12%]">상품명</th>
                                 <th className="py-3 text-center font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[6%]">규격</th>
                                 <th className="py-3 text-center font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[5%]">수량</th>
-                                <th className="py-3 text-right pr-4 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[8%]">금액</th>
+                                <th className="py-3 text-right pr-2 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[8%]">공급가액</th>
+                                <th className="py-3 text-right pr-2 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[6%]">부가세</th>
+                                <th className="py-3 text-right pr-4 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[8%]">합계</th>
                                 <th className="py-3 text-left pl-4 font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 bg-slate-50/50 w-[20%]">메모</th>
                             </tr>
                         </thead>
@@ -360,7 +376,9 @@ const SalesDailyReceipts = () => {
                                             </td>
                                             <td className="px-3 py-3 text-center text-slate-500 text-[11px]">{r.specification || '-'}</td>
                                             <td className="px-3 py-3 text-center font-black text-slate-800 text-[11px]">{r.quantity.toLocaleString()}</td>
-                                            <td className="px-3 py-3 pr-4 text-right font-black text-slate-800 text-[11px]">{formatCurrency(r.total_amount)}</td>
+                                            <td className="px-2 py-3 text-right font-medium text-slate-600 text-[10.5px]">{formatCurrency(r.supply_value || r.total_amount)}</td>
+                                            <td className="px-2 py-3 text-right font-medium text-slate-500 text-[10.5px]">{formatCurrency(r.vat_amount || 0)}</td>
+                                            <td className="px-3 py-3 pr-4 text-right font-black text-slate-800 text-[11px] font-mono">{formatCurrency(r.total_amount)}</td>
                                             <td className="px-3 py-3 pl-4 text-slate-400 text-[10px]">
                                                 <div className="truncate max-w-[120px]" title={r.memo}>{r.memo || ''}</div>
                                             </td>
