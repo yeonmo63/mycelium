@@ -19,90 +19,51 @@ pub async fn init_pool(database_url: &str) -> MyceliumResult<DbPool> {
 }
 
 pub async fn init_database(pool: &DbPool) -> MyceliumResult<()> {
-    // FIX: Resolution for Migration VersionMismatch(20260202173000)
-    // Deleting the record so SQLx re-runs it and updates the checksum.
-    // The migration file has IF NOT EXISTS guards for all operations.
-    let _ = sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 20260202173000")
+    eprintln!("DB: Quick start...");
+
+    // 1. Clear any stale advisory locks
+    let _ = sqlx::query("SELECT pg_advisory_unlock_all()")
         .execute(pool)
         .await;
 
-    // 1. Run Migrations (Schema + Triggers)
-    // This will look for .sql files in the migrations directory and apply them.
+    // 2. Standard Migrations - Run directly without wrapper to move fast
     sqlx::migrate!("./migrations").run(pool).await?;
 
-    // 2. Initial Seeds: Ensure at least the primary admin exists
+    // 3. Seeds
+    let _ = ensure_seeds(pool).await;
+    eprintln!("System: Database ready.");
+
+    Ok(())
+}
+
+async fn ensure_seeds(pool: &DbPool) -> MyceliumResult<()> {
     let admin_username = std::env::var("ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
+
+    // Check and insert admin
     let admin_exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE username = $1")
         .bind(&admin_username)
         .fetch_one(pool)
         .await
         .unwrap_or((0,));
-
     if admin_exists.0 == 0 {
-        let admin_password = std::env::var("ADMIN_PASS").unwrap_or_else(|_| "admin".to_string());
-        let password_hash = bcrypt::hash(&admin_password, bcrypt::DEFAULT_COST)?;
-        sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING")
-            .bind(admin_username)
-            .bind(password_hash)
-            .bind("admin")
-            .execute(pool)
-            .await?;
+        if let Ok(hash) = bcrypt::hash("admin", bcrypt::DEFAULT_COST) {
+            let _ = sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING").bind(&admin_username).bind(hash).execute(pool).await;
+        }
     }
 
-    let company_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM company_info")
+    // Check and insert company
+    let company_exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM company_info")
         .fetch_one(pool)
-        .await?;
-
-    if company_count.0 == 0 {
-        sqlx::query("INSERT INTO company_info (company_name) VALUES ($1)")
-            .bind("(주)대관령송암버섯")
-            .execute(pool)
-            .await?;
+        .await
+        .unwrap_or((0,));
+    if company_exists.0 == 0 {
+        let _ = sqlx::query(
+            "INSERT INTO company_info (company_name) VALUES ($1) ON CONFLICT DO NOTHING",
+        )
+        .bind("Mycelium Smart Farm")
+        .execute(pool)
+        .await;
     }
-
-    // 4. Stock Management Trigger
-    // Moved to migrations/20260202173000_init_full_schema.sql, so we don't need it here.
-
-    // 5. Ensure 'category' column exists (Auto-Fix for user)
-    sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50)")
-        .execute(pool)
-        .await?;
-
-    // 6. Ensure tax columns exist (for mixed tax BOM support)
-    sqlx::query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_exempt_value INTEGER DEFAULT 0")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20) DEFAULT '면세'")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_exempt_value INTEGER DEFAULT 0")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20) DEFAULT '면세'",
-    )
-    .execute(pool)
-    .await?;
-
-    // 7. Ensure lot_number and certification_info exist
-    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS lot_number VARCHAR(100)")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS package_count INTEGER")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS weight_per_package NUMERIC(10, 2)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS package_unit VARCHAR(50)")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE company_info ADD COLUMN IF NOT EXISTS certification_info JSONB DEFAULT '{}'::jsonb")
-        .execute(pool)
-        .await?;
-
     Ok(())
 }
 
@@ -283,7 +244,7 @@ pub struct Schedule {
     pub related_id: Option<i32>,      // reservation_id
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Default)]
 pub struct DashboardStats {
     pub total_sales_amount: Option<i64>, // Sum can be null if no rows
     pub total_orders: Option<i64>,

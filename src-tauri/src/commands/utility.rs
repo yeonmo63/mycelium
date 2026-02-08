@@ -32,17 +32,25 @@ pub async fn init_db_schema(state: State<'_, DbPool>) -> MyceliumResult<()> {
     sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity INTEGER DEFAULT 0")
         .execute(&*state)
         .await?;
-
     sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS safety_stock INTEGER DEFAULT 10")
         .execute(&*state)
         .await?;
-
     sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS material_id INTEGER REFERENCES products(product_id)")
         .execute(&*state).await?;
-
     sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS material_ratio FLOAT DEFAULT 1.0")
         .execute(&*state)
         .await?;
+    sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50)")
+        .execute(&*state)
+        .await?;
+    sqlx::query("ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_exempt_value INTEGER DEFAULT 0")
+        .execute(&*state)
+        .await?;
+    sqlx::query(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20) DEFAULT '면세'",
+    )
+    .execute(&*state)
+    .await?;
 
     // 2. Purchases Table
     sqlx::query(
@@ -50,9 +58,24 @@ pub async fn init_db_schema(state: State<'_, DbPool>) -> MyceliumResult<()> {
     )
     .execute(&*state)
     .await?;
-
     sqlx::query("ALTER TABLE purchases ADD COLUMN IF NOT EXISTS material_item_id INTEGER REFERENCES products(product_id)")
         .execute(&*state).await?;
+
+    // 3. Harvest Records Table
+    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS lot_number VARCHAR(100)")
+        .execute(&*state)
+        .await?;
+    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS package_count INTEGER")
+        .execute(&*state)
+        .await?;
+    sqlx::query(
+        "ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS weight_per_package NUMERIC(10, 2)",
+    )
+    .execute(&*state)
+    .await?;
+    sqlx::query("ALTER TABLE harvest_records ADD COLUMN IF NOT EXISTS package_unit VARCHAR(50)")
+        .execute(&*state)
+        .await?;
 
     Ok(())
 }
