@@ -181,6 +181,7 @@ const Sidebar = () => {
                         <SubMenuItem to="/exp/program-mgmt" icon="settings_applications" label="체험 프로그램 설정" />
                         <SubMenuItem to="/settings/api-keys" icon="api" label="외부 서비스 연동" />
                         <SubMenuItem to="/settings/template-mgmt" icon="chat_bubble" label="메시지 템플릿" />
+                        <SubMenuItem to="/settings/data-init" icon="rocket_launch" label="업종별 데이터 초기화" />
                         <SubMenuItem to="/settings/db-backup-restore" icon="backup" label="백업 및 복구" />
                         <SubMenuItem to="/settings/db-reset" icon="delete_forever" label="데이터 초기화" />
                     </MenuGroup>

@@ -11,6 +11,7 @@ pub mod experience;
 pub mod finance;
 pub mod ledger;
 pub mod logistics;
+pub mod preset;
 pub mod product;
 pub mod production;
 pub mod sales;

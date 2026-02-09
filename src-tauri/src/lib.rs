@@ -358,6 +358,7 @@ pub fn run() {
             commands::config::save_courier_config,
             commands::config::get_courier_config_for_ui,
             commands::sales::get_tax_report,
+            commands::preset::apply_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -30,6 +30,7 @@ import SettingsApiKeys from './features/settings/SettingsApiKeys';
 import SettingsBackup from './features/settings/SettingsBackup';
 import SettingsDbReset from './features/settings/SettingsDbReset';
 import SettingsTemplate from './features/settings/SettingsTemplate';
+import SettingsDataInit from './features/settings/SettingsDataInit';
 import SalesReception from './features/sales/SalesReception';
 import SalesSpecial from './features/sales/SalesSpecial';
 import SalesOnlineSync from './features/sales/SalesOnlineSync';
@@ -105,6 +106,7 @@ const router = createBrowserRouter(
       <Route path="settings/api-keys" element={<SettingsApiKeys />} />
       <Route path="settings/template-mgmt" element={<SettingsTemplate />} />
       <Route path="settings/db-backup-restore" element={<SettingsBackup />} />
+      <Route path="settings/data-init" element={<SettingsDataInit />} />
       <Route path="settings/db-reset" element={<SettingsDbReset />} />
       <Route path="manual" element={<UserManual />} />
     </Route>
