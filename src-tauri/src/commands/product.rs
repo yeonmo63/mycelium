@@ -844,7 +844,63 @@ pub async fn get_product_bom(
         .fetch_all(&*pool)
         .await?;
 
-    Ok(rows)
+    if !rows.is_empty() {
+        return Ok(rows);
+    }
+
+    // Fallback: Check legacy columns (material_id, aux_material_id)
+    let p: Option<(Option<i32>, Option<f64>, Option<i32>, Option<f64>)> = 
+        sqlx::query_as("SELECT material_id, material_ratio, aux_material_id, aux_material_ratio FROM products WHERE product_id = $1")
+        .bind(productId)
+        .fetch_optional(&*pool)
+        .await?;
+    
+    let mut list = Vec::new();
+    if let Some((m_id, m_ratio, a_id, a_ratio)) = p {
+         // 1. Aux Material (Packaging/Box)
+         if let Some(aid) = a_id {
+            let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
+                .bind(aid)
+                .fetch_optional(&*pool)
+                .await?;
+            
+            if let Some((name, spec, stock, itype)) = m {
+                list.push(crate::db::ProductBomJoin {
+                    id: 0, // Dummy ID
+                    product_id: productId,
+                    material_id: aid,
+                    ratio: a_ratio.unwrap_or(1.0),
+                    product_name: name,
+                    specification: spec,
+                    stock_quantity: stock,
+                    item_type: itype
+                });
+            }
+        }
+
+        // 2. Main Material (Raw)
+        if let Some(mid) = m_id {
+             let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
+                .bind(mid)
+                .fetch_optional(&*pool)
+                .await?;
+            
+            if let Some((name, spec, stock, itype)) = m {
+                list.push(crate::db::ProductBomJoin {
+                    id: 0, // Dummy ID
+                    product_id: productId,
+                    material_id: mid,
+                    ratio: m_ratio.unwrap_or(1.0),
+                    product_name: name,
+                    specification: spec,
+                    stock_quantity: stock,
+                    item_type: itype
+                });
+            }
+        }
+    }
+
+    Ok(list)
 }
 
 #[command]

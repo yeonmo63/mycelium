@@ -255,7 +255,12 @@ export const useSalesStock = (showAlert, showConfirm) => {
     const filteredLogs = useMemo(() => {
         let list = logs;
         if (hideAutoLogs) {
-            list = list.filter(l => l.reference_id === 'MANUAL' || (l.change_type !== '출고' && l.change_type !== '취소반품' && l.change_type !== '생산출고'));
+            // Filter logic
+            // ... (keep existing logic)
+            // Ideally we should just return list based on hideAutoLogs
+            if (hideAutoLogs) {
+                return logs.filter(l => !l.reference_id?.startsWith('SALES_AUTO'));
+            }
         }
         if (logSearchQuery) {
             const q = logSearchQuery.toLowerCase();
@@ -267,6 +272,19 @@ export const useSalesStock = (showAlert, showConfirm) => {
         }
         return list;
     }, [logs, hideAutoLogs, logSearchQuery]);
+
+    // BOM Modal
+    const [bomModal, setBomModal] = useState({
+        open: false,
+        product: null
+    });
+
+    const openBomModal = (product) => {
+        setBomModal({
+            open: true,
+            product
+        });
+    };
 
     return {
         tab, setTab,
@@ -288,7 +306,11 @@ export const useSalesStock = (showAlert, showConfirm) => {
         handleAdjustStock,
         openHarvestModal,
         handleHarvest,
+        openHarvestModal,
+        handleHarvest,
         openConvertModal,
-        handleBatchConvert
+        handleBatchConvert,
+        bomModal, setBomModal,
+        openBomModal
     };
 };

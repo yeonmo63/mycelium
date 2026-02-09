@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { formatCurrency, parseNumber } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import ExcelUploadModal from './components/reception/ExcelUploadModal';
 
 const SalesOnlineSync = () => {
     const { showAlert, showConfirm } = useModal();
@@ -14,6 +15,8 @@ const SalesOnlineSync = () => {
     // UI State
     const [step, setStep] = useState('upload'); // upload | review | complete
     const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+    const [isExcelCustomModalOpen, setIsExcelCustomModalOpen] = useState(false);
+    const [uploadFileData, setUploadFileData] = useState(null);
 
     // Quick Register Modal
     const [isQuickRegOpen, setIsQuickRegOpen] = useState(false);
@@ -76,6 +79,16 @@ const SalesOnlineSync = () => {
                 let orders = [];
                 if (mallType === 'naver') orders = parseNaverCsv(text);
                 else if (mallType === 'coupang') orders = parseCoupangCsv(text);
+                else if (mallType === 'custom') {
+                    const allRows = parseCSV(text);
+                    if (allRows.length < 2) {
+                        await showAlert('오류', '데이터가 부족합니다.');
+                        return;
+                    }
+                    setUploadFileData({ headers: allRows[0], rows: allRows.slice(1).filter(r => r.some(c => c)) });
+                    setIsExcelCustomModalOpen(true);
+                    return; // Wait for modal
+                }
                 else orders = parseGenericCsv(text);
 
                 if (orders.length === 0) {
@@ -247,6 +260,42 @@ const SalesOnlineSync = () => {
                 internalProductId: matchProduct(r[4], uPrice)
             };
         }).filter(o => o.customerName);
+    };
+
+    const handleImportFromExcel = async (rows) => {
+        const orders = rows.map(r => ({
+            orderId: 'EXCEL-' + Date.now().toString().slice(-4),
+            customerName: r.shipName,
+            receiverName: r.shipName,
+            mobile: r.shipMobile,
+            zip: r.shipZip,
+            address: r.shipAddr1 + (r.shipAddr2 ? ' ' + r.shipAddr2 : ''),
+            mallProductName: r.product,
+            qty: r.qty,
+            unitPrice: r.price,
+            internalProductId: matchProduct(r.product, r.price)
+        }));
+
+        // Identify Customers
+        if (window.__TAURI__) {
+            const invoke = window.__TAURI__.core.invoke;
+            for (const order of orders) {
+                try {
+                    if (!order.mobile) { order.isNewCustomer = true; continue; }
+                    const dups = await invoke('search_customers_by_mobile', { mobile: order.mobile });
+                    if (dups && dups.length > 0) {
+                        order.isNewCustomer = false;
+                        order.existingCustomerId = dups[0].customer_id;
+                        order.existingCustomerName = dups[0].customer_name;
+                    } else {
+                        order.isNewCustomer = true;
+                    }
+                } catch (e) { console.warn(e); order.isNewCustomer = true; }
+            }
+        }
+
+        setParsedOrders(orders);
+        setStep('review');
     };
 
     const matchProduct = (mallName, mallPrice) => {
@@ -473,7 +522,8 @@ const SalesOnlineSync = () => {
                                 className="w-full h-12 px-4 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 focus:ring-4 focus:ring-teal-500/20 focus:border-teal-500 transition-all outline-none">
                                 <option value="naver">네이버 스마트스토어 (Commerce API)</option>
                                 <option value="coupang">쿠팡 (윙 API)</option>
-                                <option value="generic">일반 (이름,연락처,주소,상품명)</option>
+                                <option value="custom">자유 양식 엑셀 (컬럼 직접 지정)</option>
+                                <option value="generic">기본 (이름,연락처,주소,상품명)</option>
                             </select>
                         </div>
 
@@ -737,6 +787,13 @@ const SalesOnlineSync = () => {
                     </div>
                 </div>
             )}
+
+            <ExcelUploadModal
+                isOpen={isExcelCustomModalOpen}
+                onClose={() => setIsExcelCustomModalOpen(false)}
+                fileData={uploadFileData}
+                onImport={handleImportFromExcel}
+            />
         </div>
     );
 };

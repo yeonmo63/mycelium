@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatCurrency, formatDateTime } from '../../../../utils/common';
 
-const StockTable = ({ products, tab, getFreshnessInfo, openAdjustModal, openHarvestModal, openConvertModal }) => {
+const StockTable = ({ products, tab, getFreshnessInfo, openAdjustModal, openHarvestModal, openConvertModal, openBomModal }) => {
     const getSubTag = (product) => {
         if (product.item_type !== 'aux_material' && product.item_type !== 'raw_material' && product.item_type !== 'material') return null;
         if (product.category) {
@@ -110,6 +110,11 @@ const StockTable = ({ products, tab, getFreshnessInfo, openAdjustModal, openHarv
                                         <button onClick={() => openAdjustModal(p)} className="inline-flex items-center justify-center p-2 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 transition-all active:scale-95 shadow-sm border border-orange-100" title="재고 조정">
                                             <span className="material-symbols-rounded text-base">edit_note</span>
                                         </button>
+                                        {tab === 'product' && (
+                                            <button onClick={() => openBomModal(p)} className="inline-flex items-center justify-center p-2 rounded-xl bg-violet-50 text-violet-600 hover:bg-violet-100 transition-all active:scale-95 shadow-sm border border-violet-100" title="구성 자재 관리 (BOM)">
+                                                <span className="material-symbols-rounded text-base">account_tree</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

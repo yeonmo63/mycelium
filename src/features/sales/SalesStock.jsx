@@ -8,6 +8,7 @@ import AuditTrail from './components/stock/AuditTrail';
 import StockAdjustModal from './components/modals/StockAdjustModal';
 import HarvestEntryModal from './components/modals/HarvestEntryModal';
 import BatchProductionModal from './components/modals/BatchProductionModal';
+import BomManagementModal from './components/modals/BomManagementModal';
 
 const SalesStock = () => {
     const { showAlert, showConfirm } = useModal();
@@ -21,6 +22,7 @@ const SalesStock = () => {
         convertModal, setConvertModal,
         harvestModal, setHarvestModal,
         adjustModal, setAdjustModal,
+        bomModal, setBomModal,
         loadData,
         getFreshnessInfo,
         filteredProducts,
@@ -30,7 +32,8 @@ const SalesStock = () => {
         openHarvestModal,
         handleHarvest,
         openConvertModal,
-        handleBatchConvert
+        handleBatchConvert,
+        openBomModal
     } = useSalesStock(showAlert, showConfirm);
 
     return (
@@ -69,6 +72,7 @@ const SalesStock = () => {
                         openAdjustModal={openAdjustModal}
                         openHarvestModal={openHarvestModal}
                         openConvertModal={openConvertModal}
+                        openBomModal={openBomModal}
                     />
                 </div>
 
@@ -106,6 +110,13 @@ const SalesStock = () => {
                 convertModal={convertModal} setConvertModal={setConvertModal}
                 products={products}
                 handleBatchConvert={handleBatchConvert}
+            />
+
+            <BomManagementModal
+                isOpen={bomModal.open}
+                onClose={() => setBomModal(prev => ({ ...prev, open: false }))}
+                product={bomModal.product}
+                allProducts={products}
             />
         </div>
     );
