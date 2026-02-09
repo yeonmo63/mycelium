@@ -74,7 +74,14 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_production_spaces_modtime ON production_spaces;
 CREATE TRIGGER update_production_spaces_modtime BEFORE UPDATE ON production_spaces FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+DROP TRIGGER IF EXISTS update_production_batches_modtime ON production_batches;
 CREATE TRIGGER update_production_batches_modtime BEFORE UPDATE ON production_batches FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+DROP TRIGGER IF EXISTS update_farming_logs_modtime ON farming_logs;
 CREATE TRIGGER update_farming_logs_modtime BEFORE UPDATE ON farming_logs FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+DROP TRIGGER IF EXISTS update_harvest_records_modtime ON harvest_records;
 CREATE TRIGGER update_harvest_records_modtime BEFORE UPDATE ON harvest_records FOR EACH ROW EXECUTE PROCEDURE update_modified_column();

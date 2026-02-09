@@ -15,14 +15,25 @@ use tauri::{command, AppHandle, Manager, State};
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
 
-#[derive(Default)]
+#[derive(serde::Serialize, Debug)]
+pub enum SetupStatus {
+    Initializing,
+    Configured,
+    NotConfigured,
+}
+
 pub struct SetupState {
-    pub is_configured: Mutex<bool>,
+    pub status: Mutex<SetupStatus>,
 }
 
 #[command]
-pub fn check_setup_status(state: State<'_, SetupState>) -> bool {
-    *state.is_configured.lock().unwrap()
+pub fn check_setup_status(state: State<'_, SetupState>) -> SetupStatus {
+    let status = state.status.lock().unwrap();
+    match *status {
+        SetupStatus::Initializing => SetupStatus::Initializing,
+        SetupStatus::Configured => SetupStatus::Configured,
+        SetupStatus::NotConfigured => SetupStatus::NotConfigured,
+    }
 }
 
 /// Helper to retrieve the database URL ONLY from config.json (Security Enforced)
@@ -81,14 +92,16 @@ pub async fn scan_network_for_postgres(port: u16) -> Option<String> {
 
 /// Helper to update the database_url's IP in config.json if it has changed
 pub async fn update_db_ip_in_config(app: &AppHandle) -> MyceliumResult<()> {
+    println!("System: Checking if DB IP update is needed...");
     if let Ok(config_dir) = app.path().app_config_dir() {
         let config_path = config_dir.join("config.json");
         if config_path.exists() {
             if let Ok(content) = fs::read_to_string(&config_path) {
                 if let Ok(mut config_data) = serde_json::from_str::<Value>(&content) {
                     if let Some(url) = config_data.get("database_url").and_then(|v| v.as_str()) {
-                        let re = Regex::new(r"^(postgres://[^:]+:[^@]*@)([^:/]+)((?::\d+)?)(.*)$")
-                            .unwrap();
+                        // Improved regex to handle '@' in passwords by splitting at the LAST '@' before host
+                        let re = Regex::new(r"^(postgres://.*@)([^:/]+)((?::\d+)?)(.*)$").unwrap();
+
                         if let Some(caps) = re.captures(url) {
                             let prefix = &caps[1];
                             let host = &caps[2];
@@ -101,24 +114,40 @@ pub async fn update_db_ip_in_config(app: &AppHandle) -> MyceliumResult<()> {
                                 port_str[1..].parse().unwrap_or(5432)
                             };
 
-                            // 1. Try existing host first to avoid scanning if unnecessary
+                            println!("System: Current DB host: {}, port: {}", host, port);
+
+                            // 1. If host is localhost or 127.0.0.1, skip scanning entirely
+                            if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+                                println!("System: Localhost detected, skipping network scan.");
+                                return Ok(());
+                            }
+
+                            // 2. Try existing host first to avoid scanning if unnecessary
+                            println!("System: Testing connection to {}...", host);
                             if timeout(
-                                Duration::from_millis(150),
+                                Duration::from_millis(500),
                                 TcpStream::connect(format!("{}:{}", host, port)),
                             )
                             .await
                             .is_ok()
                             {
+                                println!("System: DB host is reachable, skipping scan.");
                                 return Ok(());
                             }
 
-                            // 2. Scan network if existing one is down
+                            // 3. Scan network if existing one is down
+                            println!(
+                                "System: DB host unreachable. Scanning network for PostgreSQL..."
+                            );
                             if let Some(new_ip) = scan_network_for_postgres(port).await {
+                                println!("System: Found potential PostgreSQL at {}", new_ip);
                                 let new_url = format!("{}{}{}{}", prefix, new_ip, port_str, suffix);
                                 config_data["database_url"] = Value::String(new_url);
                                 if let Ok(config_str) = serde_json::to_string_pretty(&config_data) {
                                     let _ = fs::write(&config_path, config_str);
                                 }
+                            } else {
+                                println!("System: No PostgreSQL found in network scan.");
                             }
                         }
                     }
@@ -637,9 +666,12 @@ pub async fn setup_system(
     }
 
     // 2. Try to connect to 'postgres' database to create the new database
+    let enc_user = urlencoding::encode(&db_user);
+    let enc_pass = urlencoding::encode(&db_pass);
+
     let maintenance_url = format!(
         "postgres://{}:{}@{}:{}/postgres",
-        db_user, db_pass, db_host, db_port
+        enc_user, enc_pass, db_host, db_port
     );
 
     // We use a temporary connection just to create the DB
@@ -679,7 +711,7 @@ pub async fn setup_system(
     // 4. Create Configuration File (Persistent in AppData)
     let final_db_url = format!(
         "postgres://{}:{}@{}:{}/{}",
-        db_user, db_pass, db_host, db_port, db_name
+        enc_user, enc_pass, db_host, db_port, db_name
     );
 
     let config_dir = app_handle
@@ -734,7 +766,7 @@ pub async fn setup_system(
     app_handle.manage(pool);
 
     let setup_state = app_handle.state::<SetupState>();
-    *setup_state.is_configured.lock().unwrap() = true;
+    *setup_state.status.lock().unwrap() = SetupStatus::Configured;
 
     Ok("Database setup complete.".to_string())
 }

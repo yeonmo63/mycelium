@@ -54,7 +54,7 @@ const Dashboard = () => {
 
         if (!todayData || !yestData || yestData.total === 0) {
             if (todayData && todayData.total > 0 && (!yestData || yestData.total === 0)) {
-                return { pct: 100, isUp: true, label: 'New' };
+                return { pct: 100, isUp: true, label: '신규' };
             }
             return null;
         }
@@ -84,40 +84,54 @@ const Dashboard = () => {
     }, [weeklyData]);
 
     const loadDashboardData = async () => {
+        // 1. 핵심 통계 (우선순위 분리 로딩: 0~5번 카드 먼저 표시)
+        invoke('get_dashboard_priority_stats').then(res => {
+            setStats(prev => {
+                return { ...(prev || {}), ...(res || {}) };
+            });
+            setIsLoading(false); // 0~5번 카드 즉시 표시
 
-        // 1. 핵심 통계
-        invoke('get_dashboard_stats').then(res => {
-            setStats(res);
-            setIsLoading(false);
+            // 2. 나머지 통계 (Background) - 지연 로딩
+            invoke('get_dashboard_secondary_stats').then(secRes => {
+                if (!secRes) return;
+                setStats(prev => {
+                    const next = { ...(prev || {}) }; // Ensure prev is object
+                    Object.keys(secRes).forEach(key => {
+                        // Priority에서 가져온 값(이미 존재하는 값)을 null로 덮어쓰지 않도록 방지
+                        // Secondary가 가져온 실질적인 값(null이 아닌 값)만 병합
+                        if (secRes[key] !== null) {
+                            next[key] = secRes[key];
+                        }
+                    });
+                    return next;
+                });
+            }).catch(e => console.error("Secondary stats error", e));
+
         }).catch(err => {
             console.error("Dashboard: Stats error", err);
+            setStats({}); // Show empty stats on error
             setIsLoading(false);
         });
 
-        // 2. 모달 관련 데이터들
-        invoke('get_upcoming_anniversaries', { days: 3 }).then(res => setAnniversaries(res || [])).catch(e => console.error("Anniv error", e));
-        invoke('get_repurchase_candidates').then(res => setRepurchaseCandidates(res || [])).catch(e => console.error("Repurchase error", e));
-
-        Promise.all([
-            invoke('get_inventory_forecast_alerts'),
-            invoke('get_product_freshness')
-        ]).then(([forecast, fresh]) => {
-            setForecastAlerts(forecast || []);
-
-            // Process Freshness Alerts (> 7 days)
-            const today = new Date();
-            const alerts = (fresh || []).filter(item => {
-                if (!item.last_in_date) return false;
-                if (item.stock_quantity <= 0) return false;
-                const lastDate = new Date(item.last_in_date);
-                const diffTime = Math.abs(today - lastDate);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                item.diffDays = diffDays;
-                return diffDays > 7; // Alert Threshold
-            }).sort((a, b) => b.diffDays - a.diffDays);
-
-            setFreshnessAlerts(alerts);
-        }).catch(e => console.error("Inventory/Freshness error", e));
+        // 2. 모달 관련 데이터들 (병렬 처리)
+        Promise.allSettled([
+            invoke('get_upcoming_anniversaries', { days: 3 }).then(res => setAnniversaries(res || [])),
+            invoke('get_repurchase_candidates').then(res => setRepurchaseCandidates(res || [])),
+            invoke('get_inventory_forecast_alerts').then(res => setForecastAlerts(res || [])),
+            invoke('get_product_freshness').then(res => {
+                const today = new Date();
+                const alerts = (res || []).filter(item => {
+                    if (!item.last_in_date) return false;
+                    if (item.stock_quantity <= 0) return false;
+                    const lastDate = new Date(item.last_in_date);
+                    const diffTime = Math.abs(today - lastDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    item.diffDays = diffDays;
+                    return diffDays > 7;
+                }).sort((a, b) => b.diffDays - a.diffDays);
+                setFreshnessAlerts(alerts);
+            })
+        ]).catch(e => console.error("Aux data error", e));
 
         // 3. 주간 차트 데이터
         invoke('get_weekly_sales_data').then(weeklyRes => {
@@ -130,16 +144,9 @@ const Dashboard = () => {
 
         // 4. 상품 랭킹
         Promise.allSettled([
-            invoke('get_top3_products_by_qty'),
-            invoke('get_top_profit_products')
-        ]).then(([top3, profit]) => {
-            if (top3.status === 'fulfilled') setTop3Products(top3.value || []);
-            if (profit.status === 'fulfilled') setTopProfitProducts(profit.value || []);
-            setIsRankLoading(false);
-        }).catch(e => {
-            console.error("Dashboard: Ranking error", e);
-            setIsRankLoading(false);
-        });
+            invoke('get_top3_products_by_qty').then(res => setTop3Products(res || [])),
+            invoke('get_top_profit_products').then(res => setTopProfitProducts(res || []))
+        ]).finally(() => setIsRankLoading(false));
 
         // 5. 날씨 및 마케팅 조언
         invoke('get_weather_marketing_advice').then(weatherRes => {
@@ -634,8 +641,8 @@ const Dashboard = () => {
                                 <div className="absolute inset-0 bg-transparent z-[99] fixed w-screen h-screen top-0 left-0" onClick={() => setIsSearchFocused(false)}></div>
                                 <div className="absolute top-[calc(100%+12px)] left-0 w-full bg-white rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 overflow-hidden z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
                                     <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rapid Navigation & Commands</span>
-                                        <span className="text-[10px] text-slate-400 font-bold">{filteredCommands.length} matches</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">빠른 탐색 및 명령어</span>
+                                        <span className="text-[10px] text-slate-400 font-bold">{filteredCommands.length} 건 발견</span>
                                     </div>
                                     <div className="p-2 max-h-[400px] overflow-auto stylish-scrollbar">
                                         {filteredCommands.length > 0 ? filteredCommands.map((cmd) => (
@@ -655,7 +662,7 @@ const Dashboard = () => {
                                             </button>
                                         )) : (
                                             <div className="py-12 text-center text-slate-400 font-bold italic">
-                                                No commands found for "{searchQuery}"
+                                                검색 결과 없음: "{searchQuery}"
                                             </div>
                                         )}
                                     </div>
@@ -663,15 +670,15 @@ const Dashboard = () => {
                                         <div className="flex items-center gap-4">
                                             <div className="flex items-center gap-1.5 grayscale opacity-50">
                                                 <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-[9px] font-bold">↵</span>
-                                                <span className="text-[10px] font-bold">Enter to Select</span>
+                                                <span className="text-[10px] font-bold">선택</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 grayscale opacity-50">
                                                 <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 text-[9px] font-bold">ESC</span>
-                                                <span className="text-[10px] font-bold">Close</span>
+                                                <span className="text-[10px] font-bold">닫기</span>
                                             </div>
                                         </div>
                                         <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
-                                            Powered by Mycelium AI
+                                            Mycelium AI
                                         </div>
                                     </div>
                                 </div>
@@ -693,7 +700,7 @@ const Dashboard = () => {
                             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 font-black text-[11px] transition-all active:scale-95 border border-slate-100 uppercase tracking-widest"
                         >
                             <span className="material-symbols-rounded text-sm">logout</span>
-                            Sign Out
+                            로그아웃
                         </button>
                     </div>
                 </div>
@@ -716,7 +723,7 @@ const Dashboard = () => {
                             </div>
                             <div className="flex-1">
                                 <div className="flex items-center gap-4 mb-2">
-                                    <h3 className="text-white text-[1.4rem] font-black tracking-tight drop-shadow-sm">Daily Intelligence</h3>
+                                    <h3 className="text-white text-[1.4rem] font-black tracking-tight drop-shadow-sm">오늘의 현황</h3>
                                     {!isWeatherLoading && (
                                         <div className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-white/90 text-[0.9rem] font-bold border border-white/10 flex items-center gap-2">
                                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -736,7 +743,7 @@ const Dashboard = () => {
                             </div>
                             <div className="hidden 2xl:block pr-8 shrink-0">
                                 <div className="text-right">
-                                    <div className="text-slate-500 text-[0.7rem] font-black uppercase tracking-[0.3em] mb-1">Last Update</div>
+                                    <div className="text-slate-500 text-[0.7rem] font-black uppercase tracking-[0.3em] mb-1">최근 갱신</div>
                                     <div className="text-white font-mono text-lg font-bold">{dayjs().format('HH:mm:ss')}</div>
                                 </div>
                             </div>
@@ -764,7 +771,7 @@ const Dashboard = () => {
                     <div className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-blue-200 hover:shadow-[0_20px_40px_rgba(37,99,235,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-blue-600 bg-blue-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">shopping_cart</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Orders</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">주문</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">오늘 주문량</h3>
@@ -777,7 +784,7 @@ const Dashboard = () => {
                     <div className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">group_add</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">New CRM</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">신규 고객</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">금일 새 고객 / 전체</h3>
@@ -801,7 +808,7 @@ const Dashboard = () => {
                     <div className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-amber-200 hover:shadow-[0_20px_40px_rgba(245,158,11,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-amber-600 bg-amber-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">local_shipping</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Delivery</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">배송</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">배송 대기</h3>
@@ -817,7 +824,7 @@ const Dashboard = () => {
                     <div className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">calendar_today</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Schedule</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">일정</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">오늘의 스케줄</h3>
@@ -830,7 +837,7 @@ const Dashboard = () => {
                     <div className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-teal-200 hover:shadow-[0_20px_40px_rgba(20,184,166,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-teal-600 bg-teal-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">event_available</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Experi.</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">체험</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">체험 예약 (확정)</h3>
@@ -843,10 +850,10 @@ const Dashboard = () => {
                     <div onClick={() => toggleAlert('inventory')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-rose-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-rose-200 hover:shadow-[0_20px_40px_rgba(244,63,94,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'inventory' ? 'ring-2 ring-rose-500' : ''}`}>
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-rose-600 bg-rose-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">inventory_2</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Inventory</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">재고</div>
                         </div>
                         <div>
-                            <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">지능형 재고 알림</h3>
+                            <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">재고 알림</h3>
                             <div className="text-[1.4rem] font-black text-rose-600 tracking-tighter leading-none">
                                 <div className="flex gap-3 items-end">
                                     <span>{stats?.total_alert_count || (forecastAlerts.length + freshnessAlerts.length)}건</span>
@@ -864,7 +871,7 @@ const Dashboard = () => {
                     <div onClick={() => toggleAlert('anniversary')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-pink-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-pink-200 hover:shadow-[0_20px_40px_rgba(236,72,153,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'anniversary' ? 'ring-2 ring-pink-500' : ''}`}>
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-pink-600 bg-pink-50 p-2.5 rounded-[16px] text-[20px] min-[2000px]:text-[28px] shadow-sm">cake</span>
-                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Event</div>
+                            <div className="text-[10px] min-[2000px]:text-[13px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">기념일</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">기념일 고객 케어</h3>
@@ -877,7 +884,7 @@ const Dashboard = () => {
                     <div onClick={() => navigate('/customer/consultation')} className="bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-blue-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-blue-200 hover:shadow-[0_20px_40px_rgba(37,99,235,0.08)] transition-all duration-500 h-full min-h-[140px] min-[2000px]:min-h-[180px] flex flex-col justify-between cursor-pointer">
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-blue-600 bg-blue-50 p-2.5 rounded-[16px] text-[20px] shadow-sm">forum</span>
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Counsel</div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">상담</div>
                         </div>
                         <div>
                             <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">상담 대기</h3>
@@ -890,10 +897,10 @@ const Dashboard = () => {
                     <div onClick={() => toggleAlert('repurchase')} className={`bg-white rounded-[28px] py-5 px-6 min-[2000px]:py-8 min-[2000px]:px-8 border border-slate-100 border-l-4 border-l-indigo-500 shadow-[0_4px_20px_rgb(0,0,0,0.03)] relative overflow-hidden group hover:border-indigo-200 hover:shadow-[0_20px_40px_rgba(79,70,229,0.08)] transition-all duration-500 h-full min-h-[140px] flex flex-col justify-between cursor-pointer ${expandedAlert === 'repurchase' ? 'ring-2 ring-indigo-500' : ''}`}>
                         <div className="flex justify-between items-start">
                             <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-2.5 rounded-[16px] text-[20px] shadow-sm">notifications_active</span>
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">Retarget</div>
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md">재구매</div>
                         </div>
                         <div>
-                            <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">AI 재구매 골든 타임</h3>
+                            <h3 className="text-slate-500 text-[0.8rem] font-bold uppercase tracking-wider mb-1">재구매 예정</h3>
                             <div className="text-[1.4rem] font-black text-[#4338ca] tracking-tighter leading-none">
                                 {formatCurrency(repurchaseCandidates.length)}건
                             </div>
@@ -911,7 +918,7 @@ const Dashboard = () => {
                         </div>
                         <div className="flex flex-col gap-1">
                             <button onClick={handleAIBriefing} className="w-full bg-slate-50 hover:bg-slate-100 p-1.5 rounded-xl text-left transition-all group flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-slate-700 ml-1">AI 일일 브리핑</span>
+                                <span className="text-[11px] font-bold text-slate-700 ml-1">일일 브리핑</span>
                                 <span className="material-symbols-rounded text-sm text-slate-300 group-hover:text-indigo-500 transition-colors">arrow_forward</span>
                             </button>
                             <div className="grid grid-cols-2 gap-1">
@@ -940,11 +947,11 @@ const Dashboard = () => {
                                         {expandedAlert === 'inventory' ? 'inventory_2' : expandedAlert === 'anniversary' ? 'cake' : 'notifications_active'}
                                     </span>
                                     <h3 className="text-xl font-black tracking-tight">
-                                        {expandedAlert === 'inventory' ? '지능형 재고 소모 분석 & 알림' : expandedAlert === 'anniversary' ? '다가오는 기념일 고객 케어' : 'AI 재구매 골든 타임 타겟'}
+                                        {expandedAlert === 'inventory' ? '재고 소모 상세' : expandedAlert === 'anniversary' ? '기념일 고객 케어' : '재구매 예정 고객'}
                                     </h3>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full border border-white/20">Expanded Insight</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full border border-white/20">상세 분석</span>
                                     <button onClick={() => setExpandedAlert(null)} className="w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-colors">
                                         <span className="material-symbols-rounded text-lg">close</span>
                                     </button>
@@ -1090,7 +1097,7 @@ const Dashboard = () => {
                                                                 <td className={`p-4 text-center font-black ${color}`}>{status}</td>
                                                                 <td className="p-4 text-center">
                                                                     <button onClick={() => generateAIDraft(c)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-100 italic flex items-center gap-1.5 mx-auto">
-                                                                        <span className="material-symbols-rounded text-sm">auto_fix_high</span> AI 추천문구
+                                                                        <span className="material-symbols-rounded text-sm">auto_fix_high</span> 추천 문구
                                                                     </button>
                                                                 </td>
                                                             </tr>
@@ -1107,11 +1114,11 @@ const Dashboard = () => {
                             {/* Accordion Footer */}
                             <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[11px] font-black text-slate-400 uppercase tracking-widest">
                                 <div className="flex items-center gap-4">
-                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Analysis</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> 실시간 분석</span>
                                     <span className="w-px h-3 bg-slate-200"></span>
-                                    <span className="flex items-center gap-1.5"><span className="material-symbols-rounded text-xs">history</span> Updated {dayjs().format('HH:mm')}</span>
+                                    <span className="flex items-center gap-1.5"><span className="material-symbols-rounded text-xs">history</span> 갱신됨 {dayjs().format('HH:mm')}</span>
                                 </div>
-                                <button onClick={() => setExpandedAlert(null)} className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1">CLOSE INSIGHT <span className="material-symbols-rounded text-xs">expand_less</span></button>
+                                <button onClick={() => setExpandedAlert(null)} className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1">분석 닫기 <span className="material-symbols-rounded text-xs">expand_less</span></button>
                             </div>
                         </div>
                     </div>
@@ -1240,7 +1247,7 @@ const Dashboard = () => {
                                     <span className="material-symbols-rounded text-3xl">wb_sunny</span>
                                 </div>
                                 <div>
-                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-0.5">Daily Intelligence Brief</div>
+                                    <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-0.5">일일 브리핑</div>
                                     <h2 className="text-2xl font-black tracking-tight">마이셀리움 일일 브리핑</h2>
                                 </div>
                             </div>
@@ -1269,7 +1276,7 @@ const Dashboard = () => {
                             <div className="mt-8 flex items-center justify-between no-print">
                                 <div className="flex items-center gap-4">
                                     <button onClick={() => handlePrint('마이셀리움 일일 브리핑', aiBriefingContent)} className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 hover:text-indigo-600 transition-colors">
-                                        <span className="material-symbols-rounded text-base">print</span> PRINT REPORT
+                                        <span className="material-symbols-rounded text-base">print</span> 리포트 인쇄
                                     </button>
                                     <div className="w-px h-3 bg-slate-200"></div>
                                     <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-400">
@@ -1278,7 +1285,7 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                                 <button onClick={() => setAiBriefingContent(null)} className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-sm hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">
-                                    오늘 하루도 힘내자! 💪
+                                    확인
                                 </button>
                             </div>
 
@@ -1308,8 +1315,8 @@ const Dashboard = () => {
                                     </span>
                                 </div>
                                 <div>
-                                    <div className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">Business Intelligence Report</div>
-                                    <h2 className="text-3xl font-black tracking-tight">AI {businessReport.type === 'weekly' ? '주간 성과 요약' : '월간 경영 보고서'}</h2>
+                                    <div className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">경영 보고서</div>
+                                    <h2 className="text-3xl font-black tracking-tight">{businessReport.type === 'weekly' ? '주간 성과 요약' : '월간 경영 보고서'}</h2>
                                 </div>
                             </div>
                             <button onClick={() => setBusinessReport(null)} className="w-10 h-10 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-colors no-print">
@@ -1336,13 +1343,13 @@ const Dashboard = () => {
                             {/* Raw Data Quick View (Grounding) */}
                             {!isReportLoading && businessReport.rawData && (
                                 <div className="mt-6 p-4 bg-slate-900 rounded-2xl flex items-center gap-6 overflow-hidden print:bg-slate-100 print:border print:border-slate-200 print:mt-10">
-                                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ring-1 ring-indigo-400/30 px-2 py-1 rounded shrink-0 print:text-slate-500 print:ring-slate-300">Grounding</div>
+                                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ring-1 ring-indigo-400/30 px-2 py-1 rounded shrink-0 print:text-slate-500 print:ring-slate-300">참고 데이터</div>
                                     <div className="flex gap-6 overflow-x-auto stylish-scrollbar-horizontal pb-1 print:overflow-visible">
-                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">Sales</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.total_sales.toLocaleString()}원</span></div>
-                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">Orders</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.total_orders}건</span></div>
-                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">New CRM</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.new_customers}명</span></div>
+                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">매출</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.total_sales.toLocaleString()}원</span></div>
+                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">주문</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.total_orders}건</span></div>
+                                        <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">신규 고객</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.new_customers}명</span></div>
                                         {businessReport.rawData.top_products.length > 0 && (
-                                            <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">Best Item</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.top_products[0].product_name}</span></div>
+                                            <div className="shrink-0"><span className="text-[10px] text-slate-500 font-bold block mb-0.5 uppercase">베스트 상품</span><span className="text-xs font-black text-white print:text-slate-900">{businessReport.rawData.top_products[0].product_name}</span></div>
                                         )}
                                     </div>
                                 </div>
@@ -1351,11 +1358,11 @@ const Dashboard = () => {
                             <div className="mt-6 flex items-center justify-between no-print">
                                 <div className="flex items-center gap-2 text-[11px] font-black text-slate-400">
                                     <span className="material-symbols-rounded text-sm">verified_user</span>
-                                    DATA AUTHENTICATED BY MYCELIUM AI
+                                    MYCELIUM 시스템 자동 생성
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <button onClick={() => handlePrint('AI ' + (businessReport.type === 'weekly' ? '주간 성과 요약' : '월간 경영 보고서'), businessReport.content)} className="flex items-center gap-2 text-[11px] font-black text-indigo-600 hover:text-indigo-700">
-                                        <span className="material-symbols-rounded text-sm">print</span> PRINT REPORT
+                                    <button onClick={() => handlePrint((businessReport.type === 'weekly' ? '주간 성과 요약' : '월간 경영 보고서'), businessReport.content)} className="flex items-center gap-2 text-[11px] font-black text-indigo-600 hover:text-indigo-700">
+                                        <span className="material-symbols-rounded text-sm">print</span> 리포트 인쇄
                                     </button>
                                     <button onClick={() => setBusinessReport(null)} className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-sm hover:bg-slate-800 active:scale-95 transition-all shadow-lg shadow-slate-200">
                                         확인 및 닫기

@@ -1,5 +1,5 @@
 -- Add category column to products table
-ALTER TABLE products ADD COLUMN category VARCHAR(50);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50);
 
 -- Update existing products with inferred categories based on names
 UPDATE products SET category = '박스/포장' WHERE item_type IN ('aux_material', 'raw_material', 'material') AND (product_name LIKE '%박스%' OR product_name LIKE '%상자%');

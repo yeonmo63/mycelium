@@ -22,6 +22,20 @@ pub struct BusinessReportData {
 }
 
 #[command]
+pub async fn get_dashboard_schedule_stats(state: State<'_, DbPool>) -> MyceliumResult<i64> {
+    let today = chrono::Local::now().date_naive();
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM schedules WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp"
+    )
+    .bind(today)
+    .fetch_one(&*state)
+    .await
+    .unwrap_or((0,));
+
+    Ok(count.0)
+}
+
+#[command]
 pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<DashboardStats> {
     let today = chrono::Local::now().date_naive();
     eprintln!("Dashboard: Fetching stats for date: {}", today);
@@ -59,6 +73,66 @@ pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<Das
             Ok(DashboardStats::default())
         }
     }
+}
+
+#[command]
+pub async fn get_dashboard_priority_stats(
+    state: State<'_, DbPool>,
+) -> MyceliumResult<DashboardStats> {
+    let today = chrono::Local::now().date_naive();
+    // Prioritize Cards 0-5 (Sales, Orders, Customers, Pending Delivery, Schedule)
+    let sql = r#"
+        SELECT 
+            (SELECT CAST(COALESCE(SUM(total_amount), 0) AS BIGINT) FROM sales WHERE order_date = $1 AND status != '취소') as total_sales_amount,
+            (SELECT COUNT(*) FROM sales WHERE order_date = $1 AND status != '취소') as total_orders,
+            (SELECT COUNT(*) FROM customers WHERE join_date = $1) as total_customers,
+            (SELECT COUNT(*) FROM customers) as total_customers_all_time,
+            (SELECT COUNT(*) FROM customers WHERE status = '정상') as normal_customers_count,
+            (SELECT COUNT(*) FROM customers WHERE status = '말소') as dormant_customers_count,
+            (SELECT COUNT(*) FROM sales WHERE status NOT IN ('배송완료', '취소')) as pending_orders,
+            (SELECT COUNT(*) FROM schedules WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp) as today_schedule_count,
+            NULL::bigint as experience_reservation_count,
+            NULL::bigint as low_stock_count,
+            NULL::bigint as pending_consultation_count
+    "#;
+
+    let stats = sqlx::query_as::<_, DashboardStats>(sql)
+        .bind(today)
+        .fetch_one(&*state)
+        .await
+        .unwrap_or_default(); // Return default if fails, or handle error better? Using unwrap_or_default for safety in UI
+
+    Ok(stats)
+}
+
+#[command]
+pub async fn get_dashboard_secondary_stats(
+    state: State<'_, DbPool>,
+) -> MyceliumResult<DashboardStats> {
+    let today = chrono::Local::now().date_naive();
+    // Secondary Cards (Experience, Low Stock, Consultations)
+    let sql = r#"
+        SELECT 
+            NULL::bigint as total_sales_amount,
+            NULL::bigint as total_orders,
+            NULL::bigint as total_customers,
+            NULL::bigint as total_customers_all_time,
+            NULL::bigint as normal_customers_count,
+            NULL::bigint as dormant_customers_count,
+            NULL::bigint as pending_orders,
+            NULL::bigint as today_schedule_count,
+            (SELECT COUNT(*) FROM experience_reservations WHERE reservation_date = $1 AND status != '취소') as experience_reservation_count,
+            (SELECT COUNT(*) FROM products WHERE stock_quantity <= safety_stock) as low_stock_count,
+            (SELECT COUNT(*) FROM consultations WHERE status IN ('접수', '처리중')) as pending_consultation_count
+    "#;
+
+    let stats = sqlx::query_as::<_, DashboardStats>(sql)
+        .bind(today)
+        .fetch_one(&*state)
+        .await
+        .unwrap_or_default();
+
+    Ok(stats)
 }
 
 #[command]

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS product_bom (
     CONSTRAINT unique_bom_item UNIQUE (product_id, material_id)
 );
 
-CREATE INDEX idx_product_bom_pid ON product_bom(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_bom_pid ON product_bom(product_id);
 
 -- Optional: Comments
 COMMENT ON TABLE product_bom IS 'Bill of Materials for products';

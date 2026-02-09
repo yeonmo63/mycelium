@@ -135,8 +135,21 @@ function AppContent() {
           setIsLoggedIn(true);
         }
 
-        const status = await invoke('check_setup_status');
-        setIsConfigured(status);
+        // Check status with polling for initialization
+        let status = await invoke('check_setup_status');
+        console.log("App: Initial status:", status);
+        let attempts = 0;
+
+        // Wait up to 120 seconds for background initialization
+        while (status === 'Initializing' && attempts < 120) {
+          console.log(`App: Polling status (Attempt ${attempts}/120)...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          status = await invoke('check_setup_status');
+          attempts++;
+        }
+
+        console.log("App: Final status:", status);
+        setIsConfigured(status === 'Configured');
 
         // Remove splash screen from DOM instantly
         const htmlLoading = document.querySelector('.app-loading');

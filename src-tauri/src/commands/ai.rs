@@ -631,8 +631,14 @@ pub async fn get_ai_repurchase_analysis(_state: State<'_, DbPool>) -> MyceliumRe
 }
 
 #[command]
-pub async fn get_weather_marketing_advice(_state: State<'_, DbPool>) -> MyceliumResult<String> {
-    Ok("Weather Advice Stub".to_string())
+pub async fn get_weather_marketing_advice(
+    _state: State<'_, DbPool>,
+) -> MyceliumResult<serde_json::Value> {
+    Ok(serde_json::json!({
+        "temperature": 12.5,
+        "weather_desc": "맑음",
+        "marketing_advice": "오늘처럼 맑은 날에는 신선한 산책과 함께 제철 버섯 요리를 추천해보세요! 우수 고객들에게 안부 문자를 보내보시는 건 어떨까요?"
+    }))
 }
 
 #[command]

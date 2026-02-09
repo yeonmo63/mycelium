@@ -17,31 +17,67 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let app_handle = app.app_handle().clone();
-            let _ =
-                tauri::async_runtime::block_on(async { update_db_ip_in_config(&app_handle).await });
-            let db_url = get_db_url(&app_handle).ok();
 
-            let mut is_configured = false;
+            // Initialize SetupState as 'Initializing'
+            app_handle.manage(SetupState {
+                status: std::sync::Mutex::new(crate::commands::config::SetupStatus::Initializing),
+            });
 
-            if let Some(url) = db_url {
-                let pool_res =
-                    tauri::async_runtime::block_on(async { crate::db::init_pool(&url).await });
+            // Spawn initialization in the background to prevent UI freeze
+            tauri::async_runtime::spawn(async move {
+                println!("System: Starting background initialization...");
 
-                if let Ok(pool) = pool_res {
-                    app_handle.manage(pool.clone());
-                    is_configured = true;
+                // 1. Try to update DB IP if needed
+                println!("System: Checking DB IP connectivity...");
+                let _ = update_db_ip_in_config(&app_handle).await;
 
-                    // BLOCKING initialization to ensure schema is ready before any window opens
-                    if let Err(e) = tauri::async_runtime::block_on(async {
-                        crate::db::init_database(&pool).await
-                    }) {
-                        eprintln!("Critical: Database initialization failed: {:?}", e);
+                let mut final_status = crate::commands::config::SetupStatus::NotConfigured;
+
+                // 2. Initialize Pool and Database
+                match get_db_url(&app_handle) {
+                    Ok(url) => {
+                        println!("System: DB URL verified. Initializing connection pool...");
+                        match crate::db::init_pool(&url).await {
+                            Ok(pool) => {
+                                println!("System: DB Pool successful. Starting schema sync...");
+                                app_handle.manage(pool.clone());
+
+                                // Run migrations in background - don't block app startup
+                                let pool_clone = pool.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    if let Err(e) = crate::db::init_database(&pool_clone).await {
+                                        eprintln!("Warning: DB migration failed (non-fatal): {:?}", e);
+                                    }
+                                });
+                                
+                                // Always mark as Configured since pool is valid
+                                println!("System: Database synchronization dispatched.");
+                                final_status = crate::commands::config::SetupStatus::Configured;
+                            }
+                            Err(e) => {
+                                eprintln!("System: Failed to initialize DB Pool (check credentials/network): {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("System: Configuration error: {}", e);
                     }
                 }
-            }
 
-            app_handle.manage(SetupState {
-                is_configured: std::sync::Mutex::new(is_configured),
+                // Update status when done
+                println!(
+                    "System: Initialization finished with status: {:?}",
+                    match final_status {
+                        crate::commands::config::SetupStatus::Configured => "Configured",
+                        _ => "NotConfigured",
+                    }
+                );
+
+                if let Some(state) = app_handle.try_state::<SetupState>() {
+                    if let Ok(mut status) = state.status.lock() {
+                        *status = final_status;
+                    }
+                }
             });
 
             // Force window size and center
@@ -116,6 +152,9 @@ pub fn run() {
             commands::customer::delete_customer_address,
             commands::customer::set_default_customer_address,
             commands::dashboard::get_dashboard_stats,
+            commands::dashboard::get_dashboard_priority_stats,
+            commands::dashboard::get_dashboard_schedule_stats,
+            commands::dashboard::get_dashboard_secondary_stats,
             commands::dashboard::get_business_report_data,
             commands::ledger::get_customer_ledger,
             commands::ledger::create_ledger_entry,
