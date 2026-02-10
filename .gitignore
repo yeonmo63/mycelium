@@ -38,8 +38,8 @@ src-tauri/gen/
 *.zip
 
 # Database related (if any)
-db/
-backup/
+/db/
+/backup/
 
 # Environment
 .env
