@@ -13,6 +13,7 @@ import StatCard from './components/StatCard';
 import AlertExpansionArea from './components/AlertExpansionArea';
 import SalesChart from './components/SalesChart';
 import TopProductsTable from './components/TopProductsTable';
+import VirtualIotHub from './components/VirtualIotHub';
 
 // Modals
 import LogoutModal from './components/modals/LogoutModal';
@@ -240,6 +241,9 @@ const Dashboard = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* 4. Virtual IoT Hub (Simulator) */}
+                    <VirtualIotHub />
                 </div>
 
                 {/* 3. Alert Expansion Detail */}

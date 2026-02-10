@@ -6,7 +6,7 @@ import {
     Thermometer, Droplets, Image as ImageIcon, CheckCircle,
     ChevronDown, ClipboardList, PenTool, FlaskConical,
     Droplet, Sprout, Wind, Trash2, Edit2, Boxes, Paperclip,
-    FileText, X as CloseIcon, Camera
+    FileText, X as CloseIcon, Camera, Activity
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -395,18 +395,44 @@ const ProductionLogs = () => {
                                 </div>
                             </div>
 
-                            <div className="col-span-2 grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100">
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase">Temp (°C)</label>
-                                    <input type="number" step="0.1" value={formData.env_data.temp} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, temp: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase">Humid (%)</label>
-                                    <input type="number" step="0.1" value={formData.env_data.humidity} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, humidity: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase">CO2 (ppm)</label>
-                                    <input type="number" value={formData.env_data.co2} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, co2: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
+                            <div className="col-span-2 space-y-4">
+                                <div className="flex justify-between items-center p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                                    <div className="flex-1 grid grid-cols-3 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase">Temp (°C)</label>
+                                            <input type="number" step="0.1" value={formData.env_data.temp} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, temp: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase">Humid (%)</label>
+                                            <input type="number" step="0.1" value={formData.env_data.humidity} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, humidity: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase">CO2 (ppm)</label>
+                                            <input type="number" value={formData.env_data.co2} onChange={e => setFormData({ ...formData, env_data: { ...formData.env_data, co2: e.target.value } })} className="w-full h-9 px-3 bg-white border-none rounded-xl text-xs font-black shadow-sm" />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            try {
+                                                const sensorData = await invoke('get_virtual_sensor_data');
+                                                setFormData({
+                                                    ...formData,
+                                                    env_data: {
+                                                        temp: sensorData.temperature.toString(),
+                                                        humidity: sensorData.humidity.toString(),
+                                                        co2: sensorData.co2.toString()
+                                                    }
+                                                });
+                                            } catch (err) {
+                                                console.error('Sensor fetch failed:', err);
+                                            }
+                                        }}
+                                        className="ml-4 p-3 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-100 transition-all flex flex-col items-center gap-1 min-w-[80px]"
+                                    >
+                                        <Activity size={18} />
+                                        <span className="text-[9px] font-black">센서값<br />가져오기</span>
+                                    </button>
                                 </div>
                             </div>
 

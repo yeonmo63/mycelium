@@ -1,12 +1,13 @@
 use crate::commands::backup::logic::{backup_database, backup_database_internal};
 use crate::commands::backup::models::AutoBackupItem;
 use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at};
+use crate::commands::config::check_admin;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::{BACKUP_CANCELLED, DB_MODIFIED, IS_EXITING};
 use chrono::Datelike;
 use std::sync::atomic::Ordering;
-use tauri::{command, Manager, State};
+use tauri::{command, AppHandle, Manager, State};
 
 #[command]
 pub async fn cancel_backup_restore() {
@@ -253,11 +254,12 @@ pub async fn get_auto_backups(app: tauri::AppHandle) -> MyceliumResult<Vec<AutoB
 
 #[command]
 pub async fn run_daily_custom_backup(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, DbPool>,
     is_incremental: bool,
     use_compression: bool,
 ) -> MyceliumResult<String> {
+    check_admin(&app)?;
     run_backup_logic(app, state, is_incremental, use_compression, true).await
 }
 
@@ -357,7 +359,8 @@ async fn run_backup_logic(
 }
 
 #[command]
-pub async fn delete_backup(path: String) -> MyceliumResult<()> {
+pub async fn delete_backup(app: AppHandle, path: String) -> MyceliumResult<()> {
+    check_admin(&app)?;
     std::fs::remove_file(path)
         .map_err(|e| MyceliumError::Internal(format!("Failed to delete backup file: {}", e)))?;
     Ok(())

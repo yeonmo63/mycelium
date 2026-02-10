@@ -377,6 +377,17 @@ const SalesShipping = () => {
                                     '접수'된 주문 중 유효한 주문만 골라내어 '입금대기'로 넘기는 용도로 사용할 수 있습니다.
                                 </p>
                             </div>
+                            <div className="hidden md:block w-px bg-slate-200"></div>
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-black border bg-indigo-50 text-indigo-600 border-indigo-100">동기화</span>
+                                    <span className="text-sm font-bold text-slate-700">실시간 배송 추적 연동</span>
+                                </div>
+                                <p className="text-xs text-slate-500 leading-relaxed pl-1">
+                                    <strong>[실시간 배송 추적]</strong> 버튼을 클릭하면 택배사 API(현재 시뮬레이션 모드)와 연동하여 배송 상태를 자동으로 체크합니다.<br />
+                                    배송이 완료된 건은 시스템이 자동으로 <strong>'배송완료'</strong> 상태로 변경합니다.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -430,6 +441,24 @@ const SalesShipping = () => {
                         </div>
                         <button onClick={loadData} className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500">
                             <span className="material-symbols-rounded text-lg">refresh</span>
+                        </button>
+                        <button
+                            onClick={async () => {
+                                setIsLoading(true);
+                                try {
+                                    const count = await window.__TAURI__.core.invoke('batch_sync_courier_statuses');
+                                    showAlert('동기화 완료', `${count}건의 배송 상태가 최신화되었습니다.`);
+                                    loadData();
+                                } catch (e) {
+                                    showAlert('오류', `동기화 실패: ${e}`);
+                                } finally {
+                                    setIsLoading(false);
+                                }
+                            }}
+                            className="h-8 px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-bold text-[10px] flex items-center gap-1.5 transition-all"
+                        >
+                            <span className="material-symbols-rounded text-base">sync_alt</span>
+                            실시간 배송 추적
                         </button>
                     </div>
 

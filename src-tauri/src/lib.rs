@@ -23,6 +23,13 @@ pub fn run() {
                 status: std::sync::Mutex::new(crate::commands::config::SetupStatus::Initializing),
             });
 
+            // Initialize SessionState
+            app_handle.manage(crate::commands::config::SessionState {
+                user_id: std::sync::Mutex::new(None),
+                username: std::sync::Mutex::new(None),
+                role: std::sync::Mutex::new(None),
+            });
+
             // Spawn initialization in the background to prevent UI freeze
             tauri::async_runtime::spawn(async move {
                 println!("System: Starting background initialization...");
@@ -323,6 +330,7 @@ pub fn run() {
             commands::config::save_external_backup_path,
             commands::config::get_external_backup_path,
             commands::config::login,
+            commands::config::logout,
             commands::config::change_password,
             commands::config::get_all_users,
             commands::config::get_message_templates,
@@ -358,12 +366,23 @@ pub fn run() {
             commands::sales::fetch_external_mall_orders,
             commands::config::save_courier_config,
             commands::config::get_courier_config_for_ui,
-            commands::sales::get_tax_report,
+            commands::config::save_tax_filing_config,
+            commands::config::get_tax_filing_config_for_ui,
+            commands::sales::get_tax_report_v2,
+            commands::sales::submit_tax_report,
             crate::commands::preset::apply_preset,
             crate::commands::preset::get_preset_data,
             crate::commands::preset::save_current_as_preset,
             crate::commands::preset::get_custom_presets,
             crate::commands::preset::delete_custom_preset,
+            commands::iot::get_sensors,
+            commands::iot::get_latest_readings,
+            commands::iot::push_sensor_data,
+            commands::iot::save_sensor,
+            commands::iot::delete_sensor,
+            commands::iot::get_virtual_sensor_data,
+            commands::courier::batch_sync_courier_statuses,
+            commands::courier::sync_courier_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

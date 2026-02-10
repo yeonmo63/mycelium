@@ -803,3 +803,25 @@ pub struct HarvestRecord {
     #[sqlx(default)]
     pub updated_at: Option<DateTime<Utc>>,
 }
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Sensor {
+    pub sensor_id: i32,
+    pub sensor_name: String,
+    pub space_id: Option<i32>,
+    pub device_type: String,
+    pub connection_info: Option<String>,
+    pub is_active: bool,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct SensorReadingRecord {
+    pub reading_id: i32,
+    pub sensor_id: i32,
+    pub temperature: Option<rust_decimal::Decimal>,
+    pub humidity: Option<rust_decimal::Decimal>,
+    pub co2: Option<rust_decimal::Decimal>,
+    pub recorded_at: Option<DateTime<Utc>>,
+}

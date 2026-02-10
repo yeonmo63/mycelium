@@ -3,6 +3,11 @@ use crate::db::{init_pool, CompanyInfo, User};
 
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use base64::Engine;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use regex::Regex;
@@ -24,6 +29,84 @@ pub enum SetupStatus {
 
 pub struct SetupState {
     pub status: Mutex<SetupStatus>,
+}
+
+pub struct SessionState {
+    pub user_id: Mutex<Option<i32>>,
+    pub username: Mutex<Option<String>>,
+    pub role: Mutex<Option<String>>,
+}
+
+/// Helper to verify if the current session has 'admin' role
+pub fn check_admin(app: &AppHandle) -> MyceliumResult<()> {
+    if let Some(session_state) = app.try_state::<SessionState>() {
+        let role = session_state.role.lock().unwrap();
+        if role.as_deref() == Some("admin") {
+            return Ok(());
+        }
+    }
+    Err(MyceliumError::Internal(
+        "권한이 부족합니다. (Administrative privileges required)".to_string(),
+    ))
+}
+
+/// Log administrative or important system actions to system_logs table
+pub async fn log_system_action(
+    app: &AppHandle,
+    state: &crate::db::DbPool,
+    action_type: &str,
+    table_name: Option<&str>,
+    record_id: Option<&str>,
+    memo: Option<&str>,
+) -> MyceliumResult<()> {
+    let (uid, uname) = if let Some(session_state) = app.try_state::<SessionState>() {
+        let uid = session_state.user_id.lock().unwrap().clone();
+        let uname = session_state.username.lock().unwrap().clone();
+        (uid, uname)
+    } else {
+        (None, None)
+    };
+
+    sqlx::query(
+        "INSERT INTO system_logs (user_id, username, action_type, table_name, record_id, memo) 
+         VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(uid)
+    .bind(uname)
+    .bind(action_type)
+    .bind(table_name)
+    .bind(record_id)
+    .bind(memo)
+    .execute(state)
+    .await?;
+
+    Ok(())
+}
+
+fn get_encryption_key() -> [u8; 32] {
+    // In a production app, this should be machine-specific or stored in a secure vault
+    *b"mycelium-secret-key-32-bytes-log"
+}
+
+pub fn encrypt_data(data: &str) -> Option<String> {
+    let key = get_encryption_key();
+    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
+    let nonce = Nonce::from_slice(b"unique-nonce"); // 12 bytes
+
+    let ciphertext = cipher.encrypt(nonce, data.as_bytes()).ok()?;
+    Some(base64::engine::general_purpose::STANDARD.encode(ciphertext))
+}
+
+pub fn decrypt_data(encrypted_data: &str) -> Option<String> {
+    let key = get_encryption_key();
+    let cipher = Aes256Gcm::new_from_slice(&key).ok()?;
+    let nonce = Nonce::from_slice(b"unique-nonce");
+
+    let encrypted_bytes = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_data)
+        .ok()?;
+    let plaintext = cipher.decrypt(nonce, encrypted_bytes.as_slice()).ok()?;
+    String::from_utf8(plaintext).ok()
 }
 
 #[command]
@@ -167,7 +250,6 @@ pub async fn refresh_database_ip(app: AppHandle) -> MyceliumResult<String> {
     }
 }
 
-/// Helper to retrieve the Gemini API Key ONLY from config.json (Security Enforced)
 pub fn get_gemini_api_key(app: &AppHandle) -> Option<String> {
     if let Ok(config_dir) = app.path().app_config_dir() {
         let config_path = config_dir.join("config.json");
@@ -178,6 +260,14 @@ pub fn get_gemini_api_key(app: &AppHandle) -> Option<String> {
                         let trimmed = key.trim().trim_matches(|c: char| {
                             c.is_whitespace() || c == '"' || c == '\'' || c == '\r' || c == '\n'
                         });
+
+                        // Attempt decryption if it looks like base64-ish and is long enough
+                        if trimmed.len() > 20 && !trimmed.contains('-') {
+                            if let Some(decrypted) = decrypt_data(trimmed) {
+                                return Some(decrypted);
+                            }
+                        }
+
                         if !trimmed.is_empty() {
                             return Some(trimmed.to_string());
                         }
@@ -196,6 +286,11 @@ pub async fn get_gemini_api_key_for_ui(app: AppHandle) -> MyceliumResult<String>
 
 #[command]
 pub async fn save_gemini_api_key(app: AppHandle, key: String) -> MyceliumResult<()> {
+    check_admin(&app)?;
+
+    let encrypted_key = encrypt_data(&key)
+        .ok_or_else(|| MyceliumError::Internal("Encryption failed".to_string()))?;
+
     let config_dir = app
         .path()
         .app_config_dir()
@@ -210,15 +305,25 @@ pub async fn save_gemini_api_key(app: AppHandle, key: String) -> MyceliumResult<
         json!({})
     };
 
-    config_data["gemini_api_key"] = Value::String(key);
+    config_data["gemini_api_key"] = Value::String(encrypted_key);
 
     let config_str = serde_json::to_string_pretty(&config_data)
         .map_err(|e| MyceliumError::Internal(e.to_string()))?;
     fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
 
-    // Also update current process env to take effect immediately
-    if let Some(key_str) = config_data["gemini_api_key"].as_str() {
-        std::env::set_var("GEMINI_API_KEY", key_str);
+    // Also update current process env with the DECRYPTED key to take effect immediately
+    std::env::set_var("GEMINI_API_KEY", &key);
+
+    if let Some(pool) = app.try_state::<crate::db::DbPool>() {
+        log_system_action(
+            &app,
+            &*pool,
+            "UPDATE",
+            Some("config"),
+            Some("gemini_api_key"),
+            Some("Encrypted Gemini API key saved"),
+        )
+        .await?;
     }
 
     Ok(())
@@ -256,6 +361,7 @@ pub async fn save_naver_keys(
     client_id: String,
     client_secret: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -291,6 +397,7 @@ pub struct MallConfig {
 
 #[command]
 pub async fn save_mall_keys(app: AppHandle, config: MallConfig) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -368,6 +475,7 @@ pub struct CourierConfig {
 
 #[command]
 pub async fn save_courier_config(app: AppHandle, config: CourierConfig) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -472,6 +580,7 @@ pub async fn get_message_templates(app: AppHandle) -> MyceliumResult<Value> {
 
 #[command]
 pub async fn save_message_templates(app: AppHandle, templates: Value) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -490,6 +599,7 @@ pub async fn save_message_templates(app: AppHandle, templates: Value) -> Myceliu
 
 #[command]
 pub async fn reset_message_templates(app: AppHandle) -> MyceliumResult<Value> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -505,6 +615,7 @@ pub async fn reset_message_templates(app: AppHandle) -> MyceliumResult<Value> {
 
 #[command]
 pub async fn save_external_backup_path(app: AppHandle, path: String) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -569,6 +680,7 @@ pub async fn save_sms_config(
     sender_number: String,
     provider: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()
@@ -634,6 +746,71 @@ pub async fn get_sms_config_for_ui(app: AppHandle) -> MyceliumResult<Option<SmsC
     }))
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct TaxFilingConfig {
+    pub provider: String,
+    pub api_key: String,
+    pub client_id: Option<String>,
+}
+
+#[command]
+pub async fn save_tax_filing_config(app: AppHandle, config: TaxFilingConfig) -> MyceliumResult<()> {
+    check_admin(&app)?;
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    let mut config_data = if config_path.exists() {
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
+
+    config_data["tax_filing_provider"] = Value::String(config.provider);
+    config_data["tax_filing_api_key"] = Value::String(config.api_key);
+    config_data["tax_filing_client_id"] = Value::String(config.client_id.unwrap_or_default());
+
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    Ok(())
+}
+
+#[command]
+pub async fn get_tax_filing_config_for_ui(app: AppHandle) -> MyceliumResult<TaxFilingConfig> {
+    let mut config = TaxFilingConfig::default();
+
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let config_path = config_dir.join("config.json");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                    config.provider = json
+                        .get("tax_filing_provider")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("sim_hometax")
+                        .to_string();
+                    config.api_key = json
+                        .get("tax_filing_api_key")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.client_id = json
+                        .get("tax_filing_client_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+        }
+    }
+    Ok(config)
+}
+
 #[command]
 pub async fn setup_system(
     app_handle: AppHandle,
@@ -644,6 +821,7 @@ pub async fn setup_system(
     db_name: String,
     gemini_key: Option<String>,
 ) -> MyceliumResult<String> {
+    check_admin(&app_handle)?;
     // 1. Validate inputs
     if db_user.trim().is_empty() {
         return Err(MyceliumError::Validation(
@@ -789,6 +967,7 @@ pub async fn get_company_info(
 
 #[command]
 pub async fn save_company_info(
+    app: AppHandle,
     state: State<'_, crate::db::DbPool>,
     company_name: String,
     representative_name: Option<String>,
@@ -802,6 +981,7 @@ pub async fn save_company_info(
     item: Option<String>,
     certification_info: Option<serde_json::Value>,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let reg_date = registration_date.and_then(|s| {
         chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
             .ok()
@@ -902,6 +1082,7 @@ pub async fn verify_admin_password(
 
 #[command]
 pub async fn login(
+    app: AppHandle,
     state: State<'_, crate::db::DbPool>,
     username: String,
     password: String,
@@ -932,6 +1113,19 @@ pub async fn login(
                 match verify(&password, password_hash) {
                     Ok(is_valid) => {
                         if is_valid {
+                            // Update session state
+                            if let Some(session_state) = app.try_state::<SessionState>() {
+                                if let Ok(mut uid) = session_state.user_id.lock() {
+                                    *uid = Some(user.id);
+                                }
+                                if let Ok(mut uname) = session_state.username.lock() {
+                                    *uname = Some(user.username.clone());
+                                }
+                                if let Ok(mut urole) = session_state.role.lock() {
+                                    *urole = Some(user.role.clone());
+                                }
+                            }
+
                             Ok(LoginResponse {
                                 success: true,
                                 message: "로그인 성공".to_string(),
@@ -975,6 +1169,22 @@ pub async fn login(
             role: None,
         }),
     }
+}
+
+#[command]
+pub async fn logout(app: AppHandle) -> MyceliumResult<()> {
+    if let Some(session_state) = app.try_state::<SessionState>() {
+        if let Ok(mut uid) = session_state.user_id.lock() {
+            *uid = None;
+        }
+        if let Ok(mut uname) = session_state.username.lock() {
+            *uname = None;
+        }
+        if let Ok(mut urole) = session_state.role.lock() {
+            *urole = None;
+        }
+    }
+    Ok(())
 }
 
 #[command]
@@ -1053,7 +1263,11 @@ pub async fn change_password(
 }
 
 #[command]
-pub async fn get_all_users(state: State<'_, crate::db::DbPool>) -> MyceliumResult<Vec<User>> {
+pub async fn get_all_users(
+    app: AppHandle,
+    state: State<'_, crate::db::DbPool>,
+) -> MyceliumResult<Vec<User>> {
+    check_admin(&app)?;
     let users = sqlx::query_as::<_, User>(
         "SELECT id, username, password_hash, role, created_at, updated_at FROM users ORDER BY created_at DESC",
     )
@@ -1065,11 +1279,13 @@ pub async fn get_all_users(state: State<'_, crate::db::DbPool>) -> MyceliumResul
 
 #[command]
 pub async fn create_user(
+    app: AppHandle,
     state: State<'_, crate::db::DbPool>,
     username: String,
     password: Option<String>,
     role: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     if username.trim().is_empty() {
         return Err(MyceliumError::Validation(
             "아이디를 입력해주세요.".to_string(),
@@ -1088,23 +1304,35 @@ pub async fn create_user(
 
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)")
-        .bind(username)
+        .bind(&username)
         .bind(password_hash)
-        .bind(role)
+        .bind(&role)
         .execute(&*state)
         .await?;
+
+    log_system_action(
+        &app,
+        &*state,
+        "CREATE",
+        Some("users"),
+        Some(&username),
+        Some(&format!("Created user {} with role {}", username, role)),
+    )
+    .await?;
 
     Ok(())
 }
 
 #[command]
 pub async fn update_user(
+    app: AppHandle,
     state: State<'_, crate::db::DbPool>,
     id: i32,
     username: String,
     password: Option<String>,
     role: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let password_hash = if let Some(pwd) = password {
         if pwd.trim().is_empty() {
             None
@@ -1118,31 +1346,57 @@ pub async fn update_user(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     if let Some(hash) = password_hash {
         sqlx::query("UPDATE users SET username = $1, password_hash = $2, role = $3 WHERE id = $4")
-            .bind(username)
+            .bind(&username)
             .bind(hash)
-            .bind(role)
+            .bind(&role)
             .bind(id)
             .execute(&*state)
             .await?;
     } else {
         sqlx::query("UPDATE users SET username = $1, role = $2 WHERE id = $3")
-            .bind(username)
-            .bind(role)
+            .bind(&username)
+            .bind(&role)
             .bind(id)
             .execute(&*state)
             .await?;
     }
 
+    log_system_action(
+        &app,
+        &*state,
+        "UPDATE",
+        Some("users"),
+        Some(&id.to_string()),
+        Some(&format!("Updated user {} with role {}", username, role)),
+    )
+    .await?;
+
     Ok(())
 }
 
 #[command]
-pub async fn delete_user(state: State<'_, crate::db::DbPool>, id: i32) -> MyceliumResult<()> {
+pub async fn delete_user(
+    app: AppHandle,
+    state: State<'_, crate::db::DbPool>,
+    id: i32,
+) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(id)
         .execute(&*state)
         .await?;
+
+    log_system_action(
+        &app,
+        &*state,
+        "DELETE",
+        Some("users"),
+        Some(&id.to_string()),
+        None,
+    )
+    .await?;
+
     Ok(())
 }
 
@@ -1155,6 +1409,7 @@ pub struct TaxConfig {
 
 #[tauri::command]
 pub async fn save_tax_config(app: AppHandle, config: TaxConfig) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let config_dir = app
         .path()
         .app_config_dir()

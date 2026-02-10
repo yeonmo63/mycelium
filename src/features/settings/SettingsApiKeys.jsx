@@ -33,7 +33,8 @@ const SettingsApiKeys = () => {
         naver: false,
         mall_naver: false,
         mall_coupang: false,
-        courier: false
+        courier: false,
+        tax: false
     });
 
     const [formData, setFormData] = useState({
@@ -52,7 +53,11 @@ const SettingsApiKeys = () => {
         // Courier
         courier_provider: 'sweettracker',
         courier_api_key: '',
-        courier_client_id: ''
+        courier_client_id: '',
+        // Tax
+        tax_provider: 'sim_hometax',
+        tax_api_key: '',
+        tax_client_id: ''
     });
 
     // --- Admin Guard Check ---
@@ -78,6 +83,7 @@ const SettingsApiKeys = () => {
                     const naverId = await invoke('get_naver_client_id_for_ui');
                     const mallConfig = await invoke('get_mall_config_for_ui');
                     const courierConfig = await invoke('get_courier_config_for_ui');
+                    const taxConfig = await invoke('get_tax_filing_config_for_ui');
 
                     setFormData(prev => ({
                         ...prev,
@@ -93,7 +99,10 @@ const SettingsApiKeys = () => {
                         coupang_vendor_id: mallConfig?.coupang_vendor_id || '',
                         courier_provider: courierConfig?.provider || 'sweettracker',
                         courier_api_key: courierConfig?.api_key || '',
-                        courier_client_id: courierConfig?.client_id || ''
+                        courier_client_id: courierConfig?.client_id || '',
+                        tax_provider: taxConfig?.provider || 'sim_hometax',
+                        tax_api_key: taxConfig?.api_key || '',
+                        tax_client_id: taxConfig?.client_id || ''
                     }));
                 } catch (err) {
                     console.error("Failed to load configs:", err);
@@ -202,6 +211,24 @@ const SettingsApiKeys = () => {
                 }
             });
             await showAlert('저장 완료', '택배 연동 설정이 저장되었습니다.');
+        } catch (err) {
+            showAlert('저장 실패', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveTax = async () => {
+        setIsLoading(true);
+        try {
+            await invoke('save_tax_filing_config', {
+                config: {
+                    provider: formData.tax_provider,
+                    api_key: formData.tax_api_key,
+                    client_id: formData.tax_client_id
+                }
+            });
+            await showAlert('저장 완료', '세무신고 API 설정이 저장되었습니다.');
         } catch (err) {
             showAlert('저장 실패', err);
         } finally {
@@ -642,6 +669,90 @@ const SettingsApiKeys = () => {
                                         onChange={e => setFormData({ ...formData, courier_client_id: e.target.value })}
                                         className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-blue-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="Client ID 또는 업체코드"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tax Filing API Card */}
+                        <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 p-8 text-left transition-all">
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+                                        <Shield size={20} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-3">
+                                            <h2 className="text-lg font-black text-slate-700 tracking-tight">Tax Filing API (Hometax Integration)</h2>
+                                            <a href="https://www.hometax.go.kr/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-600 text-[10px] font-black hover:bg-violet-100 transition-colors">
+                                                <ExternalLink size={10} /> 홈택스 바로가기
+                                            </a>
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-400">부가가치세 및 종합소득세 신고 자동화 연동</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleSaveTax}
+                                    disabled={isLoading}
+                                    className="h-10 px-5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-violet-100 transition-all active:scale-[0.95]"
+                                >
+                                    <Save size={14} /> 저장
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-3 col-span-1 md:col-span-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">연동 서비스 (Tax Provider)</label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { id: 'sim_hometax', name: '모의 신고 (Sim)' },
+                                            { id: 'popbill', name: '팝빌 (Popbill)' },
+                                            { id: 'smartbill', name: '스마트빌 (Smart)' }
+                                        ].map(item => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, tax_provider: item.id })}
+                                                className={`h-12 rounded-xl border-2 font-black text-[11px] transition-all
+                                                ${formData.tax_provider === item.id
+                                                        ? 'bg-violet-50 border-violet-500 text-violet-600 shadow-md transform -translate-y-0.5'
+                                                        : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}
+                                            `}
+                                            >
+                                                {item.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">API 인증키 (Secret Key)</label>
+                                    <div className="relative group">
+                                        <input
+                                            type={showKeys.tax ? "text" : "password"}
+                                            value={formData.tax_api_key}
+                                            onChange={e => setFormData({ ...formData, tax_api_key: e.target.value })}
+                                            className="w-full h-12 px-5 pr-12 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-violet-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                            placeholder="연동 서비스의 API Key를 입력하세요"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleKeyVisibility('tax')}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                        >
+                                            {showKeys.tax ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">사업자번호 / 아이디</label>
+                                    <input
+                                        type="text"
+                                        value={formData.tax_client_id}
+                                        onChange={e => setFormData({ ...formData, tax_client_id: e.target.value })}
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-violet-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        placeholder="등록된 사업자 번호를 입력하세요"
                                     />
                                 </div>
                             </div>

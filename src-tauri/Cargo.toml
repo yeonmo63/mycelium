@@ -51,3 +51,5 @@ open = "5.3.3"
 printpdf = { version = "0.7", features = ["embedded_images"] }
 genpdf = { version = "0.2", features = ["images"] }
 image = "0.24"
+aes-gcm = "0.10.3"
+aead = "0.5.2"

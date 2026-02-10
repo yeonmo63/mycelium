@@ -1,8 +1,9 @@
+use crate::commands::config::check_admin;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use tauri::{command, State};
+use tauri::{command, AppHandle, State};
 
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct CustomPreset {
@@ -204,7 +205,12 @@ const TOMATO_PRESET_JSON: &str = r#"{
 }"#;
 
 #[command]
-pub async fn apply_preset(state: State<'_, DbPool>, preset_type: String) -> MyceliumResult<()> {
+pub async fn apply_preset(
+    app: AppHandle,
+    state: State<'_, DbPool>,
+    preset_type: String,
+) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let preset: Preset = if preset_type.starts_with("custom_") {
         let id_str = &preset_type[7..];
         let preset_id = id_str
@@ -353,10 +359,12 @@ pub async fn get_preset_data(
 
 #[command]
 pub async fn save_current_as_preset(
+    app: AppHandle,
     state: State<'_, DbPool>,
     name: String,
     description: Option<String>,
 ) -> MyceliumResult<i32> {
+    check_admin(&app)?;
     let mut conn = state.acquire().await?;
 
     // 1. Fetch Products
@@ -426,7 +434,12 @@ pub async fn get_custom_presets(state: State<'_, DbPool>) -> MyceliumResult<Vec<
 }
 
 #[command]
-pub async fn delete_custom_preset(state: State<'_, DbPool>, preset_id: i32) -> MyceliumResult<()> {
+pub async fn delete_custom_preset(
+    app: AppHandle,
+    state: State<'_, DbPool>,
+    preset_id: i32,
+) -> MyceliumResult<()> {
+    check_admin(&app)?;
     sqlx::query("DELETE FROM custom_presets WHERE preset_id = $1")
         .bind(preset_id)
         .execute(&*state)

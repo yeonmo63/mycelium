@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../contexts/ModalContext';
 
@@ -7,7 +7,7 @@ export const useAdminGuard = () => {
     const [isVerifying, setIsVerifying] = useState(false);
     const { promptAdminPassword, showAlert } = useModal();
 
-    const checkAdmin = async () => {
+    const checkAdmin = useCallback(async () => {
         const password = await promptAdminPassword();
         if (password === null) {
             // Cancelled
@@ -30,9 +30,9 @@ export const useAdminGuard = () => {
         } finally {
             setIsVerifying(false);
         }
-    };
+    }, [promptAdminPassword, showAlert]);
 
-    const verifyPassword = async (password) => {
+    const verifyPassword = useCallback(async (password) => {
         setIsVerifying(true);
         try {
             const isValid = await invoke('verify_admin_password', { password });
@@ -47,7 +47,7 @@ export const useAdminGuard = () => {
         } finally {
             setIsVerifying(false);
         }
-    };
+    }, []);
 
     return { isAuthorized, isVerifying, checkAdmin, verifyPassword };
 };

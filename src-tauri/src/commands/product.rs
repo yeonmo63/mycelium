@@ -7,7 +7,8 @@ use crate::DB_MODIFIED;
 use chrono::NaiveDateTime;
 use sqlx;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use tauri::{command, AppHandle, State};
+use crate::commands::config::check_admin;
 
 #[command]
 pub async fn get_product_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Product>> {
@@ -71,11 +72,13 @@ pub async fn get_discontinued_product_names(
 
 #[command]
 pub async fn consolidate_products(
+    app: AppHandle,
     pool: State<'_, DbPool>,
     oldProductId: i32,
     newProductId: i32,
     syncNames: Option<bool>,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let mut tx = pool.begin().await?;
     let sync = syncNames.unwrap_or(false);
 
@@ -161,6 +164,7 @@ pub async fn consolidate_products(
 
 #[command]
 pub async fn create_product(
+    app: AppHandle,
     state: State<'_, DbPool>,
     productName: String,
     specification: Option<String>,
@@ -178,6 +182,7 @@ pub async fn create_product(
     taxType: Option<String>,
     taxExemptValue: Option<i32>,
 ) -> MyceliumResult<i32> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -229,6 +234,7 @@ pub async fn create_product(
 
 #[command]
 pub async fn update_product(
+    app: AppHandle,
     state: State<'_, DbPool>,
     productId: i32,
     productName: String,
@@ -248,6 +254,7 @@ pub async fn update_product(
     taxType: Option<String>,
     taxExemptValue: Option<i32>,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let mut tx = state.begin().await?;
     let sync = syncSalesNames.unwrap_or(false);
     let cost = costPrice.unwrap_or(0);
@@ -365,7 +372,8 @@ pub async fn update_product(
 }
 
 #[command]
-pub async fn discontinue_product(state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+pub async fn discontinue_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -396,7 +404,8 @@ pub async fn discontinue_product(state: State<'_, DbPool>, productId: i32) -> My
 }
 
 #[command]
-pub async fn delete_product(state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+pub async fn delete_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    check_admin(&app)?;
     let sales_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales WHERE product_id = $1")
         .bind(productId)
         .fetch_one(&*state)
@@ -446,7 +455,8 @@ pub async fn delete_product(state: State<'_, DbPool>, productId: i32) -> Myceliu
 }
 
 #[command]
-pub async fn hard_delete_product(state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+pub async fn hard_delete_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -546,11 +556,13 @@ pub async fn get_product_history(
 
 #[command]
 pub async fn update_product_stock(
+    app: AppHandle,
     state: State<'_, DbPool>,
     productId: i32,
     newQty: i32,
     reason: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -584,6 +596,7 @@ pub async fn update_product_stock(
 
 #[command]
 pub async fn convert_stock(
+    app: AppHandle,
     state: State<'_, DbPool>,
     materialId: i32,
     productId: i32,
@@ -591,6 +604,7 @@ pub async fn convert_stock(
     materialDeductQty: Option<i32>,
     memo: String,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -671,12 +685,14 @@ pub async fn convert_stock(
 
 #[command]
 pub async fn adjust_product_stock(
+    app: AppHandle,
     state: State<'_, DbPool>,
     productId: i32,
     changeQty: i32,
     memo: String,
     reasonCategory: Option<String>,
 ) -> MyceliumResult<()> {
+    check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 

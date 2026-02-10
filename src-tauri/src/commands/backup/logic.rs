@@ -2,11 +2,13 @@ use crate::commands::backup::models::{
     DeletionLog, ExperienceReservationBackup, ProductBomBackup, PurchaseBackup, SalesClaimBackup,
 };
 use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at};
+use crate::commands::config::check_admin;
 use crate::commands::preset::CustomPreset;
 use crate::db::{
     CompanyInfo, Consultation, Customer, CustomerAddress, CustomerLedger, CustomerLog, DbPool,
     Event, Expense, ExperienceProgram, FarmingLog, HarvestRecord, InventoryLog, Product,
-    ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, User, Vendor,
+    ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, Sensor,
+    SensorReadingRecord, User, Vendor,
 };
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::BACKUP_CANCELLED;
@@ -17,13 +19,15 @@ use futures_util::StreamExt;
 use std::fs::File;
 use std::io::{BufRead, BufWriter, Read, Write};
 use std::sync::atomic::Ordering;
-use tauri::{command, Emitter, State};
+use tauri::{command, AppHandle, Emitter, State};
 
 #[command]
 pub async fn restore_database_sql(
+    app: AppHandle,
     state: State<'_, DbPool>,
     path: String,
 ) -> MyceliumResult<String> {
+    check_admin(&app)?;
     let sql = std::fs::read_to_string(&path)
         .map_err(|e| MyceliumError::Internal(format!("Failed to read SQL file: {}", e)))?;
 
@@ -35,12 +39,13 @@ pub async fn restore_database_sql(
 
 #[command]
 pub async fn backup_database(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, DbPool>,
     path: String,
     is_incremental: bool,
     use_compression: bool,
 ) -> MyceliumResult<String> {
+    check_admin(&app)?;
     let since = if is_incremental {
         get_last_backup_at(&app)
     } else {
@@ -203,6 +208,13 @@ pub async fn backup_database_internal(
     let count_custom_presets: (i64,) = sqlx::query_as(&count_query("custom_presets", None))
         .fetch_one(pool)
         .await?;
+    let count_sensors: (i64,) = sqlx::query_as(&count_query("sensors", None))
+        .fetch_one(pool)
+        .await?;
+    let count_sensor_readings: (i64,) =
+        sqlx::query_as(&count_query("sensor_readings", Some("recorded_at")))
+            .fetch_one(pool)
+            .await?;
 
     let total_records = count_users.0
         + count_products.0
@@ -229,7 +241,9 @@ pub async fn backup_database_internal(
         + count_prod_batches.0
         + count_farming_logs.0
         + count_harvest.0
-        + count_custom_presets.0;
+        + count_custom_presets.0
+        + count_sensors.0
+        + count_sensor_readings.0;
 
     if total_records == 0 {
         return Ok("백업할 데이터가 없습니다.".to_string());
@@ -352,6 +366,13 @@ pub async fn backup_database_internal(
         "수확 기록 백업 중..."
     );
     backup_table!(
+        "sensor_readings",
+        SensorReadingRecord,
+        Some("recorded_at"),
+        "센서 데이터 백업 중..."
+    );
+    backup_table!("sensors", Sensor, None, "IoT 장비 정보 백업 중...");
+    backup_table!(
         "deletion_log",
         DeletionLog,
         Some("deleted_at"),
@@ -379,10 +400,11 @@ pub async fn backup_database_internal(
 
 #[command]
 pub async fn restore_database(
-    app: tauri::AppHandle,
+    app: AppHandle,
     state: State<'_, DbPool>,
     path: String,
 ) -> MyceliumResult<String> {
+    check_admin(&app)?;
     let pool = state.inner();
     let file = File::open(&path)
         .map_err(|e| MyceliumError::Internal(format!("Failed to open backup file: {}", e)))?;
@@ -624,6 +646,22 @@ pub async fn restore_database(
                                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
                                  ON CONFLICT (schedule_id) DO UPDATE SET title=$2, description=$3, start_time=$4, end_time=$5, status=$6, related_type=$7, related_id=$8, updated_at=$10")
                         .bind(d.schedule_id).bind(&d.title).bind(&d.description).bind(d.start_time).bind(d.end_time).bind(&d.status).bind(&d.related_type).bind(d.related_id).bind(d.created_at).bind(d.updated_at)
+                        .execute(&mut *tx).await?;
+                }
+                "sensors" => {
+                    let d: Sensor = serde_json::from_value(data.clone())?;
+                    sqlx::query("INSERT INTO sensors (sensor_id, sensor_name, space_id, device_type, connection_info, is_active, created_at, updated_at) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+                                 ON CONFLICT (sensor_id) DO UPDATE SET sensor_name=$2, space_id=$3, device_type=$4, connection_info=$5, is_active=$6, updated_at=$8")
+                        .bind(d.sensor_id).bind(&d.sensor_name).bind(d.space_id).bind(&d.device_type).bind(&d.connection_info).bind(d.is_active).bind(d.created_at).bind(d.updated_at)
+                        .execute(&mut *tx).await?;
+                }
+                "sensor_readings" => {
+                    let d: SensorReadingRecord = serde_json::from_value(data.clone())?;
+                    sqlx::query("INSERT INTO sensor_readings (reading_id, sensor_id, temperature, humidity, co2, recorded_at) 
+                                 VALUES ($1, $2, $3, $4, $5, $6) 
+                                 ON CONFLICT (reading_id) DO NOTHING")
+                        .bind(d.reading_id).bind(d.sensor_id).bind(d.temperature).bind(d.humidity).bind(d.co2).bind(d.recorded_at)
                         .execute(&mut *tx).await?;
                 }
                 _ => {} // Other tables skip for now

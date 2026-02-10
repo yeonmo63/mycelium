@@ -1,0 +1,191 @@
+use crate::db::DbPool;
+use crate::error::MyceliumResult;
+use chrono::{Local, Timelike};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, Row};
+use tauri::{command, State};
+
+#[derive(Serialize, Deserialize, FromRow)]
+pub struct Sensor {
+    pub sensor_id: i32,
+    pub sensor_name: String,
+    pub space_id: Option<i32>,
+    pub device_type: String, // 'wifi', 'usb', 'virtual'
+    pub connection_info: Option<String>,
+    pub is_active: bool,
+}
+
+#[derive(Serialize)]
+pub struct SensorReading {
+    pub sensor_id: i32,
+    pub temperature: f64,
+    pub humidity: f64,
+    pub co2: f64,
+    pub recorded_at: String,
+}
+
+#[command]
+pub async fn get_sensors(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sensor>> {
+    let pool = state.inner();
+    let sensors = sqlx::query_as::<_, Sensor>("SELECT sensor_id, sensor_name, space_id, device_type, connection_info, is_active FROM sensors WHERE is_active = TRUE")
+        .fetch_all(pool)
+        .await?;
+    Ok(sensors)
+}
+
+#[command]
+pub async fn get_latest_readings(
+    state: State<'_, DbPool>,
+    sensor_ids: Vec<i32>,
+) -> MyceliumResult<Vec<SensorReading>> {
+    let pool = state.inner();
+    let mut readings = Vec::new();
+
+    for id in sensor_ids {
+        let record = sqlx::query(
+            "SELECT temperature, humidity, co2, recorded_at 
+             FROM sensor_readings 
+             WHERE sensor_id = $1 
+             ORDER BY recorded_at DESC LIMIT 1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(r) = record {
+            let temp: rust_decimal::Decimal = r.get(0);
+            let humid: rust_decimal::Decimal = r.get(1);
+            let co2: rust_decimal::Decimal = r.get(2);
+            let recorded_at: chrono::DateTime<chrono::Utc> = r.get(3);
+
+            readings.push(SensorReading {
+                sensor_id: id,
+                temperature: temp.to_string().parse().unwrap_or(0.0),
+                humidity: humid.to_string().parse().unwrap_or(0.0),
+                co2: co2.to_string().parse().unwrap_or(0.0),
+                recorded_at: recorded_at
+                    .with_timezone(&Local)
+                    .format("%H:%M:%S")
+                    .to_string(),
+            });
+        } else {
+            let virtual_data = get_virtual_simulation_data();
+            readings.push(SensorReading {
+                sensor_id: id,
+                temperature: virtual_data.temperature,
+                humidity: virtual_data.humidity,
+                co2: virtual_data.co2,
+                recorded_at: virtual_data.last_updated,
+            });
+        }
+    }
+
+    Ok(readings)
+}
+
+#[derive(Serialize)]
+pub struct VirtualSensorData {
+    pub temperature: f64,
+    pub humidity: f64,
+    pub co2: f64,
+    pub last_updated: String,
+}
+
+fn get_virtual_simulation_data() -> VirtualSensorData {
+    let now = Local::now();
+    let hour = now.hour();
+    let mut rng = rand::rng();
+
+    let base_temp = if (8..18).contains(&hour) {
+        24.0 + (hour as f64 - 12.0).abs() * -0.5
+    } else {
+        18.0 + (rng.random_range(-10..10) as f64 / 10.0)
+    };
+    let temperature = base_temp + (rng.random_range(-5..5) as f64 / 10.0);
+    let humidity = 60.0 + (rng.random_range(-100..100) as f64 / 10.0);
+    let base_co2 = if (8..18).contains(&hour) {
+        450.0 + (rng.random_range(0..200) as f64)
+    } else {
+        800.0 + (rng.random_range(0..400) as f64)
+    };
+
+    VirtualSensorData {
+        temperature: (temperature * 10.0).round() / 10.0,
+        humidity: (humidity * 10.0).round() / 10.0,
+        co2: (base_co2 * 10.0).round() / 10.0,
+        last_updated: now.format("%H:%M:%S").to_string(),
+    }
+}
+
+#[command]
+pub async fn get_virtual_sensor_data() -> MyceliumResult<VirtualSensorData> {
+    Ok(get_virtual_simulation_data())
+}
+
+#[command]
+pub async fn push_sensor_data(
+    state: State<'_, DbPool>,
+    sensor_id: i32,
+    temp: f64,
+    humid: f64,
+    co2: f64,
+) -> MyceliumResult<()> {
+    let pool = state.inner();
+
+    let t = rust_decimal::Decimal::from_f64_retain(temp).unwrap_or_default();
+    let h = rust_decimal::Decimal::from_f64_retain(humid).unwrap_or_default();
+    let c = rust_decimal::Decimal::from_f64_retain(co2).unwrap_or_default();
+
+    sqlx::query(
+        "INSERT INTO sensor_readings (sensor_id, temperature, humidity, co2) VALUES ($1, $2, $3, $4)"
+    )
+    .bind(sensor_id)
+    .bind(t)
+    .bind(h)
+    .bind(c)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+#[command]
+pub async fn save_sensor(state: State<'_, DbPool>, sensor: Sensor) -> MyceliumResult<()> {
+    let pool = state.inner();
+    if sensor.sensor_id > 0 {
+        sqlx::query(
+            "UPDATE sensors SET sensor_name = $1, space_id = $2, device_type = $3, connection_info = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP WHERE sensor_id = $6"
+        )
+        .bind(&sensor.sensor_name)
+        .bind(sensor.space_id)
+        .bind(&sensor.device_type)
+        .bind(&sensor.connection_info)
+        .bind(sensor.is_active)
+        .bind(sensor.sensor_id)
+        .execute(pool)
+        .await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO sensors (sensor_name, space_id, device_type, connection_info, is_active) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(&sensor.sensor_name)
+        .bind(sensor.space_id)
+        .bind(&sensor.device_type)
+        .bind(&sensor.connection_info)
+        .bind(sensor.is_active)
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
+
+#[command]
+pub async fn delete_sensor(state: State<'_, DbPool>, sensor_id: i32) -> MyceliumResult<()> {
+    let pool = state.inner();
+    sqlx::query("UPDATE sensors SET is_active = FALSE WHERE sensor_id = $1")
+        .bind(sensor_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

@@ -17,9 +17,14 @@ const FinanceTaxReport = () => {
     }, []);
 
     const [reportData, setReportData] = useState({
-        taxable: [],
-        exempt: [],
-        summary: { taxableAmt: 0, taxableSupply: 0, taxableVat: 0, exemptAmt: 0, totalAmt: 0 }
+        taxableSales: [],
+        exemptSales: [],
+        purchases: [],
+        summary: {
+            taxableSalesAmt: 0, taxableSalesSupply: 0, taxableSalesVat: 0,
+            exemptSalesAmt: 0, totalSalesAmt: 0,
+            purchaseAmt: 0, purchaseSupply: 0, purchaseVat: 0
+        }
     });
     const [isLoading, setIsLoading] = useState(false);
 
@@ -27,44 +32,49 @@ const FinanceTaxReport = () => {
         if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            const data = await window.__TAURI__.core.invoke('get_tax_report', { startDate, endDate });
+            const data = await window.__TAURI__.core.invoke('get_tax_report_v2', { startDate, endDate });
 
-            let taxable = [];
-            let exempt = [];
-            let sum = { taxableAmt: 0, taxableSupply: 0, taxableVat: 0, exemptAmt: 0, totalAmt: 0 };
+            let taxableSales = [];
+            let exemptSales = [];
+            let purchases = [];
+
+            let sum = {
+                taxableSalesAmt: 0, taxableSalesSupply: 0, taxableSalesVat: 0,
+                exemptSalesAmt: 0, totalSalesAmt: 0,
+                purchaseAmt: 0, purchaseSupply: 0, purchaseVat: 0
+            };
 
             (data || []).forEach(item => {
-                const taxType = item.tax_type || '면세';
                 const amt = item.total_amount || 0;
                 const supply = item.supply_value || 0;
                 const vat = item.vat_amount || 0;
-                const exemptPart = (item.tax_exempt_value !== undefined && item.tax_exempt_value !== null) ? item.tax_exempt_value : (taxType === '면세' ? amt : 0);
-                const taxablePart = (taxType === '과세') ? amt : (supply + vat);
+                const exemptPart = item.tax_exempt_value || 0;
 
-                if (taxType === '복합') {
-                    if (taxablePart > 0) {
-                        taxable.push({ ...item, display_amount: taxablePart, display_tax_type: '과세(분분)' });
-                        sum.taxableAmt += taxablePart;
-                        sum.taxableSupply += supply;
-                        sum.taxableVat += vat;
+                if (item.direction === '매출') {
+                    sum.totalSalesAmt += amt;
+                    if (item.tax_type === '면세') {
+                        exemptSales.push(item);
+                        sum.exemptSalesAmt += amt;
+                    } else if (item.tax_type === '과세' || item.tax_type === '복합') {
+                        taxableSales.push(item);
+                        sum.taxableSalesAmt += (amt - exemptPart);
+                        sum.taxableSalesSupply += supply;
+                        sum.taxableSalesVat += vat;
+                        if (exemptPart > 0) {
+                            exemptSales.push({ ...item, name: `[면세분] ${item.name}`, total_amount: exemptPart });
+                            sum.exemptSalesAmt += exemptPart;
+                        }
                     }
-                    if (exemptPart > 0) {
-                        exempt.push({ ...item, display_amount: exemptPart, display_tax_type: '면세(분분)' });
-                        sum.exemptAmt += exemptPart;
-                    }
-                } else if (taxType === '과세') {
-                    taxable.push(item);
-                    sum.taxableAmt += amt;
-                    sum.taxableSupply += supply;
-                    sum.taxableVat += vat;
                 } else {
-                    exempt.push(item);
-                    sum.exemptAmt += amt;
+                    // 매입 (Expense/Purchases)
+                    purchases.push(item);
+                    sum.purchaseAmt += amt;
+                    sum.purchaseSupply += supply;
+                    sum.purchaseVat += vat;
                 }
-                sum.totalAmt += amt;
             });
 
-            setReportData({ taxable, exempt, summary: sum });
+            setReportData({ taxableSales, exemptSales, purchases, summary: sum });
         } catch (e) {
             console.error(e);
             showAlert("오류", "리포트 로드 실패: " + e);
@@ -74,42 +84,38 @@ const FinanceTaxReport = () => {
     };
 
     const handleExportExcel = async () => {
-        if (reportData.totalAmt === 0) {
+        if (reportData.summary.totalSalesAmt === 0 && reportData.summary.purchaseAmt === 0) {
             showAlert("알림", "저장할 데이터가 없습니다.");
             return;
         }
 
-        let csv = '\uFEFF[부가세 신고 지원 자료]\n';
+        let csv = '\uFEFF[종합 세무 신고 지원 자료]\n';
         csv += `조회 기간: ${startDate} ~ ${endDate}\n\n`;
 
-        csv += '[과세 매출 합계]\n';
-        csv += `공급가액,${reportData.summary.taxableSupply}\n`;
-        csv += `부가세,${reportData.summary.taxableVat}\n`;
-        csv += `합계,${reportData.summary.taxableAmt}\n\n`;
+        csv += '[매출 합계 (Output VAT)]\n';
+        csv += `과세 공급가액,${reportData.summary.taxableSalesSupply}\n`;
+        csv += `과세 부가세,${reportData.summary.taxableSalesVat}\n`;
+        csv += `면세 공급가액,${reportData.summary.exemptSalesAmt}\n`;
+        csv += `매출 총액,${reportData.summary.totalSalesAmt}\n\n`;
 
-        csv += '[면세 매출 합계]\n';
-        csv += `합계(공급가액),${reportData.summary.exemptAmt}\n\n`;
+        csv += '[매입 합계 (Input VAT)]\n';
+        csv += `매입 공급가액,${reportData.summary.purchaseSupply}\n`;
+        csv += `매입 부가세,${reportData.summary.purchaseVat}\n`;
+        csv += `매입 총액,${reportData.summary.purchaseAmt}\n\n`;
 
-        csv += '구분,날짜,상품명,규격,수량,단가,공급가액,부가세,합계,비고(근거)\n';
+        csv += '구분,분류,날짜,항목명,공급가액,부가세,합계,비고\n';
 
-        const allData = [...reportData.taxable, ...reportData.exempt];
+        const allData = [...reportData.taxableSales, ...reportData.exemptSales, ...reportData.purchases];
         allData.forEach(r => {
-            // For mixed items, provide context in the remarks
-            let remark = r.memo || '';
-            if (r.display_tax_type === '과세(분분)') remark = `[복합-과세분] ${remark}`;
-            if (r.display_tax_type === '면세(분분)') remark = `[복합-면세분] ${remark}`;
-
             const row = [
-                r.display_tax_type || r.tax_type,
-                r.order_date,
-                r.product_name,
-                r.specification || '-',
-                r.quantity,
-                r.unit_price,
-                r.supply_value || (r.display_tax_type === '면세(분분)' ? r.display_amount : r.total_amount),
-                r.vat_amount || 0,
-                r.display_amount || r.total_amount,
-                `"${remark.replace(/"/g, '""')}"` // Handle CSV escaping
+                r.direction,
+                r.category,
+                r.date,
+                r.name,
+                r.supply_value,
+                r.vat_amount,
+                r.total_amount,
+                r.memo || '-'
             ].join(',');
             csv += row + '\n';
         });
@@ -125,6 +131,32 @@ const FinanceTaxReport = () => {
             }
         } catch (e) {
             showAlert("오류", "파일 저장 실패: " + e);
+        }
+    };
+
+    const handleSubmitTaxReport = async () => {
+        const allData = [...(reportData.taxableSales || []), ...(reportData.exemptSales || []), ...(reportData.purchases || [])];
+        if (allData.length === 0) {
+            showAlert("알림", "신고할 데이터가 없습니다. 먼저 조회하기를 눌러주세요.");
+            return;
+        }
+
+        const confirm = window.confirm(`[세무신고 자동화]\n\n조회된 ${allData.length}건의 자료를 국세청(연동된 API)으로 전송하시겠습니까?\n\n이 작업은 시스템 로그에 기록되며 취소할 수 없습니다.`);
+        if (!confirm) return;
+
+        setIsLoading(true);
+        try {
+            const result = await window.__TAURI__.core.invoke('submit_tax_report', {
+                items: allData,
+                startDate,
+                endDate
+            });
+            showAlert("전송 성공", result);
+        } catch (e) {
+            console.error(e);
+            showAlert("전송 실패", "세무신고 오류: " + e);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -174,6 +206,14 @@ const FinanceTaxReport = () => {
                         <span className="material-symbols-rounded text-lg">download</span>
                         신고용 엑셀
                     </button>
+                    <button
+                        onClick={handleSubmitTaxReport}
+                        disabled={isLoading}
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-md shadow-violet-100 flex items-center gap-2 disabled:opacity-50"
+                    >
+                        <span className="material-symbols-rounded text-lg">rocket_launch</span>
+                        자동신고 (API)
+                    </button>
                 </div>
             </div>
 
@@ -183,36 +223,44 @@ const FinanceTaxReport = () => {
                     <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
                     <div className="relative z-10">
                         <p className="text-[11px] font-black text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="material-symbols-rounded text-lg">payments</span> 과세 매출 합계 (Taxable)
+                            <span className="material-symbols-rounded text-lg">trending_up</span> 매출 합계 (Sales/Revenue)
                         </p>
                         <div className="space-y-3">
                             <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                                <span>공급가액</span>
-                                <span className="text-slate-700">{formatCurrency(reportData.summary.taxableSupply)}원</span>
+                                <span>공급가액 (과세+면세)</span>
+                                <span className="text-slate-700">{formatCurrency(reportData.summary.taxableSalesSupply + reportData.summary.exemptSalesAmt)}원</span>
                             </div>
                             <div className="flex justify-between items-center text-sm font-bold text-slate-500 border-b border-slate-50 pb-2">
-                                <span>부가세 (VAT)</span>
-                                <span className="text-indigo-600">+{formatCurrency(reportData.summary.taxableVat)}원</span>
+                                <span>매출 부가세 (Output VAT)</span>
+                                <span className="text-indigo-600">+{formatCurrency(reportData.summary.taxableSalesVat)}원</span>
                             </div>
                             <div className="flex justify-between items-center bg-indigo-50/50 p-2 rounded-lg">
-                                <span className="text-xs font-black text-indigo-400">합계</span>
-                                <span className="text-xl font-black text-indigo-700 tracking-tight">{formatCurrency(reportData.summary.taxableAmt)}원</span>
+                                <span className="text-xs font-black text-indigo-400">총 매출액</span>
+                                <span className="text-xl font-black text-indigo-700 tracking-tight">{formatCurrency(reportData.summary.totalSalesAmt)}원</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
                     <div className="relative z-10">
-                        <p className="text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="material-symbols-rounded text-lg">agriculture</span> 면세 매출 합계 (Exempt)
+                        <p className="text-[11px] font-black text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="material-symbols-rounded text-lg">trending_down</span> 매입/비용 합계 (Expenses)
                         </p>
-                        <div className="flex flex-col justify-center h-[116px]">
-                            <p className="text-xs font-bold text-slate-400 mb-2">총 면세 매출액</p>
-                            <p className="text-3xl font-black text-emerald-600 tracking-tighter tabular-nums">
-                                {formatCurrency(reportData.summary.exemptAmt)} <span className="text-base font-medium text-slate-400">원</span>
-                            </p>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center text-sm font-bold text-slate-500">
+                                <span>공급가액 (Input)</span>
+                                <span className="text-slate-700">{formatCurrency(reportData.summary.purchaseSupply)}원</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm font-bold text-slate-500 border-b border-slate-50 pb-2">
+                                <span>매입 부가세 (Input VAT)</span>
+                                <span className="text-rose-600">-{formatCurrency(reportData.summary.purchaseVat)}원</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-rose-50/50 p-2 rounded-lg">
+                                <span className="text-xs font-black text-rose-400">총 매입액</span>
+                                <span className="text-xl font-black text-rose-700 tracking-tight">{formatCurrency(reportData.summary.purchaseAmt)}원</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -221,16 +269,16 @@ const FinanceTaxReport = () => {
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent opacity-50"></div>
                     <div className="relative z-10">
                         <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="material-symbols-rounded text-lg text-white">calculate</span> 전체 총계 (Total Business)
+                            <span className="material-symbols-rounded text-lg text-white">account_balance_wallet</span> 납부 예상 세액 (Estimated VAT)
                         </p>
                         <div className="flex flex-col justify-center h-[116px]">
-                            <p className="text-xs font-bold text-slate-500 mb-2">과세 + 면세 총 매출</p>
+                            <p className="text-xs font-bold text-slate-500 mb-2">매출세 - 매입세</p>
                             <p className="text-3xl font-black text-white tracking-tighter tabular-nums">
-                                {formatCurrency(reportData.summary.totalAmt)} <span className="text-base font-medium text-slate-500">원</span>
+                                {formatCurrency(reportData.summary.taxableSalesVat - reportData.summary.purchaseVat)} <span className="text-base font-medium text-slate-500">원</span>
                             </p>
                             <div className="mt-4 flex gap-4">
-                                <div className="text-[10px] text-slate-400">상품수: <span className="text-white font-bold">{reportData.taxable.length + reportData.exempt.length}건</span></div>
-                                <div className="text-[10px] text-slate-400">조회일: <span className="text-white font-bold">{formatDate(new Date())}</span></div>
+                                <div className="text-[10px] text-slate-400">데이터: <span className="text-white font-bold">{reportData.taxableSales.length + reportData.exemptSales.length + reportData.purchases.length}건</span></div>
+                                <div className="text-[10px] text-slate-400">상태: <span className="text-emerald-400 font-bold">집계완료</span></div>
                             </div>
                         </div>
                     </div>
@@ -239,73 +287,69 @@ const FinanceTaxReport = () => {
 
             {/* List Panels */}
             <div className="flex-1 grid grid-cols-2 gap-6 min-h-0">
-                {/* Taxable List */}
+                {/* Revenue List */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                         <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span> 과세 매출 상세 (Taxable List)
+                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span> 매출 내역 (Revenue List)
                         </h3>
-                        <span className="text-[10px] font-bold text-slate-400 font-mono">{reportData.taxable.length} Rows</span>
+                        <span className="text-[10px] font-bold text-slate-400 font-mono">{(reportData.taxableSales?.length || 0) + (reportData.exemptSales?.length || 0)} 건</span>
                     </div>
                     <div className="flex-1 overflow-auto stylish-scrollbar">
                         <table className="w-full text-[11px] border-collapse">
                             <thead className="sticky top-0 bg-white shadow-sm z-10">
                                 <tr>
+                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">분류</th>
                                     <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">날짜</th>
-                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">상품명</th>
-                                    <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">공급가액</th>
+                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">항목명</th>
                                     <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">부가세</th>
                                     <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">합계</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {reportData.taxable.map((r, i) => (
+                                {[...(reportData.taxableSales || []), ...(reportData.exemptSales || [])].map((r, i) => (
                                     <tr key={i} className="hover:bg-indigo-50/30 transition-colors group">
-                                        <td className="p-3 font-mono text-slate-400">{r.order_date}</td>
-                                        <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.product_name}>{r.product_name}</td>
-                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.supply_value || r.display_amount || r.total_amount)}</td>
-                                        <td className="p-3 text-right font-black text-indigo-500">{formatCurrency(r.vat_amount || 0)}</td>
-                                        <td className="p-3 text-right font-black text-slate-800 tabular-nums">{formatCurrency(r.display_amount || r.total_amount)}</td>
+                                        <td className="p-3 font-bold text-indigo-400">{r.category}</td>
+                                        <td className="p-3 font-mono text-slate-400">{r.date}</td>
+                                        <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.name}>{r.name}</td>
+                                        <td className="p-3 text-right font-black text-indigo-500">{formatCurrency(r.vat_amount)}</td>
+                                        <td className="p-3 text-right font-black text-slate-800 tabular-nums">{formatCurrency(r.total_amount)}</td>
                                     </tr>
                                 ))}
-                                {reportData.taxable.length === 0 && (
-                                    <tr><td colSpan="5" className="py-20 text-center text-slate-300 font-bold italic">과세 거래 내역이 없습니다.</td></tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                {/* Exempt List */}
+                {/* Expense List */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                         <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> 면세 매출 상세 (Exempt List)
+                            <span className="w-2 h-2 rounded-full bg-rose-500"></span> 매입/지출 내역 (Expense List)
                         </h3>
-                        <span className="text-[10px] font-bold text-slate-400 font-mono">{reportData.exempt.length} Rows</span>
+                        <span className="text-[10px] font-bold text-slate-400 font-mono">{(reportData.purchases?.length || 0)} 건</span>
                     </div>
                     <div className="flex-1 overflow-auto stylish-scrollbar">
                         <table className="w-full text-[11px] border-collapse">
                             <thead className="sticky top-0 bg-white shadow-sm z-10">
                                 <tr>
+                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">분류</th>
                                     <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">날짜</th>
-                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">상품명</th>
-                                    <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">공급가액(면세)</th>
+                                    <th className="p-3 text-left font-bold text-slate-400 border-b border-slate-100">항목명</th>
+                                    <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">부가세(공제)</th>
                                     <th className="p-3 text-right font-bold text-slate-400 border-b border-slate-100">합계</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {reportData.exempt.map((r, i) => (
-                                    <tr key={i} className="hover:bg-emerald-50/30 transition-colors group">
-                                        <td className="p-3 font-mono text-slate-400">{r.order_date}</td>
-                                        <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.product_name}>{r.product_name}</td>
-                                        <td className="p-3 text-right font-black text-slate-600">{formatCurrency(r.display_amount || r.total_amount)}</td>
-                                        <td className="p-3 text-right font-black text-emerald-600 tabular-nums">{formatCurrency(r.display_amount || r.total_amount)}</td>
+                                {(reportData.purchases || []).map((r, i) => (
+                                    <tr key={i} className="hover:bg-rose-50/30 transition-colors group">
+                                        <td className="p-3 font-bold text-rose-400">{r.category}</td>
+                                        <td className="p-3 font-mono text-slate-400">{r.date}</td>
+                                        <td className="p-3 font-bold text-slate-700 truncate max-w-[120px]" title={r.name}>{r.name}</td>
+                                        <td className="p-3 text-right font-black text-rose-500">{formatCurrency(r.vat_amount)}</td>
+                                        <td className="p-3 text-right font-black text-slate-800 tabular-nums">{formatCurrency(r.total_amount)}</td>
                                     </tr>
                                 ))}
-                                {reportData.exempt.length === 0 && (
-                                    <tr><td colSpan="4" className="py-20 text-center text-slate-300 font-bold italic">면세 거래 내역이 없습니다.</td></tr>
-                                )}
                             </tbody>
                         </table>
                     </div>

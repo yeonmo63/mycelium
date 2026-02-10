@@ -1,9 +1,11 @@
+use crate::commands::config::check_admin;
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
-use tauri::{command, State};
+use tauri::{command, AppHandle, State};
 
 #[command]
-pub async fn reset_database(state: State<'_, DbPool>) -> MyceliumResult<String> {
+pub async fn reset_database(app: AppHandle, state: State<'_, DbPool>) -> MyceliumResult<String> {
+    check_admin(&app)?;
     let pool = state.inner();
     let mut conn = pool.acquire().await?;
 
@@ -31,6 +33,8 @@ pub async fn reset_database(state: State<'_, DbPool>) -> MyceliumResult<String> 
         "vendors",
         "event",
         "schedules",
+        "sensor_readings",
+        "sensors",
     ];
 
     for table in tables {
@@ -43,7 +47,12 @@ pub async fn reset_database(state: State<'_, DbPool>) -> MyceliumResult<String> 
 }
 
 #[command]
-pub async fn cleanup_old_logs(state: State<'_, DbPool>, months: i32) -> MyceliumResult<u64> {
+pub async fn cleanup_old_logs(
+    app: AppHandle,
+    state: State<'_, DbPool>,
+    months: i32,
+) -> MyceliumResult<u64> {
+    check_admin(&app)?;
     let pool = state.inner();
     let mut total_deleted = 0;
 
@@ -66,11 +75,29 @@ pub async fn cleanup_old_logs(state: State<'_, DbPool>, months: i32) -> Mycelium
         .await?;
     total_deleted += res.rows_affected();
 
+    // Cleanup system audit logs older than N months
+    let res = sqlx::query("DELETE FROM system_logs WHERE created_at < $1")
+        .bind(target_date)
+        .execute(pool)
+        .await?;
+    total_deleted += res.rows_affected();
+
+    // Cleanup sensor readings older than N months
+    let res = sqlx::query("DELETE FROM sensor_readings WHERE recorded_at < $1")
+        .bind(target_date)
+        .execute(pool)
+        .await?;
+    total_deleted += res.rows_affected();
+
     Ok(total_deleted)
 }
 
 #[command]
-pub async fn run_db_maintenance(state: State<'_, DbPool>) -> MyceliumResult<String> {
+pub async fn run_db_maintenance(
+    app: AppHandle,
+    state: State<'_, DbPool>,
+) -> MyceliumResult<String> {
+    check_admin(&app)?;
     let pool = state.inner();
     let mut conn = pool.acquire().await?;
 

@@ -30,6 +30,7 @@ import SettingsApiKeys from './features/settings/SettingsApiKeys';
 import SettingsBackup from './features/settings/SettingsBackup';
 import SettingsDbReset from './features/settings/SettingsDbReset';
 import SettingsTemplate from './features/settings/SettingsTemplate';
+import IotSettings from './features/settings/IotSettings';
 import SalesReception from './features/sales/SalesReception';
 import SalesSpecial from './features/sales/SalesSpecial';
 import SalesOnlineSync from './features/sales/SalesOnlineSync';
@@ -53,6 +54,45 @@ import ScheduleMgmt from './features/schedule/ScheduleMgmt';
 import ProductionManager from './features/production/ProductionManager';
 import UserManual from './features/manual/UserManual';
 import Placeholder from './components/Placeholder';
+
+import { Navigate, Outlet } from 'react-router-dom';
+
+// Admin Route Guard
+const AdminRoute = () => {
+  const userRole = sessionStorage.getItem('userRole');
+  if (userRole !== 'admin') {
+    console.warn("Access denied: Admin privileges required.");
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+};
+
+// Session Timeout Hook
+function useSessionTimeout(isLoggedIn, onLogout) {
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    let timeout;
+    const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+    const resetTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        console.log("Session timed out due to inactivity.");
+        onLogout();
+      }, TIMEOUT_MS);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(name => window.addEventListener(name, resetTimer));
+    resetTimer();
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      events.forEach(name => window.removeEventListener(name, resetTimer));
+    };
+  }, [isLoggedIn, onLogout]);
+}
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -88,7 +128,19 @@ const router = createBrowserRouter(
       <Route path="customer/sms" element={<CustomerSms />} />
       <Route path="exp/reservation-entry" element={<ExperienceReservation />} />
       <Route path="exp/reservation-status" element={<ExperienceStatus />} />
-      <Route path="exp/program-mgmt" element={<ExperienceProgram />} />
+
+      {/* Protected Admin Routes */}
+      <Route element={<AdminRoute />}>
+        <Route path="exp/program-mgmt" element={<ExperienceProgram />} />
+        <Route path="settings/product-list" element={<SettingsProduct />} />
+        <Route path="settings/user-list" element={<SettingsUser />} />
+        <Route path="settings/company-info" element={<SettingsCompany />} />
+        <Route path="settings/api-keys" element={<SettingsApiKeys />} />
+        <Route path="settings/template-mgmt" element={<SettingsTemplate />} />
+        <Route path="settings/iot" element={<IotSettings />} />
+        <Route path="settings/db-backup-restore" element={<SettingsBackup />} />
+        <Route path="settings/db-reset" element={<SettingsDbReset />} />
+      </Route>
 
       {/* Production Management Routes */}
       <Route path="production" element={<ProductionManager initialTab="dashboard" />} />
@@ -99,13 +151,6 @@ const router = createBrowserRouter(
       <Route path="production/harvest" element={<ProductionManager initialTab="harvest" />} />
 
       <Route path="schedule" element={<ScheduleMgmt />} />
-      <Route path="settings/product-list" element={<SettingsProduct />} />
-      <Route path="settings/user-list" element={<SettingsUser />} />
-      <Route path="settings/company-info" element={<SettingsCompany />} />
-      <Route path="settings/api-keys" element={<SettingsApiKeys />} />
-      <Route path="settings/template-mgmt" element={<SettingsTemplate />} />
-      <Route path="/settings/db-backup-restore" element={<SettingsBackup />} />
-      <Route path="/settings/db-reset" element={<SettingsDbReset />} />
       <Route path="manual" element={<UserManual />} />
     </Route>
   )
@@ -118,13 +163,21 @@ function AppContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isLoggedIn') === 'true');
   const { showConfirm, showChoice } = useModal();
 
+  const handleLogout = () => {
+    sessionStorage.removeItem('isLoggedIn');
+    sessionStorage.removeItem('userRole');
+    sessionStorage.removeItem('userId');
+    sessionStorage.removeItem('username');
+    setIsLoggedIn(false);
+    // Optional: invoke logout in Rust to clear backend state
+    invoke('logout').catch(console.error);
+    window.location.reload(); // Reset state
+  };
+
+  useSessionTimeout(isLoggedIn, handleLogout);
+
   useEffect(() => {
     let unlisten;
-
-    const handleLogout = () => {
-      sessionStorage.removeItem('isLoggedIn');
-      setIsLoggedIn(false);
-    };
 
     window.addEventListener('app-logout', handleLogout);
 
