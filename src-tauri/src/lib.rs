@@ -18,6 +18,50 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.app_handle().clone();
 
+            // --- Start Mobile Server for Production ---
+            let handle_for_server = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                use axum::Router;
+                use std::net::SocketAddr;
+                use tower_http::cors::CorsLayer;
+                use tower_http::services::{ServeDir, ServeFile};
+
+                // 1. Precise Resource Path (with fallbacks)
+                let resource_path = {
+                    let res_dir = handle_for_server.path().resource_dir().unwrap_or_default();
+                    let p1 = res_dir.join("dist");
+                    let p2 = res_dir.join("_up_").join("dist");
+                    if p1.exists() { p1 } else if p2.exists() { p2 } else { res_dir }
+                };
+                
+                let index_path = resource_path.join("index.html");
+                
+                println!("System: Mobile Server finalized path: {:?}", resource_path);
+
+                // 2. Bound to 8989
+                let addr = SocketAddr::from(([0, 0, 0, 0], 8989));
+
+                let serve_dir = ServeDir::new(&resource_path)
+                    .fallback(ServeFile::new(index_path));
+
+                let app = Router::new()
+                    .nest_service("/", serve_dir)
+                    .layer(CorsLayer::permissive());
+
+                match tokio::net::TcpListener::bind(addr).await {
+                    Ok(listener) => {
+                        println!("System: Mobile Server listening on http://{}", addr);
+                        axum::serve(listener, app).await.unwrap_or_else(|e| {
+                            eprintln!("System: Mobile server error: {}", e);
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("System: Could not bind mobile server to 8989 (already in use?): {}", e);
+                    }
+                }
+            });
+            // --- End Mobile Server ---
+
             // Initialize SetupState as 'Initializing'
             app_handle.manage(SetupState {
                 status: std::sync::Mutex::new(crate::commands::config::SetupStatus::Initializing),

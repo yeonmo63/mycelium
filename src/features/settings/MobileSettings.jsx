@@ -7,7 +7,7 @@ import { Smartphone, Laptop, QrCode, Wifi, ShieldCheck, ArrowRight } from 'lucid
 const MobileSettings = () => {
     const { showAlert } = useModal();
     const [localIp, setLocalIp] = useState('Checking...');
-    const [port] = useState('5173'); // Default Vite Dev Port
+    const [port] = useState('8989'); // Prod Mobile Server Port
     const [isServerActive, setIsServerActive] = useState(false);
 
     useEffect(() => {
