@@ -20,7 +20,10 @@ import {
     ArrowRight,
     ChevronDown,
     QrCode,
-    Box
+    Box,
+    Loader2,
+    Database,
+    Zap
 } from 'lucide-react';
 import LabelPrinter from '../production/components/LabelPrinter';
 
@@ -37,6 +40,8 @@ const SettingsProduct = () => {
     const [collapsedCats, setCollapsedCats] = useState(new Set());
     const [showDiscontinued, setShowDiscontinued] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedPreset, setSelectedPreset] = useState('');
+    const [isApplyingPreset, setIsApplyingPreset] = useState(false);
 
     // Price History State
     const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -390,6 +395,31 @@ const SettingsProduct = () => {
         }
     };
 
+    const handleApplyPreset = async (presetId) => {
+        if (!presetId) return;
+        const confirm = await showConfirm(
+            "프리셋 적용",
+            "선택한 업종의 표준 데이터(상품, 자재, BOM, 구역)를 생성하시겠습니까?\n이미 존재하는 항목은 건너뛰고 새 항목만 추가됩니다."
+        );
+        if (!confirm) {
+            setSelectedPreset('');
+            return;
+        }
+
+        setIsApplyingPreset(true);
+        try {
+            await invoke('apply_preset', { presetType: presetId });
+            showAlert("성공", "프리셋 데이터가 성공적으로 반영되었습니다.");
+            loadProducts();
+            setSelectedPreset('');
+        } catch (err) {
+            console.error(err);
+            showAlert("오류", "프리셋 적용 중 오류가 발생했습니다: " + err);
+        } finally {
+            setIsApplyingPreset(false);
+        }
+    };
+
     // --- Memoized Values ---
     const filteredProducts = useMemo(() => {
         let filtered = allProducts;
@@ -481,33 +511,72 @@ const SettingsProduct = () => {
                     </div>
                 </div>
 
-                {/* Definition Guide Section */}
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100">
-                            <Package size={16} />
+                {/* Definition Guide Section & Preset Selector */}
+                <div className="mt-6 flex flex-col xl:flex-row gap-4">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl flex items-start gap-3 transition-all hover:bg-indigo-50">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100">
+                                <Package size={16} />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black text-indigo-900 mb-0.5">완제품</h4>
+                                <p className="text-[10px] text-indigo-600 font-bold leading-relaxed">판매 주력 결과물입니다.<br />(선물세트, 1kg 박스 등)</p>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="text-xs font-black text-indigo-900 mb-0.5">완제품</h4>
-                            <p className="text-[10px] text-indigo-600 font-bold leading-relaxed">판매 주력 결과물입니다.<br />(선물세트, 1kg 박스 등)</p>
+                        <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl flex items-start gap-3 transition-all hover:bg-emerald-50">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-100">
+                                <TrendingUp size={16} />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black text-emerald-900 mb-0.5">농산물 (수확물)</h4>
+                                <p className="text-[10px] text-emerald-600 font-bold leading-relaxed">수확하는 버섯 그 자체입니다.<br />(수확 입고의 대상입니다)</p>
+                            </div>
+                        </div>
+                        <div className="bg-orange-50/50 border border-orange-100 p-4 rounded-2xl flex items-start gap-3 transition-all hover:bg-orange-50">
+                            <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-100">
+                                <Layers size={16} />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-black text-orange-900 mb-0.5">부자재 (포장재)</h4>
+                                <p className="text-[10px] text-orange-600 font-bold leading-relaxed">종균/배지부터 박스/라벨까지<br />모든 자재를 통합 관리합니다</p>
+                            </div>
                         </div>
                     </div>
-                    <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-100">
-                            <TrendingUp size={16} /> 농산물 (수확물)
+
+                    <div className="w-full xl:w-80 bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col justify-center gap-2 relative group hover:border-indigo-200 transition-all">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Zap size={14} className="text-indigo-500 fill-indigo-500" />
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">업종별 자동 설정 (Preset)</label>
                         </div>
-                        <div>
-                            <h4 className="text-xs font-black text-emerald-900 mb-0.5">농산물 (수확물)</h4>
-                            <p className="text-[10px] text-emerald-600 font-bold leading-relaxed">수확하는 버섯 그 자체입니다.<br />(수확 입고의 대상입니다)</p>
-                        </div>
-                    </div>
-                    <div className="bg-orange-50/50 border border-orange-100 p-4 rounded-2xl flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-100">
-                            <Layers size={16} />
-                        </div>
-                        <div>
-                            <h4 className="text-xs font-black text-orange-900 mb-0.5">부자재 (포장재)</h4>
-                            <p className="text-[10px] text-orange-600 font-bold leading-relaxed">종균/배지부터 박스/라벨까지<br />모든 자재를 통합 관리합니다</p>
+                        <div className="flex gap-2">
+                            <select
+                                value={selectedPreset}
+                                onChange={(e) => {
+                                    setSelectedPreset(e.target.value);
+                                    if (e.target.value) handleApplyPreset(e.target.value);
+                                }}
+                                disabled={isApplyingPreset}
+                                className="flex-1 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 outline-none focus:ring-4 focus:ring-indigo-50 focus:bg-white focus:border-indigo-300 transition-all disabled:opacity-50 appearance-none cursor-pointer"
+                                style={{
+                                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                                    backgroundRepeat: 'no-repeat',
+                                    backgroundPosition: 'right 0.75rem center',
+                                    backgroundSize: '1rem'
+                                }}
+                            >
+                                <option value="">농종 프리셋 선택...</option>
+                                <option value="mushroom">🍄 버섯 농장 (표고/느타리)</option>
+                                <option value="strawberry">🍓 딸기 농장 (설향/매향)</option>
+                                <option value="potato">🥔 감자 농장 (수미/조림용)</option>
+                                <option value="shinemuscat">🍇 샤인머스켓 (에어셀 포장)</option>
+                                <option value="apple">🍎 사과 농장 (부사/선별포장)</option>
+                                <option value="tomato">🍅 방울토마토 (팩/박스포장)</option>
+                            </select>
+                            {isApplyingPreset && (
+                                <div className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl">
+                                    <Loader2 size={18} className="animate-spin" />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

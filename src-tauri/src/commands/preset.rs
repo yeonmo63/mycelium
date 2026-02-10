@@ -1,41 +1,51 @@
 use crate::db::DbPool;
-use crate::error::MyceliumResult;
+use crate::error::{MyceliumError, MyceliumResult};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use tauri::{command, State};
 
-#[derive(Debug, Deserialize, Serialize)]
-struct PresetProduct {
-    name: String,
-    specification: Option<String>,
-    price: i32,
-    item_type: String, // product, harvest_item, aux_material
-    category: Option<String>,
-    stock_quantity: i32,
+#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+pub struct CustomPreset {
+    pub preset_id: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub preset_data: serde_json::Value,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+pub struct PresetProduct {
+    pub name: String,
+    pub specification: Option<String>,
+    pub price: i32,
+    pub item_type: String, // product, harvest_item, aux_material
+    pub category: Option<String>,
+    pub stock_quantity: i32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct PresetBomItem {
-    material_name: String,
-    ratio: f64,
+pub struct PresetBomItem {
+    pub material_name: String,
+    pub ratio: f64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct PresetBom {
-    product_name: String,
-    materials: Vec<PresetBomItem>,
+pub struct PresetBom {
+    pub product_name: String,
+    pub materials: Vec<PresetBomItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
+pub struct PresetSpace {
+    pub name: String,
+    pub space_type: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct PresetSpace {
-    name: String,
-    space_type: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Preset {
-    products: Vec<PresetProduct>,
-    boms: Vec<PresetBom>,
-    spaces: Vec<PresetSpace>,
+pub struct Preset {
+    pub products: Vec<PresetProduct>,
+    pub boms: Vec<PresetBom>,
+    pub spaces: Vec<PresetSpace>,
 }
 
 const MUSHROOM_PRESET_JSON: &str = r#"{
@@ -65,14 +75,159 @@ const MUSHROOM_PRESET_JSON: &str = r#"{
     ]
 }"#;
 
+const STRAWBERRY_PRESET_JSON: &str = r#"{
+    "products": [
+        { "name": "설향 딸기 (특)", "specification": "500g", "price": 12000, "item_type": "product", "category": "생과", "stock_quantity": 0 },
+        { "name": "설향 딸기 (상)", "specification": "500g", "price": 10000, "item_type": "product", "category": "생과", "stock_quantity": 0 },
+        { "name": "수제 딸기잼", "specification": "300g", "price": 8500, "item_type": "product", "category": "가공품", "stock_quantity": 0 },
+        { "name": "설향 딸기 원물", "specification": "kg", "price": 0, "item_type": "harvest_item", "category": "원물", "stock_quantity": 0 },
+        { "name": "딸기 투명팩(500g)", "specification": "개", "price": 150, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 2000 },
+        { "name": "딸기 난좌(Tray)", "specification": "개", "price": 80, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 2000 },
+        { "name": "포장용 비닐(소)", "specification": "장", "price": 20, "item_type": "aux_material", "category": "비닐/봉투", "stock_quantity": 1000 },
+        { "name": "잼 공병(300g)", "specification": "개", "price": 400, "item_type": "aux_material", "category": "기타자재", "stock_quantity": 500 }
+    ],
+    "boms": [
+        { "product_name": "설향 딸기 (특)", "materials": [
+            { "material_name": "설향 딸기 원물", "ratio": 0.52 },
+            { "material_name": "딸기 투명팩(500g)", "ratio": 1.0 },
+            { "material_name": "딸기 난좌(Tray)", "ratio": 1.0 }
+        ]},
+        { "product_name": "수제 딸기잼", "materials": [
+            { "material_name": "설향 딸기 원물", "ratio": 0.2 },
+            { "material_name": "잼 공병(300g)", "ratio": 1.0 }
+        ]}
+    ],
+    "spaces": [
+        { "name": "A동 (수경재배)", "space_type": "재배사" },
+        { "name": "B동 (수경재배)", "space_type": "재배사" },
+        { "name": "육묘장", "space_type": "재배사" },
+        { "name": "예냉실", "space_type": "창고" },
+        { "name": "포장실", "space_type": "작업장" }
+    ]
+}"#;
+
+const POTATO_PRESET_JSON: &str = r#"{
+    "products": [
+        { "name": "수미감자 (왕특)", "specification": "10kg", "price": 25000, "item_type": "product", "category": "선별감자", "stock_quantity": 0 },
+        { "name": "수미감자 (특)", "specification": "10kg", "price": 22000, "item_type": "product", "category": "선별감자", "stock_quantity": 0 },
+        { "name": "조림용 알감자", "specification": "5kg", "price": 12000, "item_type": "product", "category": "선별감자", "stock_quantity": 0 },
+        { "name": "감자 원물(수확)", "specification": "kg", "price": 0, "item_type": "harvest_item", "category": "원물", "stock_quantity": 0 },
+        { "name": "감자 박스(10kg)", "specification": "개", "price": 650, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "감자 박스(5kg)", "specification": "개", "price": 450, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "낱개 그물망", "specification": "개", "price": 30, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 2000 }
+    ],
+    "boms": [
+        { "product_name": "수미감자 (왕특)", "materials": [
+            { "material_name": "감자 원물(수확)", "ratio": 10.2 },
+            { "material_name": "감자 박스(10kg)", "ratio": 1.0 }
+        ]},
+        { "product_name": "조림용 알감자", "materials": [
+            { "material_name": "감자 원물(수확)", "ratio": 5.1 },
+            { "material_name": "감자 박스(5kg)", "ratio": 1.0 }
+        ]}
+    ],
+    "spaces": [
+        { "name": "노지 1필지", "space_type": "재배지" },
+        { "name": "노지 2필지", "space_type": "재배지" },
+        { "name": "저온저장고", "space_type": "창고" },
+        { "name": "선별작업장", "space_type": "작업장" }
+    ]
+}"#;
+
+const SHINE_MUSCAT_PRESET_JSON: &str = r#"{
+    "products": [
+        { "name": "샤인머스켓 (특)", "specification": "2kg/3송이", "price": 35000, "item_type": "product", "category": "포도", "stock_quantity": 0 },
+        { "name": "샤인머스켓 (상)", "specification": "2kg/4송이", "price": 30000, "item_type": "product", "category": "포도", "stock_quantity": 0 },
+        { "name": "샤인머스켓 원물", "specification": "kg", "price": 0, "item_type": "harvest_item", "category": "원물", "stock_quantity": 0 },
+        { "name": "샤인 전용 박스(2kg)", "specification": "개", "price": 1200, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 500 },
+        { "name": "에어셀 완충재", "specification": "개", "price": 300, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "고급 선물용 띠지", "specification": "장", "price": 100, "item_type": "aux_material", "category": "라벨", "stock_quantity": 1000 }
+    ],
+    "boms": [
+        { "product_name": "샤인머스켓 (특)", "materials": [
+            { "material_name": "샤인머스켓 원물", "ratio": 2.1 },
+            { "material_name": "샤인 전용 박스(2kg)", "ratio": 1.0 },
+            { "material_name": "에어셀 완충재", "ratio": 3.0 }
+        ]}
+    ],
+    "spaces": [
+        { "name": "포도 연동하우스", "space_type": "재배사" },
+        { "name": "출하 전 예냉실", "space_type": "창고" },
+        { "name": "포도 소포장실", "space_type": "작업장" }
+    ]
+}"#;
+
+const APPLE_PRESET_JSON: &str = r#"{
+    "products": [
+        { "name": "꿀사과 (부사/대과)", "specification": "5kg/12과", "price": 45000, "item_type": "product", "category": "사과", "stock_quantity": 0 },
+        { "name": "꿀사과 (부사/중과)", "specification": "5kg/16과", "price": 38000, "item_type": "product", "category": "사과", "stock_quantity": 0 },
+        { "name": "사과 원물", "specification": "kg", "price": 0, "item_type": "harvest_item", "category": "원물", "stock_quantity": 0 },
+        { "name": "사과 전용 박스(5kg)", "specification": "개", "price": 800, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "사과 상/하 난좌", "specification": "세트", "price": 400, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "개별 폼 캡", "specification": "개", "price": 50, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 5000 }
+    ],
+    "boms": [
+        { "product_name": "꿀사과 (부사/대과)", "materials": [
+            { "material_name": "사과 원물", "ratio": 5.2 },
+            { "material_name": "사과 전용 박스(5kg)", "ratio": 1.0 },
+            { "material_name": "사과 상/하 난좌", "ratio": 1.0 }
+        ]}
+    ],
+    "spaces": [
+        { "name": "과수원 1구역", "space_type": "재배지" },
+        { "name": "과수원 2구역", "space_type": "재배지" },
+        { "name": "대형 저온저장고", "space_type": "창고" },
+        { "name": "자동 선별장", "space_type": "작업장" }
+    ]
+}"#;
+
+const TOMATO_PRESET_JSON: &str = r#"{
+    "products": [
+        { "name": "대추방울토마토", "specification": "750g/팩", "price": 8500, "item_type": "product", "category": "토마토", "stock_quantity": 0 },
+        { "name": "대추방울토마토 (원물)", "specification": "kg", "price": 0, "item_type": "harvest_item", "category": "원물", "stock_quantity": 0 },
+        { "name": "토마토 투명용기(750g)", "specification": "개", "price": 180, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 2000 },
+        { "name": "토마토 외박스(2kg용)", "specification": "개", "price": 600, "item_type": "aux_material", "category": "박스/포장", "stock_quantity": 1000 },
+        { "name": "생산자 직인 스티커", "specification": "장", "price": 30, "item_type": "aux_material", "category": "라벨", "stock_quantity": 5000 }
+    ],
+    "boms": [
+        { "product_name": "대추방울토마토", "materials": [
+            { "material_name": "대추방울토마토 (원물)", "ratio": 0.77 },
+            { "material_name": "토마토 투명용기(750g)", "ratio": 1.0 },
+            { "material_name": "생산자 직인 스티커", "ratio": 1.0 }
+        ]}
+    ],
+    "spaces": [
+        { "name": "토마토 생산동", "space_type": "재배사" },
+        { "name": "육묘실", "space_type": "재배사" },
+        { "name": "집하/출하실", "space_type": "작업장" }
+    ]
+}"#;
+
 #[command]
 pub async fn apply_preset(state: State<'_, DbPool>, preset_type: String) -> MyceliumResult<()> {
-    let preset_json = match preset_type.as_str() {
-        "mushroom" => MUSHROOM_PRESET_JSON,
-        _ => return Ok(()),
+    let preset: Preset = if preset_type.starts_with("custom_") {
+        let id_str = &preset_type[7..];
+        let preset_id = id_str
+            .parse::<i32>()
+            .map_err(|_| MyceliumError::Internal("Invalid custom preset ID".to_string()))?;
+        let row: (serde_json::Value,) =
+            sqlx::query_as("SELECT preset_data FROM custom_presets WHERE preset_id = $1")
+                .bind(preset_id)
+                .fetch_one(&*state)
+                .await?;
+        serde_json::from_value(row.0)?
+    } else {
+        let preset_json = match preset_type.as_str() {
+            "mushroom" => MUSHROOM_PRESET_JSON,
+            "strawberry" => STRAWBERRY_PRESET_JSON,
+            "potato" => POTATO_PRESET_JSON,
+            "shinemuscat" => SHINE_MUSCAT_PRESET_JSON,
+            "apple" => APPLE_PRESET_JSON,
+            "tomato" => TOMATO_PRESET_JSON,
+            _ => return Ok(()),
+        };
+        serde_json::from_str(preset_json)?
     };
-
-    let preset: Preset = serde_json::from_str(preset_json)?;
     let mut tx = state.begin().await?;
 
     // 1. Insert Products
@@ -160,5 +315,121 @@ pub async fn apply_preset(state: State<'_, DbPool>, preset_type: String) -> Myce
     }
 
     tx.commit().await?;
+    Ok(())
+}
+
+#[command]
+pub async fn get_preset_data(
+    state: State<'_, DbPool>,
+    preset_type: String,
+) -> MyceliumResult<Preset> {
+    if preset_type.starts_with("custom_") {
+        let id_str = &preset_type[7..];
+        let preset_id = id_str
+            .parse::<i32>()
+            .map_err(|_| MyceliumError::Internal("Invalid custom preset ID".to_string()))?;
+        let row: (serde_json::Value,) =
+            sqlx::query_as("SELECT preset_data FROM custom_presets WHERE preset_id = $1")
+                .bind(preset_id)
+                .fetch_one(&*state)
+                .await?;
+        let preset: Preset = serde_json::from_value(row.0)?;
+        return Ok(preset);
+    }
+
+    let preset_json = match preset_type.as_str() {
+        "mushroom" => MUSHROOM_PRESET_JSON,
+        "strawberry" => STRAWBERRY_PRESET_JSON,
+        "potato" => POTATO_PRESET_JSON,
+        "shinemuscat" => SHINE_MUSCAT_PRESET_JSON,
+        "apple" => APPLE_PRESET_JSON,
+        "tomato" => TOMATO_PRESET_JSON,
+        _ => return Err(MyceliumError::Internal("Unknown preset type".to_string())),
+    };
+
+    let preset: Preset = serde_json::from_str(preset_json)?;
+    Ok(preset)
+}
+
+#[command]
+pub async fn save_current_as_preset(
+    state: State<'_, DbPool>,
+    name: String,
+    description: Option<String>,
+) -> MyceliumResult<i32> {
+    let mut conn = state.acquire().await?;
+
+    // 1. Fetch Products
+    let products: Vec<PresetProduct> = sqlx::query_as(
+        "SELECT product_name as name, specification, unit_price as price, item_type, category, stock_quantity FROM products"
+    ).fetch_all(&mut *conn).await?;
+
+    // 2. Fetch BOMs
+    // Complex query to get BOMs with material names
+    let bom_rows: Vec<(String, String, f64)> = sqlx::query_as(
+        "SELECT p.product_name, m.product_name as material_name, b.ratio 
+         FROM product_bom b
+         JOIN products p ON b.product_id = p.product_id
+         JOIN products m ON b.material_id = m.product_id",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let mut boms_map: std::collections::HashMap<String, Vec<PresetBomItem>> =
+        std::collections::HashMap::new();
+    for (p_name, m_name, ratio) in bom_rows {
+        boms_map.entry(p_name).or_default().push(PresetBomItem {
+            material_name: m_name,
+            ratio,
+        });
+    }
+
+    let boms: Vec<PresetBom> = boms_map
+        .into_iter()
+        .map(|(product_name, materials)| PresetBom {
+            product_name,
+            materials,
+        })
+        .collect();
+
+    // 3. Fetch Spaces
+    let spaces: Vec<PresetSpace> = sqlx::query_as(
+        "SELECT space_name as name, space_type FROM production_spaces WHERE is_active = true",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let preset = Preset {
+        products,
+        boms,
+        spaces,
+    };
+    let preset_json = serde_json::to_value(preset)?;
+
+    let row: (i32,) = sqlx::query_as("INSERT INTO custom_presets (name, description, preset_data) VALUES ($1, $2, $3) RETURNING preset_id")
+        .bind(name)
+        .bind(description)
+        .bind(preset_json)
+        .fetch_one(&mut *conn)
+        .await?;
+
+    Ok(row.0)
+}
+
+#[command]
+pub async fn get_custom_presets(state: State<'_, DbPool>) -> MyceliumResult<Vec<CustomPreset>> {
+    let presets =
+        sqlx::query_as::<_, CustomPreset>("SELECT * FROM custom_presets ORDER BY created_at DESC")
+            .fetch_all(&*state)
+            .await?;
+    Ok(presets)
+}
+
+#[command]
+pub async fn delete_custom_preset(state: State<'_, DbPool>, preset_id: i32) -> MyceliumResult<()> {
+    sqlx::query("DELETE FROM custom_presets WHERE preset_id = $1")
+        .bind(preset_id)
+        .execute(&*state)
+        .await?;
     Ok(())
 }

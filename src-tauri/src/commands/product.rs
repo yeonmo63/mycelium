@@ -11,11 +11,9 @@ use tauri::{command, State};
 
 #[command]
 pub async fn get_product_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Product>> {
-    let products = sqlx::query_as::<_, Product>(
-        "SELECT * FROM products ORDER BY product_name"
-    )
-    .fetch_all(&*state)
-    .await?;
+    let products = sqlx::query_as::<_, Product>("SELECT * FROM products ORDER BY product_name")
+        .fetch_all(&*state)
+        .await?;
 
     Ok(products)
 }
@@ -731,10 +729,12 @@ pub async fn adjust_product_stock(
                 .execute(&mut *tx).await?;
 
             // 3. Get representative name
-            let rep_name = sqlx::query_scalar::<_, String>("SELECT representative_name FROM company_info LIMIT 1")
-                .fetch_optional(&mut *tx)
-                .await?
-                .unwrap_or_else(|| "시스템자동".to_string());
+            let rep_name = sqlx::query_scalar::<_, String>(
+                "SELECT representative_name FROM company_info LIMIT 1",
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or_else(|| "시스템자동".to_string());
 
             // 4. Insert into farming_logs (4th tab - GAP/HACCP)
             sqlx::query("INSERT INTO farming_logs (batch_id, space_id, log_date, work_type, work_content, worker_name) VALUES ($1, $2, CURRENT_DATE, 'harvest', $3, $4)")
@@ -854,16 +854,16 @@ pub async fn get_product_bom(
         .bind(productId)
         .fetch_optional(&*pool)
         .await?;
-    
+
     let mut list = Vec::new();
     if let Some((m_id, m_ratio, a_id, a_ratio)) = p {
-         // 1. Aux Material (Packaging/Box)
-         if let Some(aid) = a_id {
+        // 1. Aux Material (Packaging/Box)
+        if let Some(aid) = a_id {
             let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
                 .bind(aid)
                 .fetch_optional(&*pool)
                 .await?;
-            
+
             if let Some((name, spec, stock, itype)) = m {
                 list.push(crate::db::ProductBomJoin {
                     id: 0, // Dummy ID
@@ -873,18 +873,18 @@ pub async fn get_product_bom(
                     product_name: name,
                     specification: spec,
                     stock_quantity: stock,
-                    item_type: itype
+                    item_type: itype,
                 });
             }
         }
 
         // 2. Main Material (Raw)
         if let Some(mid) = m_id {
-             let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
+            let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
                 .bind(mid)
                 .fetch_optional(&*pool)
                 .await?;
-            
+
             if let Some((name, spec, stock, itype)) = m {
                 list.push(crate::db::ProductBomJoin {
                     id: 0, // Dummy ID
@@ -894,7 +894,7 @@ pub async fn get_product_bom(
                     product_name: name,
                     specification: spec,
                     stock_quantity: stock,
-                    item_type: itype
+                    item_type: itype,
                 });
             }
         }
@@ -1007,7 +1007,8 @@ pub async fn batch_convert_stock(
             .await?;
 
         // Summary of targets for the log
-        let target_names = targets.iter()
+        let target_names = targets
+            .iter()
             .map(|t| format!("{} {}개", t.product_id, t.quantity)) // Simplified for now, we'll log more detail in full implementation if needed
             .collect::<Vec<_>>()
             .join(", ");
@@ -1125,7 +1126,7 @@ pub async fn convert_stock_bom(
         if let Some((bid, sid)) = b_info {
             batch_id = Some(bid);
             space_id = sid;
-            break; 
+            break;
         }
     }
 
@@ -1138,4 +1139,3 @@ pub async fn convert_stock_bom(
     tx.commit().await?;
     Ok(())
 }
-

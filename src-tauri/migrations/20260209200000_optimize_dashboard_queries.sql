@@ -9,10 +9,13 @@ CREATE INDEX IF NOT EXISTS idx_experience_reservations_customer_id ON experience
 -- View for daily dashboard summary to avoid repeated complex aggregations
 CREATE OR REPLACE VIEW v_dashboard_daily_summary AS
 SELECT 
-    d::date as target_date,
+    date_gen.target_date,
     COALESCE(SUM(s.total_amount) FILTER (WHERE s.status != '취소'), 0) as daily_sales,
     COUNT(s.sales_id) FILTER (WHERE s.status != '취소') as daily_orders,
-    (SELECT COUNT(*) FROM customers WHERE join_date = d::date) as new_customers
-FROM generate_series(CURRENT_DATE - interval '30 days', CURRENT_DATE, '1 day') d
-LEFT JOIN sales s ON s.order_date = d::date
-GROUP BY d::date;
+    (SELECT COUNT(*) FROM customers WHERE join_date = date_gen.target_date) as new_customers
+FROM (
+    SELECT d::date as target_date 
+    FROM generate_series(CURRENT_DATE - interval '30 days', CURRENT_DATE, '1 day') d
+) date_gen
+LEFT JOIN sales s ON s.order_date = date_gen.target_date
+GROUP BY date_gen.target_date;
