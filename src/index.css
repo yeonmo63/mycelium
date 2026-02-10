@@ -56,7 +56,19 @@ input:-webkit-autofill:active {
 
   body {
     @apply bg-background text-foreground;
+    /* Full screen mobile prep */
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
+}
+
+/* Scroll lock when mobile to prevent rubber banding if desired, but we want smooth scroll usually */
+.mobile-fullscreen {
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #app-splash {

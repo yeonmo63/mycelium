@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
-import { Camera, Save, ArrowLeft, Thermometer, Droplets, User, ClipboardList, MapPin, LayoutDashboard, CirclePlus } from 'lucide-react';
+import { Camera, Save, ArrowLeft, Thermometer, Droplets, MapPin, LayoutDashboard, ClipboardList, CirclePlus } from 'lucide-react';
 import dayjs from 'dayjs';
 
 const MobileWorkLog = () => {
     const navigate = useNavigate();
-    const { showAlert, showConfirm } = useModal();
+    const { showAlert } = useModal();
     const [spaces, setSpaces] = useState([]);
     const [batches, setBatches] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -30,29 +30,16 @@ const MobileWorkLog = () => {
     }, []);
 
     const loadBaseData = async () => {
-        if (!window.__TAURI__) {
-            console.warn("Non-Tauri environment: Using mock spaces/batches.");
-            setSpaces([
-                { space_id: 1, space_name: "제1 온실 (데모)" },
-                { space_id: 2, space_name: "제2 재배동 (데모)" }
-            ]);
-            setBatches([
-                { batch_id: 1, batch_code: "B240210-001", status: "growing" },
-                { batch_id: 2, batch_code: "B240210-002", status: "growing" }
-            ]);
-            setIsLoading(false);
-            return;
-        }
         try {
             const [sRes, bRes] = await Promise.all([
-                invoke('get_production_spaces'),
-                invoke('get_production_batches')
+                callBridge('get_production_spaces'),
+                callBridge('get_production_batches')
             ]);
             setSpaces(sRes || []);
             setBatches(bRes || []);
         } catch (e) {
             console.error(e);
-            showAlert("데이터 로드 실패", "생산 공간 및 배치 정보를 가져오지 못했습니다.");
+            showAlert("데이터 로드 실패", "실제 생산 정보를 가져오지 못했습니다.");
         } finally {
             setIsLoading(false);
         }
@@ -65,18 +52,17 @@ const MobileWorkLog = () => {
         }
 
         try {
-            if (!window.__TAURI__) {
-                console.log("Mock saved log:", formData);
-                showAlert("저장 완료 (데모)", "브라우저 환경이므로 실제 DB에는 저장되지 않았지만 UI 동작은 완료되었습니다.");
-            } else {
-                await invoke('save_farming_log', { log: formData });
+            const res = await callBridge('save_farming_log', { log: formData });
+            if (res && res.success) {
                 showAlert("저장 완료", "현장 작업 일지가 성공적으로 기록되었습니다.");
+                setFormData(prev => ({
+                    ...prev,
+                    work_content: '',
+                    env_data: { temp: '', humi: '' }
+                }));
+            } else {
+                throw new Error(res?.error || "Unknown error");
             }
-            setFormData(prev => ({
-                ...prev,
-                work_content: '',
-                env_data: { temp: '', humi: '' }
-            }));
         } catch (e) {
             console.error(e);
             showAlert("저장 실패", "일지 기록 중 오류가 발생했습니다: " + e);

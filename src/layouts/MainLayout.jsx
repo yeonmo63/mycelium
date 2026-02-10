@@ -7,8 +7,10 @@ const MainLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-    const isMobileRoute = location.pathname.toLowerCase().includes('mobile') ||
-        window.location.search.toLowerCase().includes('mobile');
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isMobilePort = window.location.port === '8989';
+    const isMobileRoute = location.pathname.toLowerCase().startsWith('/mobile-') ||
+        isMobileUA || isMobilePort;
 
     useEffect(() => {
         if (!isLoggedIn && !isMobileRoute) {

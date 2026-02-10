@@ -168,11 +168,12 @@ const router = createBrowserRouter(
 
 function AppContent() {
   const isWebBrowser = !window.__TAURI__;
-  const isMobileRoute = window.location.pathname.toLowerCase().includes('mobile') ||
-    window.location.search.toLowerCase().includes('mobile') ||
-    window.location.hash.toLowerCase().includes('mobile');
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isMobilePort = window.location.port === '8989';
+  const isMobileRoute = window.location.pathname.toLowerCase().startsWith('/mobile-') ||
+    isMobileUA || isMobilePort;
 
-  console.log("App: Environment check", { isWebBrowser, isMobileRoute, path: window.location.pathname });
+  console.log("App: Environment check", { isWebBrowser, isMobileRoute, path: window.location.pathname, port: window.location.port });
 
   // High-priority bypass for web/mobile browsers
   const [isConfigured, setIsConfigured] = useState(isWebBrowser ? true : null);
@@ -189,15 +190,19 @@ function AppContent() {
       }
 
       if (isMobileRoute) {
-        console.log("App: Running in Mobile Web Preview Mode");
+        console.log("App: Running in Mobile Web Mode");
+        // Ensure mobile users are on a mobile- prefixed path
+        if (!window.location.pathname.toLowerCase().startsWith('/mobile-')) {
+          console.log("App: Redirecting mobile user to /mobile-dashboard");
+          window.location.href = '/mobile-dashboard';
+          return;
+        }
+
         if (!sessionStorage.getItem('username')) {
           sessionStorage.setItem('username', 'MobileUser');
           sessionStorage.setItem('userRole', 'admin');
           sessionStorage.setItem('isLoggedIn', 'true');
         }
-      } else if (window.location.pathname === '/' || window.location.pathname === '') {
-        // Redir mobile users to dashboard if they hit root in browser
-        window.location.href = '/mobile-dashboard';
       }
     }
   }, [isWebBrowser, isMobileRoute]);

@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { invokeAI } from '../../../utils/aiErrorHandler';
+import { useState, useEffect } from 'react';
+import { callBridge } from '../../../utils/apiBridge';
 import dayjs from 'dayjs';
 
 export const useDashboard = (showAlert) => {
@@ -26,35 +25,15 @@ export const useDashboard = (showAlert) => {
     }, []);
 
     const loadDashboardData = async () => {
-        if (!window.__TAURI__) {
-            console.warn("Non-Tauri environment detected. Using mock data.");
-            setStats({
-                total_sales_amount: 12540000,
-                total_orders: 142,
-                pending_orders: 28,
-                total_customers: 12,
-                total_customers_all_time: 12450,
-                experience_reservation_count: 5,
-                today_schedule_count: 8
-            });
-            setWeeklyData([
-                { date: dayjs().subtract(1, 'day').format('MM-DD'), total: 8500000 },
-                { date: dayjs().format('MM-DD'), total: 12540000 }
-            ]);
-            setIsLoading(false);
-            setIsChartLoading(false);
-            setIsRankLoading(false);
-            setIsWeatherLoading(false);
-            return;
-        }
-
         // 1. 핵심 통계 (우선순위 분리 로딩)
-        invoke('get_dashboard_priority_stats').then(res => {
-            setStats(prev => ({ ...(prev || {}), ...(res || {}) }));
+        callBridge('get_dashboard_priority_stats').then(res => {
+            if (res) {
+                setStats(prev => ({ ...(prev || {}), ...(res || {}) }));
+            }
             setIsLoading(false);
 
             // 2. 나머지 통계 (Background)
-            invoke('get_dashboard_secondary_stats').then(secRes => {
+            callBridge('get_dashboard_secondary_stats').then(secRes => {
                 if (!secRes) return;
                 setStats(prev => {
                     const next = { ...(prev || {}) };
@@ -70,12 +49,13 @@ export const useDashboard = (showAlert) => {
             setIsLoading(false);
         });
 
-        // 2. 모달 관련 데이터들 (병렬 처리)
+        // 2. 모달 관련 데이터들 (병렬 처리 - 일부는 아직 브릿지에 없을 수 있음)
         Promise.allSettled([
-            invoke('get_upcoming_anniversaries', { days: 3 }).then(res => setAnniversaries(res || [])),
-            invoke('get_repurchase_candidates').then(res => setRepurchaseCandidates(res || [])),
-            invoke('get_inventory_forecast_alerts').then(res => setForecastAlerts(res || [])),
-            invoke('get_product_freshness').then(res => {
+            callBridge('get_upcoming_anniversaries', { days: 3 }).then(res => res && setAnniversaries(res)),
+            callBridge('get_repurchase_candidates').then(res => res && setRepurchaseCandidates(res)),
+            callBridge('get_inventory_forecast_alerts').then(res => res && setForecastAlerts(res)),
+            callBridge('get_product_freshness').then(res => {
+                if (!res) return;
                 const today = new Date();
                 const alerts = (res || []).filter(item => {
                     if (!item.last_in_date || item.stock_quantity <= 0) return false;
@@ -89,8 +69,8 @@ export const useDashboard = (showAlert) => {
         ]).catch(e => console.error("Aux data error", e));
 
         // 3. 주간 차트 데이터
-        invoke('get_weekly_sales_data').then(weeklyRes => {
-            setWeeklyData(weeklyRes || []);
+        callBridge('get_weekly_sales_data').then(weeklyRes => {
+            if (weeklyRes) setWeeklyData(weeklyRes);
             setIsChartLoading(false);
         }).catch(e => {
             console.error("Dashboard: Weekly chart error", e);
@@ -99,13 +79,13 @@ export const useDashboard = (showAlert) => {
 
         // 4. 상품 랭킹
         Promise.allSettled([
-            invoke('get_top3_products_by_qty').then(res => setTop3Products(res || [])),
-            invoke('get_top_profit_products').then(res => setTopProfitProducts(res || []))
+            callBridge('get_top3_products_by_qty').then(res => res && setTop3Products(res)),
+            callBridge('get_top_profit_products').then(res => res && setTopProfitProducts(res))
         ]).finally(() => setIsRankLoading(false));
 
         // 5. 날씨 및 마케팅 조언
-        invoke('get_weather_marketing_advice').then(weatherRes => {
-            setWeatherAdvice(weatherRes);
+        callBridge('get_weather_marketing_advice').then(weatherRes => {
+            if (weatherRes) setWeatherAdvice(weatherRes);
             setIsWeatherLoading(false);
         }).catch(e => {
             console.error("Dashboard: Weather error", e);

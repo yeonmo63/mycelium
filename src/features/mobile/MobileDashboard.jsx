@@ -42,9 +42,9 @@ const MobileDashboard = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-10 overflow-x-hidden">
-            {/* Header */}
-            <div className="bg-indigo-600 p-6 pt-10 pb-12 rounded-b-[2.5rem] shadow-lg shadow-indigo-100 relative overflow-hidden shrink-0">
+        <div className="mobile-fullscreen bg-slate-50 flex flex-col font-sans overflow-hidden">
+            {/* Header - Fixed to top or with top safe area */}
+            <div className="bg-indigo-600 px-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-12 rounded-b-[2.5rem] shadow-lg shadow-indigo-100 relative overflow-hidden shrink-0">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 blur-3xl rounded-full"></div>
                 <div className="relative z-10 flex justify-between items-start mb-6">
                     <div>
@@ -83,8 +83,8 @@ const MobileDashboard = () => {
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="px-6 -mt-6 relative z-20 space-y-4">
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto px-6 -mt-6 relative z-20 space-y-4 pb-32">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white p-5 rounded-3xl shadow-md border border-slate-100 min-h-[140px] flex flex-col justify-between">
                         <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -168,17 +168,17 @@ const MobileDashboard = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Bottom Nav Spacer */}
+                <div className="mt-8 px-4 text-center">
+                    <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-relaxed">
+                        © 2026 Mycelium Farm OS<br />ENTERPRISE MOBILE DASHBOARD
+                    </p>
+                </div>
             </div>
 
-            {/* Bottom Nav Spacer */}
-            <div className="mt-12 px-10 text-center mb-20">
-                <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-relaxed">
-                    © 2026 Mycelium Farm OS<br />ENTERPRISE MOBILE DASHBOARD
-                </p>
-            </div>
-
-            {/* Bottom Tab Bar */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around h-20 px-4 pb-4 z-50">
+            {/* Bottom Tab Bar (App-like with safe area) */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around h-[calc(5rem+env(safe-area-inset-bottom))] px-4 pb-[env(safe-area-inset-bottom)] z-50">
                 <button onClick={() => navigate('/mobile-dashboard')} className="flex flex-col items-center gap-1 text-indigo-600">
                     <LayoutDashboard size={24} />
                     <span className="text-[10px] font-black">현황판</span>

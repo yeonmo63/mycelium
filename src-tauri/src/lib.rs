@@ -12,6 +12,8 @@ pub static IS_EXITING: AtomicBool = AtomicBool::new(false);
 pub static DB_MODIFIED: AtomicBool = AtomicBool::new(false);
 pub static BACKUP_CANCELLED: AtomicBool = AtomicBool::new(false);
 
+pub mod bridge;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -35,18 +37,34 @@ pub fn run() {
                 };
                 
                 let index_path = resource_path.join("index.html");
-                
                 println!("System: Mobile Server finalized path: {:?}", resource_path);
 
                 // 2. Bound to 8989
                 let addr = SocketAddr::from(([0, 0, 0, 0], 8989));
 
+                // Wait for DB Pool to be ready (up to 30s)
+                let mut pool = None;
+                for _ in 0..60 {
+                    if let Some(p) = handle_for_server.try_state::<crate::db::DbPool>() {
+                        pool = Some(p.inner().clone());
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+
                 let serve_dir = ServeDir::new(&resource_path)
                     .fallback(ServeFile::new(index_path));
 
-                let app = Router::new()
+                let mut app = Router::new()
                     .nest_service("/", serve_dir)
                     .layer(CorsLayer::permissive());
+                
+                if let Some(p) = pool {
+                    println!("System: DB Pool detected. Attaching API Bridge.");
+                    app = app.merge(crate::bridge::create_mobile_router(p));
+                } else {
+                    println!("System: DB Pool not found within timeout. API Bridge disabled.");
+                }
 
                 match tokio::net::TcpListener::bind(addr).await {
                     Ok(listener) => {

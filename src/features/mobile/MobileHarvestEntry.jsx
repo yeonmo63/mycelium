@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { Save, ArrowLeft, Package, Trash2, Scale, Info, CircleCheck, LayoutDashboard, ClipboardList, CirclePlus } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -32,17 +32,8 @@ const MobileHarvestEntry = () => {
     }, []);
 
     const loadBatches = async () => {
-        if (!window.__TAURI__) {
-            console.warn("Non-Tauri environment: Using mock batches.");
-            setBatches([
-                { batch_id: 1, batch_code: "B240210-001 (데모)", status: "growing" },
-                { batch_id: 2, batch_code: "B240210-002 (데모)", status: "growing" }
-            ]);
-            setIsLoading(false);
-            return;
-        }
         try {
-            const res = await invoke('get_production_batches');
+            const res = await callBridge('get_production_batches');
             // Filter only active batches if possible, or show all
             setBatches(res?.filter(b => b.status !== 'completed') || []);
         } catch (e) {
@@ -71,30 +62,29 @@ const MobileHarvestEntry = () => {
         if (!confirmed) return;
 
         try {
-            if (!window.__TAURI__) {
-                console.log("Mock saved harvest:", formData);
-                showAlert("저장 완료 (데모)", "브라우저 환경이므로 실제 DB에는 저장되지 않았지만 UI 동작은 완료되었습니다.");
-            } else {
-                await invoke('save_harvest_record', {
-                    record: {
-                        ...formData,
-                        quantity: parseFloat(formData.quantity),
-                        defective_quantity: parseFloat(formData.defective_quantity),
-                        loss_quantity: parseFloat(formData.loss_quantity),
-                        harvest_date: formData.harvest_date
-                    },
-                    complete_batch: false // Default to false for mobile quick entry
-                });
-            }
+            const res = await callBridge('save_harvest_record', {
+                record: {
+                    ...formData,
+                    quantity: parseFloat(formData.quantity),
+                    defective_quantity: parseFloat(formData.defective_quantity),
+                    loss_quantity: parseFloat(formData.loss_quantity),
+                    harvest_date: formData.harvest_date
+                },
+                complete_batch: false // Default to false for mobile quick entry
+            });
 
-            showAlert("저장 완료", "수확 기록이 성공적으로 저장되었습니다.");
-            setFormData(prev => ({
-                ...prev,
-                quantity: 0,
-                defective_quantity: 0,
-                loss_quantity: 0,
-                memo: ''
-            }));
+            if (res && res.success) {
+                showAlert("저장 완료", "수확 기록이 성공적으로 저장되었습니다.");
+                setFormData(prev => ({
+                    ...prev,
+                    quantity: 0,
+                    defective_quantity: 0,
+                    loss_quantity: 0,
+                    memo: ''
+                }));
+            } else {
+                throw new Error(res?.error || "Unknown error");
+            }
         } catch (e) {
             console.error(e);
             showAlert("저장 실패", "기록 중 오류가 발생했습니다: " + e);
