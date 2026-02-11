@@ -53,3 +53,9 @@ src-tauri/gen/
 
 # Temporary files
 *.txt
+
+# PostgreSQL Binaries & Libraries (Local setup)
+src-tauri/bin/
+src-tauri/lib/
+src-tauri/share/
+test_db/

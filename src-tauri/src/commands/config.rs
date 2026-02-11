@@ -855,7 +855,6 @@ pub async fn setup_system(
     db_name: String,
     gemini_key: Option<String>,
 ) -> MyceliumResult<String> {
-    check_admin(&app_handle)?;
     // 1. Validate inputs
     if db_user.trim().is_empty() {
         return Err(MyceliumError::Validation(
@@ -877,7 +876,28 @@ pub async fn setup_system(
         ));
     }
 
-    // 2. Try to connect to 'postgres' database to create the new database
+    // 2. Handle Embedded DB Start if port 5433 is chosen
+    if db_port == "5433" && (db_host == "localhost" || db_host == "127.0.0.1") {
+        println!("System: Setup requested on port 5433. Ensuring embedded engine is started...");
+        if let Err(e) = crate::embedded_db::init_db_if_needed(&app_handle).await {
+            eprintln!("System: Embedded DB Init failed: {}", e);
+        }
+        match crate::embedded_db::start_db(&app_handle).await {
+            Ok(child) => {
+                let state = app_handle.state::<crate::embedded_db::EmbeddedDbState>();
+                if let Ok(mut lock) = state.child_process.lock() {
+                    // Update or set the child process
+                    *lock = Some(child);
+                }
+                println!("System: Embedded engine ready for setup.");
+            }
+            Err(e) => {
+                println!("System: Embedded engine start skipped or failed (might be already running): {}", e);
+            }
+        }
+    }
+
+    // 3. Try to connect to 'postgres' database to create the new database
     let enc_user = urlencoding::encode(&db_user);
     let enc_pass = urlencoding::encode(&db_pass);
 

@@ -1,6 +1,7 @@
 ﻿#![allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub mod commands;
 pub mod db;
+pub mod embedded_db;
 pub mod error;
 
 use commands::config::{get_db_url, update_db_ip_in_config, SetupState};
@@ -17,8 +18,39 @@ pub mod bridge;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(crate::embedded_db::EmbeddedDbState {
+            child_process: std::sync::Mutex::new(None),
+        })
         .setup(|app| {
             let app_handle = app.app_handle().clone();
+
+            // --- Embedded PostgreSQL Start (Conditional) ---
+            let handle_for_db = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(url) = crate::commands::config::get_db_url(&handle_for_db) {
+                    if url.contains(":5433") {
+                        println!("System: Embedded DB Port (5433) detected. Starting engine...");
+                        if let Err(e) = crate::embedded_db::init_db_if_needed(&handle_for_db).await {
+                            eprintln!("System: Embedded DB Init Error: {}", e);
+                        }
+                        match crate::embedded_db::start_db(&handle_for_db).await {
+                            Ok(child) => {
+                                let state = handle_for_db.state::<crate::embedded_db::EmbeddedDbState>();
+                                if let Ok(mut lock) = state.child_process.lock() {
+                                    *lock = Some(child);
+                                }
+                                println!("System: Embedded PostgreSQL started successfully.");
+                            }
+                            Err(e) => {
+                                eprintln!("System: Embedded PostgreSQL start failed: {}", e);
+                            }
+                        }
+                    } else {
+                        println!("System: External DB Port detected. Skipping embedded engine start.");
+                    }
+                }
+            });
+            // --- End Embedded PostgreSQL ---
 
             // --- Start Mobile Server for Production ---
             let handle_for_server = app_handle.clone();
@@ -186,6 +218,7 @@ pub fn run() {
             }
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -194,6 +227,10 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Stop Embedded Database on Exit
+                let db_state = window.state::<crate::embedded_db::EmbeddedDbState>();
+                crate::embedded_db::stop_db(&db_state);
+
                 if IS_EXITING.load(Ordering::Relaxed) {
                     // Allow close
                 } else {

@@ -57,7 +57,13 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../dist"
+      "../dist",
+      "bin/*",
+      "share/*"
+    ],
+    "externalBin": [
+      "bin/postgres",
+      "bin/initdb"
     ],
     "windows": {
       "wix": {
