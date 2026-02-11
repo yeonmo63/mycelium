@@ -59,7 +59,8 @@
     "resources": [
       "../dist",
       "bin/*",
-      "share/*"
+      "share/*",
+      "lib/*"
     ],
     "externalBin": [
       "bin/postgres",
