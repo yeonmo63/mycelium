@@ -101,25 +101,38 @@ export const useSalesReception = (showAlert, showConfirm) => {
     }, []);
 
     // --- Draft Logic ---
+    const [tempDraft, setTempDraft] = useState(null);
+
     useEffect(() => {
         const draft = localStorage.getItem('mycelium_draft_reception');
         if (draft) {
             try {
                 const parsed = JSON.parse(draft);
                 if (parsed.salesRows?.length > 0 || parsed.customer) {
-                    setCustomer(parsed.customer);
-                    setOrderDate(parsed.orderDate || formatDate(new Date()));
-                    setSalesRows(parsed.salesRows || []);
-                    setDeletedSalesIds(parsed.deletedSalesIds || []);
-                    setInputState(prev => ({ ...prev, ...parsed.inputState }));
-                    setIsDirty(true);
-                    setIsDraftRestored(true);
+                    setTempDraft(parsed);
                 }
             } catch (e) {
                 console.error(e);
             }
         }
     }, []);
+
+    const handleRestoreDraft = () => {
+        if (!tempDraft) return;
+        setCustomer(tempDraft.customer);
+        setOrderDate(tempDraft.orderDate || formatDate(new Date()));
+        setSalesRows(tempDraft.salesRows || []);
+        setDeletedSalesIds(tempDraft.deletedSalesIds || []);
+        setInputState(prev => ({ ...prev, ...tempDraft.inputState }));
+        setIsDirty(true);
+        setIsDraftRestored(true);
+        setTempDraft(null);
+    };
+
+    const handleDiscardDraft = () => {
+        clearDraft();
+        setTempDraft(null);
+    };
 
     useEffect(() => {
         if (isDirty || salesRows.length > 0 || customer) {
@@ -549,6 +562,9 @@ export const useSalesReception = (showAlert, showConfirm) => {
         handlePrintStatement,
         handleCsvUpload,
         summary,
-        isDraftRestored
+        isDraftRestored,
+        tempDraft,
+        handleRestoreDraft,
+        handleDiscardDraft
     };
 };

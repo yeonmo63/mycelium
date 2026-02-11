@@ -22,7 +22,7 @@ const LogoutModal = ({ onClose }) => {
                         <button
                             onClick={() => {
                                 sessionStorage.clear();
-                                window.dispatchEvent(new CustomEvent('app-logout'));
+                                window.location.reload();
                             }}
                             className="flex-1 py-3.5 rounded-2xl bg-[#0f172a] text-white font-bold text-sm hover:bg-slate-800 shadow-xl shadow-slate-200 transition-all active:scale-95"
                         >

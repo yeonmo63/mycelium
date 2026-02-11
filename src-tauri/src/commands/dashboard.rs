@@ -260,7 +260,7 @@ pub async fn get_recent_sales(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sa
         "SELECT s.*, c.customer_name 
          FROM sales s
          LEFT JOIN customers c ON s.customer_id = c.customer_id
-         ORDER BY s.order_date DESC LIMIT 5",
+         ORDER BY s.order_date DESC, s.sales_id DESC LIMIT 5",
     )
     .fetch_all(&*state)
     .await?;

@@ -35,7 +35,10 @@ const SalesReception = () => {
         handlePrintStatement,
         handleCsvUpload,
         summary,
-        isDraftRestored
+        isDraftRestored,
+        tempDraft,
+        handleRestoreDraft,
+        handleDiscardDraft
     } = useSalesReception(showAlert, showConfirm);
 
     // Refs
@@ -137,6 +140,15 @@ const SalesReception = () => {
                     custSearchRef={custSearchRef} handleSearchCustomer={handleSearchCustomer}
                     customer={customer}
                 />
+                {isDraftRestored && (
+                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-rounded text-amber-500 text-sm">history_edu</span>
+                            <span className="text-[11px] font-bold text-amber-700">이전 작업 내용이 복구되었습니다.</span>
+                        </div>
+                        <button onClick={handleReset} className="text-[10px] font-black text-amber-600 hover:text-amber-800 underline">새로 작성하기</button>
+                    </div>
+                )}
             </div>
 
             <div className={`px-6 lg:px-8 min-[2000px]:px-12 mt-1 flex flex-col gap-3 overflow-hidden flex-1 pb-6 lg:pb-8 min-[2000px]:pb-12 ${!customer ? 'pointer-events-none opacity-50' : ''}`}>
@@ -171,6 +183,36 @@ const SalesReception = () => {
             />
 
             <AddressLayer isOpen={showAddrLayer} onClose={() => setShowAddrLayer(false)} />
+
+            {/* Draft Recovery Modal */}
+            {tempDraft && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mb-6">
+                            <span className="material-symbols-rounded text-3xl">restore_page</span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2">저장되지 않은 데이터가 있습니다</h3>
+                        <p className="text-sm text-slate-500 font-medium leading-relaxed mb-8">
+                            마지막 실시간 저장된 데이터를 복구하시겠습니까?<br />
+                            (고객: {tempDraft.customer?.customer_name || '미필터'}, 항목: {tempDraft.salesRows?.length || 0}건)
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleDiscardDraft}
+                                className="flex-1 h-12 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm hover:bg-slate-200 transition-all"
+                            >
+                                무시하고 새로 작성
+                            </button>
+                            <button
+                                onClick={handleRestoreDraft}
+                                className="flex-1 h-12 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-500 shadow-lg shadow-indigo-200 transition-all"
+                            >
+                                데이터 복구하기
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

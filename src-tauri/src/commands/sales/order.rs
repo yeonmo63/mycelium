@@ -1,7 +1,7 @@
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
-use chrono::Utc;
+use chrono::Local;
 use std::sync::atomic::Ordering;
 use tauri::{command, State};
 
@@ -24,7 +24,7 @@ pub async fn create_sale(
 
     let sale_id = format!("S-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
 
-    let parsed_date = parse_date_safe(&order_date).unwrap_or_else(|| Utc::now().date_naive());
+    let parsed_date = parse_date_safe(&order_date).unwrap_or_else(|| Local::now().date_naive());
 
     // Find product_id and tax_type
     let p_info: Option<(i32, Option<String>)> = sqlx::query_as(
@@ -309,7 +309,7 @@ pub async fn complete_shipment(
             chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
                 .map_err(|e| MyceliumError::Internal(e.to_string()))?,
         ),
-        _ => Some(chrono::Utc::now().date_naive()),
+        _ => Some(chrono::Local::now().date_naive()),
     };
 
     sqlx::query(

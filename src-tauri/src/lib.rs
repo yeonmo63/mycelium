@@ -55,9 +55,7 @@ pub fn run() {
                 let serve_dir = ServeDir::new(&resource_path)
                     .fallback(ServeFile::new(index_path));
 
-                let mut app = Router::new()
-                    .nest_service("/", serve_dir)
-                    .layer(CorsLayer::permissive());
+                let mut app = Router::new();
                 
                 if let Some(p) = pool {
                     println!("System: DB Pool detected. Attaching API Bridge.");
@@ -65,6 +63,9 @@ pub fn run() {
                 } else {
                     println!("System: DB Pool not found within timeout. API Bridge disabled.");
                 }
+
+                app = app.fallback_service(serve_dir)
+                    .layer(CorsLayer::permissive());
 
                 match tokio::net::TcpListener::bind(addr).await {
                     Ok(listener) => {

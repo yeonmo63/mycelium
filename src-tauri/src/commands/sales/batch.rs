@@ -1,7 +1,7 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
 use crate::DB_MODIFIED;
-use chrono::{NaiveDate, Utc};
+use chrono::{Local, NaiveDate};
 use std::sync::atomic::Ordering;
 use tauri::{command, State};
 
@@ -186,7 +186,7 @@ pub async fn save_special_sales_batch(
     let event_id = if let Some(eid) = &event.event_id {
         if eid.trim().is_empty() {
             // Logic for New Event
-            let now = Utc::now();
+            let now = Local::now();
             let date_str = now.format("%Y%m%d").to_string();
             let last_record: Option<(String,)> = sqlx::query_as(
                 "SELECT event_id FROM event WHERE event_id LIKE $1 ORDER BY event_id DESC LIMIT 1",
@@ -282,7 +282,7 @@ pub async fn save_special_sales_batch(
         }
     } else {
         // Same new logic if None
-        let now = Utc::now();
+        let now = Local::now();
         let date_str = now.format("%Y%m%d").to_string();
         let last_record: Option<(String,)> = sqlx::query_as(
             "SELECT event_id FROM event WHERE event_id LIKE $1 ORDER BY event_id DESC LIMIT 1",
@@ -427,7 +427,7 @@ pub async fn save_special_sales_batch(
     }
 
     // 3. Handle Upserts
-    let today_naive = Utc::now().date_naive();
+    let today_naive = Local::now().date_naive();
     let today_str = today_naive.format("%Y%m%d").to_string();
     let sl_prefix = format!("{}-", today_str);
     let sl_like = format!("{}%", sl_prefix);
@@ -453,7 +453,7 @@ pub async fn save_special_sales_batch(
 
     for sale in sales {
         let sale_date = NaiveDate::parse_from_str(&sale.order_date, "%Y-%m-%d")
-            .unwrap_or_else(|_| Utc::now().date_naive());
+            .unwrap_or_else(|_| Local::now().date_naive());
         let total = sale
             .total_amount
             .unwrap_or_else(|| sale.quantity * sale.unit_price);
@@ -795,7 +795,7 @@ pub async fn save_general_sales_batch(
             .await?;
     }
 
-    let today_naive = Utc::now().date_naive();
+    let today_naive = Local::now().date_naive();
     let today_str = today_naive.format("%Y%m%d").to_string();
     let sl_prefix = format!("{}-", today_str);
     let sl_like = format!("{}%", sl_prefix);

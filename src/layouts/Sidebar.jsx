@@ -68,7 +68,7 @@ const MenuGroup = ({ id, icon, label, children, activePrefix, expanded, onToggle
 
 const Sidebar = () => {
     const [expandedMenus, setExpandedMenus] = useState({});
-    const [companyName, setCompanyName] = useState('Mycelium');
+    const [companyName, setCompanyName] = useState('마이셀리움');
     const location = useLocation();
 
     useEffect(() => {

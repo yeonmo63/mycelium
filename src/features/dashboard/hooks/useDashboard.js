@@ -20,32 +20,27 @@ export const useDashboard = (showAlert) => {
 
     useEffect(() => {
         loadDashboardData();
-        const interval = setInterval(loadDashboardData, 300000); // 5 min
+        const interval = setInterval(loadDashboardData, 60000); // 1 min (frequent update for mobile/web)
         return () => clearInterval(interval);
     }, []);
 
     const loadDashboardData = async () => {
-        // 1. 핵심 통계 (우선순위 분리 로딩)
-        callBridge('get_dashboard_priority_stats').then(res => {
-            if (res) {
-                setStats(prev => ({ ...(prev || {}), ...(res || {}) }));
-            }
+        // 1. 핵심 통계 (병렬 로딩 후 통합 업데이트)
+        Promise.all([
+            callBridge('get_dashboard_priority_stats'),
+            callBridge('get_dashboard_secondary_stats')
+        ]).then(([pri, sec]) => {
+            setStats(prev => {
+                const combined = { ...(prev || {}) };
+                // Merge Priority Stats (only non-null)
+                if (pri) Object.keys(pri).forEach(k => { if (pri[k] !== null) combined[k] = pri[k]; });
+                // Merge Secondary Stats (only non-null)
+                if (sec) Object.keys(sec).forEach(k => { if (sec[k] !== null) combined[k] = sec[k]; });
+                return combined;
+            });
             setIsLoading(false);
-
-            // 2. 나머지 통계 (Background)
-            callBridge('get_dashboard_secondary_stats').then(secRes => {
-                if (!secRes) return;
-                setStats(prev => {
-                    const next = { ...(prev || {}) };
-                    Object.keys(secRes).forEach(key => {
-                        if (secRes[key] !== null) next[key] = secRes[key];
-                    });
-                    return next;
-                });
-            }).catch(e => console.error("Secondary stats error", e));
         }).catch(err => {
             console.error("Dashboard: Stats error", err);
-            setStats({});
             setIsLoading(false);
         });
 

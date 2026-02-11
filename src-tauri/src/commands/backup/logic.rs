@@ -205,9 +205,10 @@ pub async fn backup_database_internal(
     let count_harvest: (i64,) = sqlx::query_as(&count_query("harvest_records", None))
         .fetch_one(pool)
         .await?;
-    let count_custom_presets: (i64,) = sqlx::query_as(&count_query("custom_presets", None))
-        .fetch_one(pool)
-        .await?;
+    let count_custom_presets: (i64,) =
+        sqlx::query_as(&count_query("custom_presets", Some("created_at")))
+            .fetch_one(pool)
+            .await?;
     let count_sensors: (i64,) = sqlx::query_as(&count_query("sensors", None))
         .fetch_one(pool)
         .await?;
@@ -381,7 +382,7 @@ pub async fn backup_database_internal(
     backup_table!(
         "custom_presets",
         CustomPreset,
-        None,
+        Some("created_at"),
         "커스텀 프리셋 백업 중..."
     );
 

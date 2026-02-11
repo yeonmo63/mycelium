@@ -19,7 +19,7 @@ pub async fn upload_farming_photo(
     let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("png");
     let file_name = format!(
         "farm_{}_{}.{}",
-        chrono::Utc::now().timestamp(),
+        chrono::Local::now().timestamp(),
         uuid::Uuid::new_v4().to_string().split_at(8).0,
         extension
     );

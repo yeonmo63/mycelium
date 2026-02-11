@@ -8,7 +8,7 @@ const Login = ({ onLoginSuccess }) => {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
-    const [companyName, setCompanyName] = useState('Mycelium');
+    const [companyName, setCompanyName] = useState('마이셀리움');
     const [localIp, setLocalIp] = useState('');
     const [showQR, setShowQR] = useState(false);
 
@@ -152,28 +152,33 @@ const Login = ({ onLoginSuccess }) => {
 
                     {/* UI Close Button (Top Right) */}
                     <button
-                        onClick={() => emit('window_close_requested', {})}
+                        type="button"
+                        onClick={() => {
+                            console.log("Login: UI Close button clicked");
+                            emit('window_close_requested', {});
+                        }}
                         style={{
                             position: 'absolute',
                             top: '24px',
                             right: '24px',
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            background: '#fff',
+                            border: '1px solid #e2e8f0',
                             width: '40px',
                             height: '40px',
                             borderRadius: '12px',
-                            color: '#94a3b8',
+                            color: '#6366f1',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
                             transition: 'all 0.2s',
-                            zIndex: 20
+                            zIndex: 200,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
                         }}
-                        className="hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/20"
+                        className="hover:scale-110 active:scale-95"
                         title="프로그램 종료"
                     >
-                        <span className="material-symbols-rounded" style={{ fontSize: '20px' }}>close</span>
+                        <span className="material-symbols-rounded" style={{ fontSize: '20px', fontWeight: 'bold' }}>close</span>
                     </button>
 
                     <div style={{ textAlign: 'center', marginBottom: '48px', position: 'relative', zIndex: 10 }}>
@@ -189,7 +194,7 @@ const Login = ({ onLoginSuccess }) => {
                             boxShadow: '0 20px 40px rgba(99, 102, 241, 0.3)',
                             transform: 'rotate(-5deg)'
                         }}>
-                            <span className="material-symbols-rounded" style={{ fontSize: '48px', color: '#fff' }}>agriculture</span>
+                            <span className="material-symbols-rounded" style={{ fontSize: '48px', color: '#fff' }}>space_dashboard</span>
                         </div>
                         <h1 style={{
                             fontSize: '32px',
@@ -198,7 +203,7 @@ const Login = ({ onLoginSuccess }) => {
                             marginBottom: '12px',
                             letterSpacing: '-0.02em',
                         }}>{companyName}</h1>
-                        <p style={{ color: '#94a3b8', fontSize: '15px', fontWeight: '500' }}>Intelligence Center Login</p>
+                        <p style={{ color: '#94a3b8', fontSize: '15px', fontWeight: '500' }}>지능형 통합 관제 센터</p>
                     </div>
 
                     <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', zIndex: 10 }}>
@@ -329,7 +334,7 @@ const Login = ({ onLoginSuccess }) => {
                         color: '#64748b',
                         fontWeight: '500'
                     }}>
-                        <p style={{ opacity: 0.8 }}>Authorized Personnel Only</p>
+                        <p style={{ opacity: 0.8 }}>인가된 관계자 전용 시스템</p>
                         <p style={{ marginTop: '12px', opacity: 0.5, fontSize: '12px', letterSpacing: '0.05em' }}>© 2024 {companyName.toUpperCase()}.</p>
                     </div>
                 </div>

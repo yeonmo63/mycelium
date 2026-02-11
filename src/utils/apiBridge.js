@@ -32,7 +32,8 @@ export async function callBridge(commandName, args = {}) {
         const isPost = commandName.startsWith('save_');
 
         try {
-            const response = await fetch(route, {
+            const url = isPost ? route : `${route}?_t=${Date.now()}`;
+            const response = await fetch(url, {
                 method: isPost ? 'POST' : 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -43,6 +44,13 @@ export async function callBridge(commandName, args = {}) {
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.warn(`Bridge: Received non-json response from ${route}. ${contentType}`, text.substring(0, 50));
+                return null;
             }
 
             return await response.json();

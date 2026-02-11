@@ -1,6 +1,8 @@
 use crate::db::{DashboardStats, DbPool};
 use axum::{
     extract::State,
+    http::header,
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
@@ -20,35 +22,76 @@ pub fn create_mobile_router(pool: DbPool) -> Router {
         .with_state(pool)
 }
 
-async fn get_priority_stats(State(pool): State<DbPool>) -> Json<Value> {
-    // We create a dummy AppHandle or just call the DB logic directly
-    // Since we can't easily get AppHandle here, let's call the DB logic
+async fn get_priority_stats(State(pool): State<DbPool>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
+    println!("Mobile API: Fetching Priority Stats for {}", today);
+
+    // Using IDENTICAL query as PC (CTE-based for reliability)
     let sql = r#"
+        WITH sales_stats AS (
+            SELECT 
+                SUM(total_amount) FILTER (WHERE order_date = $1 AND status != '취소') as today_sales,
+                COUNT(*) FILTER (WHERE order_date = $1 AND status != '취소') as today_orders,
+                COUNT(*) FILTER (WHERE status NOT IN ('배송완료', '취소')) as pending
+            FROM sales
+        ),
+        customer_stats AS (
+            SELECT 
+                COUNT(*) FILTER (WHERE join_date = $1) as new_today,
+                COUNT(*) as total_all,
+                COUNT(*) FILTER (WHERE status = '정상') as normal,
+                COUNT(*) FILTER (WHERE status = '말소') as dormant
+            FROM customers
+        ),
+        schedule_count AS (
+            SELECT COUNT(*) as today_schedules 
+            FROM schedules 
+            WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp
+        )
         SELECT 
-            (SELECT CAST(COALESCE(SUM(total_amount), 0) AS BIGINT) FROM sales WHERE order_date = $1 AND status != '취소') as total_sales_amount,
-            (SELECT COUNT(*) FROM sales WHERE order_date = $1 AND status != '취소') as total_orders,
-            (SELECT COUNT(*) FROM customers WHERE join_date = $1) as total_customers,
-            (SELECT COUNT(*) FROM customers) as total_customers_all_time,
-            (SELECT COUNT(*) FROM customers WHERE status = '정상') as normal_customers_count,
-            (SELECT COUNT(*) FROM customers WHERE status = '말소') as dormant_customers_count,
-            (SELECT COUNT(*) FROM sales WHERE status NOT IN ('배송완료', '취소')) as pending_orders,
-            (SELECT COUNT(*) FROM schedules WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp) as today_schedule_count,
+            CAST(COALESCE(ss.today_sales, 0) AS BIGINT) as total_sales_amount,
+            CAST(COALESCE(ss.today_orders, 0) AS BIGINT) as total_orders,
+            CAST(COALESCE(cs.new_today, 0) AS BIGINT) as total_customers,
+            CAST(COALESCE(cs.total_all, 0) AS BIGINT) as total_customers_all_time,
+            CAST(COALESCE(cs.normal, 0) AS BIGINT) as normal_customers_count,
+            CAST(COALESCE(cs.dormant, 0) AS BIGINT) as dormant_customers_count,
+            CAST(COALESCE(ss.pending, 0) AS BIGINT) as pending_orders,
+            CAST(COALESCE(sc.today_schedules, 0) AS BIGINT) as today_schedule_count,
             NULL::bigint as experience_reservation_count,
             NULL::bigint as low_stock_count,
             NULL::bigint as pending_consultation_count
+        FROM sales_stats ss, customer_stats cs, schedule_count sc
     "#;
 
     let res = sqlx::query_as::<_, DashboardStats>(sql)
         .bind(today)
         .fetch_one(&pool)
-        .await
-        .unwrap_or_default();
+        .await;
 
-    Json(json!(res))
+    match res {
+        Ok(stats) => {
+            println!(
+                "Mobile API: Priority Stats -> Sales: {:?}, Orders: {:?}",
+                stats.total_sales_amount, stats.total_orders
+            );
+            (
+                [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+                Json(json!(stats)),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            eprintln!("Mobile API: Priority Stats ERROR: {:?}", e);
+            (
+                [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+                Json(json!(DashboardStats::default())),
+            )
+                .into_response()
+        }
+    }
 }
 
-async fn get_secondary_stats(State(pool): State<DbPool>) -> Json<Value> {
+async fn get_secondary_stats(State(pool): State<DbPool>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -71,21 +114,26 @@ async fn get_secondary_stats(State(pool): State<DbPool>) -> Json<Value> {
         .await
         .unwrap_or_default();
 
-    Json(json!(res))
+    (
+        [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+        Json(json!(res)),
+    )
 }
 
-async fn get_weekly_sales(State(pool): State<DbPool>) -> Json<Value> {
+async fn get_weekly_sales(State(pool): State<DbPool>) -> impl IntoResponse {
+    let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
             TO_CHAR(d, 'MM-DD') as date,
             CAST(COALESCE(SUM(s.total_amount), 0) AS BIGINT) as total
-        FROM generate_series(CURRENT_DATE - interval '6 days', CURRENT_DATE, '1 day') d
+        FROM generate_series($1 - interval '6 days', $1, '1 day') d
         LEFT JOIN sales s ON s.order_date = d::date AND s.status != '취소'
         GROUP BY d
         ORDER BY d
     "#;
 
     let rows: Vec<(String, i64)> = sqlx::query_as(sql)
+        .bind(today)
         .fetch_all(&pool)
         .await
         .unwrap_or_default();
@@ -94,11 +142,14 @@ async fn get_weekly_sales(State(pool): State<DbPool>) -> Json<Value> {
         .into_iter()
         .map(|(date, total)| json!({ "date": date, "total": total }))
         .collect();
-    Json(json!(res))
+
+    (
+        [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+        Json(json!(res)),
+    )
 }
 
-async fn get_top_products(State(pool): State<DbPool>) -> Json<Value> {
-    // Simplified version of get_top3_products_by_qty
+async fn get_top_products(State(pool): State<DbPool>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let query = r#"
         SELECT 
@@ -124,10 +175,14 @@ async fn get_top_products(State(pool): State<DbPool>) -> Json<Value> {
         .into_iter()
         .map(|(name, qty)| json!({ "product_name": name, "total_quantity": qty }))
         .collect();
-    Json(json!(res))
+
+    (
+        [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+        Json(json!(res)),
+    )
 }
 
-async fn get_top_profitable(State(pool): State<DbPool>) -> Json<Value> {
+async fn get_top_profitable(State(pool): State<DbPool>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -153,7 +208,11 @@ async fn get_top_profitable(State(pool): State<DbPool>) -> Json<Value> {
         .into_iter()
         .map(|(name, profit)| json!({ "product_name": name, "net_profit": profit }))
         .collect();
-    Json(json!(res))
+
+    (
+        [(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+        Json(json!(res)),
+    )
 }
 
 async fn get_spaces(State(pool): State<DbPool>) -> Json<Value> {
@@ -191,7 +250,6 @@ async fn get_batches(State(pool): State<DbPool>) -> Json<Value> {
 }
 
 async fn save_farming_log(State(pool): State<DbPool>, Json(payload): Json<Value>) -> Json<Value> {
-    // Basic implementation of saving farming log via SQL
     let log = payload.get("log").unwrap_or(&payload);
     let res = sqlx::query(
         "INSERT INTO farming_logs (batch_id, space_id, log_date, worker_name, work_type, work_content, env_data) 

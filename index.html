@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" style="background-color: #020617;">
+<html lang="ko">
 
 <head>
   <meta charset="UTF-8" />
@@ -9,17 +9,36 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Mycelium</title>
+  <title>Mycelium Smart Farm</title>
+
+  <!-- 1. Immediate Environment Detection -->
+  <script>
+    (function () {
+      var isTauri = !!window.__TAURI__;
+      var isMobilePort = window.location.port === '8989';
+      var isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      var isSmallScreen = window.innerWidth < 1024;
+      var isMobile = !isTauri && (isMobilePort || isMobileUA || isSmallScreen);
+
+      // Set background color immediately to avoid flashy transitions
+      var bgColor = isMobile ? "#f8fafc" : "#020617";
+      document.documentElement.style.backgroundColor = bgColor;
+      window.__MYCELIUM_MOBILE__ = isMobile;
+    })();
+  </script>
+
+  <!-- 2. Essential Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap"
     rel="stylesheet">
+  <link rel="stylesheet" crossorigin
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
   <style>
     :root {
       --primary: #6366f1;
-      --primary-glow: rgba(99, 102, 241, 0.5);
-      --bg: #020617;
     }
 
     body,
@@ -28,9 +47,8 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background-color: var(--bg);
       overflow: hidden;
-      font-family: 'Inter', 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+      font-family: 'Inter', 'Noto Sans KR', sans-serif;
     }
 
     .app-loading {
@@ -40,277 +58,92 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background-color: var(--bg);
       z-index: 9999;
-      color: white;
-    }
-
-    .app-loading-bg {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at center, #1e1b4b 0%, #020617 100%);
-      opacity: 0.6;
+      transition: opacity 0.4s ease-out;
     }
 
     .logo-area {
       position: relative;
-      margin-bottom: 3rem;
+      margin-bottom: 2rem;
     }
 
     .logo-box {
-      position: relative;
-      z-index: 2;
-      width: 96px;
-      height: 96px;
+      width: 80px;
+      height: 80px;
       background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-      border-radius: 28px;
+      border-radius: 22px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 40px var(--primary-glow), inset 0 0 20px rgba(255, 255, 255, 0.2);
-      animation: logo-float 4s ease-in-out infinite;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
+      animation: logo-float 3s ease-in-out infinite;
     }
 
     @keyframes logo-float {
 
       0%,
       100% {
-        transform: translateY(0) rotate(0deg);
+        transform: translateY(0);
       }
 
       50% {
-        transform: translateY(-10px) rotate(5deg);
-      }
-    }
-
-    .ring-static {
-      position: absolute;
-      inset: -15px;
-      border: 3px solid rgba(99, 102, 241, 0.1);
-      border-radius: 50%;
-    }
-
-    .ring-spin {
-      position: absolute;
-      inset: -15px;
-      border: 3px solid transparent;
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-    }
-
-    .ring-reverse {
-      position: absolute;
-      inset: -25px;
-      border: 2px solid transparent;
-      border-bottom-color: #a855f7;
-      border-radius: 50%;
-      opacity: 0.3;
-      animation: spin 3s linear infinite reverse;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
+        transform: translateY(-10px);
       }
     }
 
     .title {
-      font-size: 2.5rem;
+      font-size: 2rem;
       font-weight: 900;
-      margin-bottom: 1.5rem;
-      letter-spacing: -0.05em;
       background: linear-gradient(to right, #fff, #94a3b8);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      position: relative;
-      z-index: 2;
-    }
-
-    .loading-badge {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 8px 20px;
-      border-radius: 100px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(8px);
-      position: relative;
-      z-index: 2;
-    }
-
-    .dot-container {
-      position: relative;
-      width: 10px;
-      height: 10px;
-    }
-
-    .dot-ping {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      background-color: var(--primary);
-      border-radius: 50%;
-      animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
-    }
-
-    .dot-solid {
-      position: relative;
-      display: block;
-      width: 10px;
-      height: 10px;
-      background-color: var(--primary);
-      border-radius: 50%;
-    }
-
-    @keyframes ping {
-
-      75%,
-      100% {
-        transform: scale(3.5);
-        opacity: 0;
-      }
+      margin-bottom: 1rem;
     }
 
     .loading-text {
-      font-size: 0.875rem;
-      font-weight: 500;
+      font-size: 0.8rem;
       color: #94a3b8;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: 0.5;
-      }
-    }
-
-    .version-text {
-      position: absolute;
-      bottom: 2rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #475569;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    /* Blob backgrounds */
-    .blob {
-      position: absolute;
-      width: 400px;
-      height: 400px;
-      background: var(--primary-glow);
-      filter: blur(100px);
-      border-radius: 50%;
-      z-index: 1;
-      opacity: 0.2;
-    }
-
-    .blob-1 {
-      top: -100px;
-      left: -100px;
-      animation: move-1 10s infinite alternate;
-    }
-
-    .blob-2 {
-      bottom: -100px;
-      right: -100px;
-      background: rgba(168, 85, 247, 0.3);
-      animation: move-2 12s infinite alternate;
-    }
-
-    @keyframes move-1 {
-      from {
-        transform: translate(0, 0);
-      }
-
-      to {
-        transform: translate(100px, 100px);
-      }
-    }
-
-    @keyframes move-2 {
-      from {
-        transform: translate(0, 0);
-      }
-
-      to {
-        transform: translate(-100px, -100px);
-      }
+      opacity: 0.8;
     }
   </style>
-  <link rel="stylesheet" crossorigin
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
   <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 
 <body>
-  <script>
-    (function () {
-      var isTauri = !!window.__TAURI__;
-      if (!isTauri) {
-        var isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        var isRoot = window.location.pathname === '/' || window.location.pathname === '' || window.location.pathname === '/index.html';
-        var isMobilePath = window.location.pathname.toLowerCase().startsWith('/mobile-');
-
-        // If it's a mobile device or we are at root, redirect to mobile dashboard
-        if (isRoot || (isMobileUA && !isMobilePath)) {
-          window.location.replace('/mobile-dashboard');
-        }
-
-        if (isMobilePath) {
-          document.write('<style>.app-loading { display: none !important; }</style>');
-        }
-
-        setTimeout(function () {
-          var loader = document.querySelector('.app-loading');
-          if (loader) {
-            loader.style.opacity = '0';
-            setTimeout(function () { loader.style.display = 'none'; }, 400);
-          }
-        }, 1500);
-      }
-    })();
-  </script>
-
-  <div class="app-loading">
-    <div class="app-loading-bg"></div>
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
+  <div class="app-loading" id="app-spinner">
     <div class="logo-area">
       <div class="logo-box">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="white">
           <path
             d="M21 5c-1.1 0-2 .9-2 2v6H5V7c0-1.1-.9-2-2-2s-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-2 12H5v-4h14v4zm-7-6c-2.21 0-4-1.79-4-4 0-1.02.38-1.95 1-2.67V2h2v2c2.21 0 4 1.79 4 4s-1.79 4-4 4z" />
         </svg>
       </div>
-      <div class="ring-static"></div>
-      <div class="ring-spin"></div>
-      <div class="ring-reverse"></div>
     </div>
     <h2 class="title">Mycelium</h2>
-    <div class="loading-badge">
-      <div class="dot-container">
-        <span class="dot-ping"></span>
-        <span class="dot-solid"></span>
-      </div>
-      <span class="loading-text">시스템 리소스를 최적화하고 있습니다...</span>
-    </div>
-    <p class="version-text">VERSION 1.0.0 • ENTERPRISE EDITION</p>
+    <p class="loading-text">지능형 농업 관제 시스템 초기화 중...</p>
   </div>
 
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+
+  <script>
+    // Adjust spinner visual state immediately
+    (function () {
+      var s = document.getElementById('app-spinner');
+      if (window.__MYCELIUM_MOBILE__) {
+        if (s) {
+          s.style.backgroundColor = "#f8fafc";
+          var t = s.querySelector('.title');
+          if (t) {
+            t.style.background = "linear-gradient(to right, #1e293b, #64748b)";
+            t.style.webkitBackgroundClip = "text";
+          }
+        }
+      } else {
+        if (s) s.style.backgroundColor = "#020617";
+      }
+    })();
+  </script>
 </body>
 
 </html>

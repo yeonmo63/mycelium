@@ -1,5 +1,6 @@
 use crate::db::{DbPool, HarvestRecord};
 use crate::error::MyceliumResult;
+use chrono::Local;
 use sqlx::{query, query_as};
 use tauri::{command, State};
 
@@ -249,7 +250,7 @@ pub async fn save_harvest_batch(
         .bind(&product.1)
         .bind(qty_f64 as i32)
         .bind(format!("수확 입고(일괄) [정품]: {}", b_code))
-        .bind(format!("HARVEST_{}_{}", b_code, chrono::Utc::now().timestamp()))
+        .bind(format!("HARVEST_{}_{}", b_code, Local::now().timestamp()))
         .execute(&mut *tx).await?;
 
         if def_qty_f64 > 0.0 {

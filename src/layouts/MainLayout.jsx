@@ -1,35 +1,24 @@
-import React, { useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Header from './Header';
 
-const MainLayout = () => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const isMobilePort = window.location.port === '8989';
-    const isMobileRoute = location.pathname.toLowerCase().startsWith('/mobile-') ||
-        isMobileUA || isMobilePort;
-
-    useEffect(() => {
-        if (!isLoggedIn && !isMobileRoute) {
-            // App.jsx handles the login screen rendering
-        }
-    }, [isLoggedIn, navigate, isMobileRoute]);
-
-    if (isMobileRoute) {
+const MainLayout = ({ isMobile }) => {
+    // If mobile is prop-driven from App.jsx, use it directly for total consistency
+    if (isMobile) {
         return (
-            <div className="min-h-screen w-screen bg-slate-50 overflow-x-hidden">
-                <Outlet />
+            <div className="fixed inset-0 bg-slate-50 flex flex-col overflow-hidden">
+                <main className="flex-1 w-full relative overflow-y-auto">
+                    <Outlet />
+                </main>
             </div>
         );
     }
 
+    // Default Desktop Layout
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+        <div className="flex h-screen w-screen overflow-hidden bg-slate-950">
             <Sidebar />
-            <main className="flex-1 relative overflow-hidden flex flex-col">
+            <main className="flex-1 relative overflow-hidden flex flex-col bg-slate-50">
                 <div className="flex-1 relative min-h-0 h-full">
                     <Outlet />
                 </div>

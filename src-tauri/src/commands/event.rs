@@ -2,7 +2,7 @@
 use crate::db::{DbPool, Event};
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
-use chrono::{NaiveDate, Utc};
+use chrono::{Local, NaiveDate};
 use std::sync::atomic::Ordering;
 use tauri::{command, State};
 
@@ -29,7 +29,7 @@ pub async fn create_event(
     memo: Option<String>,
 ) -> MyceliumResult<String> {
     // Generate ID: YYYYMMDD-1XXXX (Global Sequence)
-    let now = Utc::now();
+    let now = Local::now();
     let date_str = now.format("%Y%m%d").to_string(); // YYYYMMDD
 
     // Find the last ID for THIS date to reset daily (using 1XXXX range for events)
