@@ -139,26 +139,44 @@ pub fn run() {
                 match get_db_url(&app_handle) {
                     Ok(url) => {
                         println!("System: DB URL verified. Initializing connection pool...");
-                        match crate::db::init_pool(&url).await {
-                            Ok(pool) => {
-                                println!("System: DB Pool successful. Starting schema sync...");
-                                app_handle.manage(pool.clone());
-
-                                // Run migrations in background - don't block app startup
-                                let pool_clone = pool.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    if let Err(e) = crate::db::init_database(&pool_clone).await {
-                                        eprintln!("Warning: DB migration failed (non-fatal): {:?}", e);
+                        
+                        // Retry pool initialization to handle slow-starting embedded DB
+                        let mut pool_result = None;
+                        for i in 1..=20 {
+                            match crate::db::init_pool(&url).await {
+                                Ok(pool) => {
+                                    pool_result = Some(pool);
+                                    break;
+                                }
+                                Err(e) => {
+                                    if i == 20 {
+                                        eprintln!("System: Final attempt to initialize DB Pool failed: {:?}", e);
+                                    } else {
+                                        println!("System: DB Pool init attempt {} failed, retrying in 1s...", i);
+                                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                                     }
-                                });
-                                
-                                // Always mark as Configured since pool is valid
-                                println!("System: Database synchronization dispatched.");
-                                final_status = crate::commands::config::SetupStatus::Configured;
+                                }
                             }
-                            Err(e) => {
-                                eprintln!("System: Failed to initialize DB Pool (check credentials/network): {:?}", e);
-                            }
+                        }
+
+                        if let Some(pool) = pool_result {
+                            println!("System: DB Pool successful. Starting schema sync...");
+                            app_handle.manage(pool.clone());
+
+                            // Run migrations in background - don't block app startup
+                            let pool_clone = pool.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = crate::db::init_database(&pool_clone).await {
+                                    eprintln!("Warning: DB migration failed (non-fatal): {:?}", e);
+                                }
+                            });
+                            
+                            // Always mark as Configured since pool is valid
+                            println!("System: Database synchronization dispatched.");
+                            final_status = crate::commands::config::SetupStatus::Configured;
+                        } else {
+                            eprintln!("System: Failed to initialize DB Pool after retries.");
+                            final_status = crate::commands::config::SetupStatus::NotConfigured;
                         }
                     }
                     Err(e) => {

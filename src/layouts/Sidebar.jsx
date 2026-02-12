@@ -174,10 +174,9 @@ const Sidebar = () => {
 
                     <MenuItem to="/schedule" icon="calendar_month" label="일정 관리" />
 
-                    <MenuItem to="/manual" icon="help" label="사용자 메뉴얼" />
-
                     {sessionStorage.getItem('userRole') === 'admin' && (
                         <MenuGroup id="settings" icon="settings" label="설정 및 관리" expanded={isExpanded('settings')} onToggle={toggleMenu} currentPath={location.pathname}>
+                            <SubMenuItem to="/manual" icon="help" label="사용자 메뉴얼" />
                             <SubMenuItem to="/settings/user-list" icon="manage_accounts" label="사용자 관리" />
                             <SubMenuItem to="/settings/company-info" icon="business" label="업체 정보 관리" />
                             <SubMenuItem to="/settings/product-list" icon="inventory_2" label="상품/자재 마스터" />

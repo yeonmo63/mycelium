@@ -177,6 +177,15 @@ function AppContent() {
         });
 
         let status = await invoke('check_setup_status');
+
+        // Wait if system is still initializing (e.g. starting embedded DB)
+        let retryCount = 0;
+        while (status === 'Initializing' && retryCount < 60) {
+          await new Promise(r => setTimeout(r, 500));
+          status = await invoke('check_setup_status');
+          retryCount++;
+        }
+
         setIsConfigured(status === 'Configured');
         const spl = document.getElementById('app-spinner');
         if (spl) { spl.style.opacity = '0'; setTimeout(() => spl.remove(), 400); }

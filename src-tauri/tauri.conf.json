@@ -58,13 +58,7 @@
     ],
     "resources": [
       "../dist",
-      "bin/*",
-      "share/*",
-      "lib/*"
-    ],
-    "externalBin": [
-      "bin/postgres",
-      "bin/initdb"
+      "resources/**/*"
     ],
     "windows": {
       "wix": {

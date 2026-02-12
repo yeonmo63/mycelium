@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-use crate::db::{init_pool, CompanyInfo, User};
+use crate::db::{CompanyInfo, User};
 
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
@@ -12,6 +12,7 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use regex::Regex;
 use serde_json::{json, Value};
+use sqlx::Connection;
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::atomic::Ordering;
@@ -901,26 +902,46 @@ pub async fn setup_system(
     let enc_user = urlencoding::encode(&db_user);
     let enc_pass = urlencoding::encode(&db_pass);
 
-    let maintenance_url = format!(
-        "postgres://{}:{}@{}:{}/postgres",
-        enc_user, enc_pass, db_host, db_port
-    );
+    let maintenance_url = if db_port == "5433" && (db_host == "localhost" || db_host == "127.0.0.1")
+    {
+        // For local embedded DB, use a simplified trust connection string
+        format!("postgres://postgres@127.0.0.1:5433/postgres?sslmode=disable")
+    } else {
+        format!(
+            "postgres://{}:{}@{}:{}/postgres?sslmode=disable",
+            enc_user, enc_pass, db_host, db_port
+        )
+    };
 
     // We use a temporary connection just to create the DB
-    use sqlx::Connection;
+    use sqlx::postgres::{PgConnectOptions, PgSslMode};
     use std::str::FromStr;
-    let opts = sqlx::postgres::PgConnectOptions::from_str(&maintenance_url).map_err(
-        |e: sqlx::Error| MyceliumError::Internal(format!("Invalid connection URL: {}", e)),
-    )?;
-
-    let mut conn = sqlx::postgres::PgConnection::connect_with(&opts)
-        .await
+    let opts = PgConnectOptions::from_str(&maintenance_url)
         .map_err(|e: sqlx::Error| {
-            MyceliumError::Internal(format!(
-                "Failed to connect to PostgreSQL. Check credentials. Error: {}",
-                e
-            ))
-        })?;
+            MyceliumError::Internal(format!("Invalid connection URL: {}", e))
+        })?
+        .ssl_mode(PgSslMode::Disable);
+
+    let mut conn = None;
+    for i in 1..=10 {
+        match sqlx::postgres::PgConnection::connect_with(&opts).await {
+            Ok(c) => {
+                conn = Some(c);
+                break;
+            }
+            Err(e) => {
+                if i == 10 {
+                    return Err(MyceliumError::Internal(format!(
+                        "Failed to connect after 10 attempts. Error: {}",
+                        e
+                    )));
+                }
+                println!("System: Connection attempt {} failed, retrying in 2s...", i);
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+        }
+    }
+    let mut conn = conn.unwrap();
 
     // 3. Create Database if not exists
     let create_query = format!("CREATE DATABASE \"{}\"", db_name);
@@ -942,7 +963,7 @@ pub async fn setup_system(
 
     // 4. Create Configuration File (Persistent in AppData)
     let final_db_url = format!(
-        "postgres://{}:{}@{}:{}/{}",
+        "postgres://{}:{}@{}:{}/{}?sslmode=disable",
         enc_user, enc_pass, db_host, db_port, db_name
     );
 
@@ -980,7 +1001,11 @@ pub async fn setup_system(
         .map_err(|e| MyceliumError::Internal(format!("Failed to write config file: {}", e)))?;
 
     // 5. Initialize Schema
-    let pool = init_pool(&final_db_url).await.map_err(|e| {
+    let opts = PgConnectOptions::from_str(&final_db_url)
+        .map_err(|e: sqlx::Error| MyceliumError::Internal(format!("Invalid final URL: {}", e)))?
+        .ssl_mode(PgSslMode::Disable);
+
+    let pool = crate::db::init_pool_with_options(opts).await.map_err(|e| {
         MyceliumError::Internal(format!("Failed to connect to new database: {}", e))
     })?;
     crate::db::init_database(&pool)

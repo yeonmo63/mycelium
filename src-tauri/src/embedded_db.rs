@@ -30,39 +30,47 @@ fn normalize_path(path: PathBuf) -> String {
 /// Find the bin directory containing postgres.exe and initdb.exe
 fn find_bin_dir(app: &AppHandle) -> PathBuf {
     // 1. Try absolute project path (Dev mode)
-    let project_bin = PathBuf::from(r"D:\workspace\rust\mycelium\src-tauri\bin");
+    let project_bin = PathBuf::from(r"D:\workspace\rust\mycelium\src-tauri\resources\bin");
     if project_bin.exists() && project_bin.join("postgres.exe").exists() {
         return project_bin;
     }
 
     // 2. Try resource directory (Production)
     if let Ok(res_dir) = app.path().resource_dir() {
-        let p = res_dir.join("bin");
+        let p = res_dir.join("resources").join("bin");
         if p.exists() && p.join("postgres.exe").exists() {
             return p;
         }
     }
 
-    app.path().resource_dir().unwrap_or_default().join("bin")
+    app.path()
+        .resource_dir()
+        .unwrap_or_default()
+        .join("resources")
+        .join("bin")
 }
 
 /// Find the share directory containing postgres.bki, etc.
 fn find_share_dir(app: &AppHandle) -> PathBuf {
     // 1. Try absolute project path (Dev mode)
-    let project_share = PathBuf::from(r"D:\workspace\rust\mycelium\src-tauri\share");
+    let project_share = PathBuf::from(r"D:\workspace\rust\mycelium\src-tauri\resources\share");
     if project_share.exists() {
         return project_share;
     }
 
     // 2. Try resource directory (Production)
     if let Ok(res_dir) = app.path().resource_dir() {
-        let p = res_dir.join("share");
+        let p = res_dir.join("resources").join("share");
         if p.exists() {
             return p;
         }
     }
 
-    app.path().resource_dir().unwrap_or_default().join("share")
+    app.path()
+        .resource_dir()
+        .unwrap_or_default()
+        .join("resources")
+        .join("share")
 }
 
 /// Initialize DB if the data directory doesn't exist or is incomplete
@@ -106,6 +114,7 @@ pub async fn init_db_if_needed(app: &AppHandle) -> Result<(), String> {
                 "--no-locale",
                 "-U",
                 "postgres",
+                "--auth=trust",
                 "-L", // Library (share) directory explicitly
                 &normalize_path(share_dir),
             ])
@@ -160,7 +169,20 @@ pub async fn start_db(app: &AppHandle) -> Result<CommandChild, String> {
     let sidecar = app
         .shell()
         .command(normalize_path(postgres_exe))
-        .args(["-D", &data_path_str, "-p", "5433", "-h", "127.0.0.1"])
+        .args([
+            "-D",
+            &data_path_str,
+            "-p",
+            "5433",
+            "-h",
+            "127.0.0.1",
+            "-c",
+            "ssl=off",
+            "-c",
+            "max_connections=100",
+            "-c",
+            "shared_buffers=128MB",
+        ])
         .current_dir(&bin_dir_str)
         .env("PGDATA", &data_path_str) // Add PGDATA explicitly
         .env(
@@ -205,7 +227,8 @@ pub async fn start_db(app: &AppHandle) -> Result<CommandChild, String> {
     while attempts < 30 {
         // Support slow disks/init
         if TcpStream::connect_timeout(&target_addr, Duration::from_millis(500)).is_ok() {
-            println!("EmbeddedDB: Database is ready for connections.");
+            println!("EmbeddedDB: Port 5433 is open. Waiting 1s for engine stability...");
+            tokio::time::sleep(Duration::from_secs(1)).await;
             return Ok(child);
         }
 

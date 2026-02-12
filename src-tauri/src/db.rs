@@ -1,21 +1,30 @@
 use bcrypt;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 use sqlx::{FromRow, Pool, Postgres};
+use std::str::FromStr;
 
-use crate::error::MyceliumResult;
+use crate::error::{MyceliumError, MyceliumResult};
 
 pub type DbPool = Pool<Postgres>;
 
-pub async fn init_pool(database_url: &str) -> MyceliumResult<DbPool> {
+pub async fn init_pool_with_options(opts: PgConnectOptions) -> MyceliumResult<DbPool> {
     Ok(PgPoolOptions::new()
-        .max_connections(20) // Optimized for 5+ clients (20 * 5 = 100 max)
+        .max_connections(20)
         .acquire_timeout(std::time::Duration::from_secs(30))
-        .idle_timeout(std::time::Duration::from_secs(120)) // Keep idle conns longer
-        .max_lifetime(std::time::Duration::from_secs(300)) // Rotate connections every 5m
-        .connect(database_url)
+        .idle_timeout(std::time::Duration::from_secs(120))
+        .max_lifetime(std::time::Duration::from_secs(300))
+        .connect_with(opts)
         .await?)
+}
+
+pub async fn init_pool(database_url: &str) -> MyceliumResult<DbPool> {
+    let opts = PgConnectOptions::from_str(database_url)
+        .map_err(|e| MyceliumError::Internal(format!("Invalid DB URL: {}", e)))?
+        .ssl_mode(PgSslMode::Disable);
+
+    init_pool_with_options(opts).await
 }
 
 pub async fn init_database(pool: &DbPool) -> MyceliumResult<()> {
