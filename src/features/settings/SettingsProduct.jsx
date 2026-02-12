@@ -25,7 +25,7 @@ import {
     Database,
     Zap
 } from 'lucide-react';
-import LabelPrinter from '../production/components/LabelPrinter';
+import LabelPrinter, { printLabel } from '../production/components/LabelPrinter';
 
 const SettingsProduct = () => {
     const navigate = useNavigate();
@@ -367,19 +367,13 @@ const SettingsProduct = () => {
     };
 
     const handlePrint = (product) => {
-        setPrintData({
+        printLabel('product', {
             title: product.product_name,
             code: product.product_code || `PRD-${product.product_id}`,
             spec: product.specification,
             date: `단가: ₩${product.unit_price?.toLocaleString() || 0}`,
-            qrValue: `[${product.product_name}] ${product.specification || '규격미정'} | ₩${product.unit_price?.toLocaleString() || 0} | ${product.product_code || 'ID:' + product.product_id}`,
-            isPrinting: true
+            qrValue: `[${product.product_name}] ${product.specification || '규격미정'} | ₩${product.unit_price?.toLocaleString() || 0} | ${product.product_code || 'ID:' + product.product_id}`
         });
-
-        setTimeout(() => {
-            window.print();
-            setPrintData(prev => ({ ...prev, isPrinting: false }));
-        }, 300);
     };
 
     const loadPriceHistory = async (productId) => {

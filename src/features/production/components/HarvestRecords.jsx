@@ -7,7 +7,7 @@ import {
     Tag, Scale, Info, QrCode, Zap, Speaker, CheckCircle2
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import LabelPrinter from './LabelPrinter';
+import LabelPrinter, { printLabel } from './LabelPrinter';
 
 const HarvestRecords = () => {
     const [records, setRecords] = useState([]);
@@ -149,26 +149,19 @@ const HarvestRecords = () => {
     };
 
     const handlePrint = (record) => {
-        // Use String conversion for safer comparison
         const batch = batches.find(b => String(b.batch_id) === String(record.batch_id));
         const product = products.find(p => String(p.product_id) === String(batch?.product_id));
 
         const displayCode = record.traceability_code ||
             (batch?.batch_code ? `B-${batch.batch_code}` : `H-${record.harvest_id}`);
 
-        setPrintData({
+        printLabel('harvest', {
             title: product?.product_name || '수확물(상품미정)',
             code: displayCode,
             spec: `${record.grade}등급 / ${record.quantity}${record.unit}`,
             date: `수확: ${dayjs(record.harvest_date).format('YY/MM/DD')}`,
-            qrValue: `[${product?.product_name || '수확물'}] ${dayjs(record.harvest_date).format('YYYY-MM-DD')} | ${record.grade}등급 | ${record.quantity}${record.unit} | ${displayCode}`,
-            isPrinting: true
+            qrValue: `[${product?.product_name || '수확물'}] ${dayjs(record.harvest_date).format('YYYY-MM-DD')} | ${record.grade}등급 | ${record.quantity}${record.unit} | ${displayCode}`
         });
-
-        setTimeout(() => {
-            window.print();
-            setPrintData(prev => ({ ...prev, isPrinting: false }));
-        }, 300);
     };
 
     const handleQuickScan = async (e) => {

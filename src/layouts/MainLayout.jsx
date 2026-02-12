@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import LabelPrinter from '../features/production/components/LabelPrinter';
 
 const MainLayout = ({ isMobile }) => {
     // If mobile is prop-driven from App.jsx, use it directly for total consistency
@@ -10,6 +11,7 @@ const MainLayout = ({ isMobile }) => {
                 <main className="flex-1 w-full relative overflow-y-auto">
                     <Outlet />
                 </main>
+                <LabelPrinter />
             </div>
         );
     }
@@ -23,6 +25,7 @@ const MainLayout = ({ isMobile }) => {
                     <Outlet />
                 </div>
             </main>
+            <LabelPrinter />
         </div>
     );
 };
