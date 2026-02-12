@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
-import { Save, ArrowLeft, Package, Trash2, Scale, Info, CircleCheck, LayoutDashboard, ClipboardList, CirclePlus } from 'lucide-react';
+import { Save, ArrowLeft, Package, Trash2, Scale, Info, CircleCheck, LayoutDashboard, ClipboardList, CirclePlus, Store, QrCode } from 'lucide-react';
 import dayjs from 'dayjs';
 
 const MobileHarvestEntry = () => {
@@ -26,6 +26,22 @@ const MobileHarvestEntry = () => {
         weight_per_package: 0,
         package_unit: 'kg'
     });
+
+    const [isScanning, setIsScanning] = useState(false);
+
+    const handleQrScan = () => {
+        setIsScanning(true);
+        // QR 스캔 시뮬레이션: 진행 중인 배치 중 하나를 랜덤하게 선택
+        setTimeout(() => {
+            setIsScanning(false);
+            if (batches.length > 0) {
+                const randomBatch = batches[Math.floor(Math.random() * batches.length)];
+                setFormData(prev => ({ ...prev, batch_id: randomBatch.batch_id }));
+            } else {
+                showAlert("스캔 실패", "선택할 수 있는 활성 배치가 없습니다.");
+            }
+        }, 1200);
+    };
 
     useEffect(() => {
         loadBatches();
@@ -94,7 +110,7 @@ const MobileHarvestEntry = () => {
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-24">
             {/* Header */}
-            <div className="bg-white border-b border-slate-100 p-4 pt-8 sticky top-0 z-50 flex items-center justify-between">
+            <div className="bg-white border-b border-slate-100 p-4 pt-4 sticky top-0 z-50 flex items-center justify-between">
                 <button className="p-2 hover:bg-slate-50 rounded-xl text-slate-400" onClick={() => window.history.back()}>
                     <ArrowLeft size={20} />
                 </button>
@@ -102,12 +118,31 @@ const MobileHarvestEntry = () => {
                 <div className="w-10"></div>
             </div>
 
-            <div className="p-5 space-y-6">
+            <div className="p-4 space-y-4">
                 {/* Batch Selection */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                    <div className="flex items-center gap-3 text-slate-800 font-black mb-4">
-                        <Package size={18} className="text-indigo-500" />
-                        <span>생산 배치 선택</span>
+                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3 text-slate-800 font-black">
+                            <Package size={18} className="text-indigo-500" />
+                            <span>생산 배치 선택</span>
+                        </div>
+                        <button
+                            onClick={handleQrScan}
+                            disabled={isScanning}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-black text-xs transition-all active:scale-95 ${isScanning ? 'bg-slate-100 text-slate-400' : 'bg-indigo-50 text-indigo-600 border border-indigo-100'}`}
+                        >
+                            {isScanning ? (
+                                <>
+                                    <div className="w-3 h-3 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                    <span>스캔 중...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <QrCode size={14} />
+                                    <span>QR 스캔</span>
+                                </>
+                            )}
+                        </button>
                     </div>
 
                     <select
@@ -123,7 +158,7 @@ const MobileHarvestEntry = () => {
                 </div>
 
                 {/* Main Quantity */}
-                <div className="bg-indigo-600 rounded-[2.5rem] p-8 shadow-xl shadow-indigo-100 text-white space-y-4">
+                <div className="bg-indigo-600 rounded-[2.5rem] p-6 shadow-xl shadow-indigo-100 text-white space-y-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <Scale size={20} />
@@ -182,7 +217,7 @@ const MobileHarvestEntry = () => {
                 </div>
 
                 {/* Grade & Memo */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 space-y-3">
                     <div className="flex items-center gap-3 text-slate-800 font-black mb-2">
                         <CircleCheck size={18} className="text-indigo-500" />
                         <span>등급 및 기타 정보</span>
@@ -225,6 +260,10 @@ const MobileHarvestEntry = () => {
                 <button onClick={() => navigate('/mobile-dashboard')} className="flex flex-col items-center gap-1 text-slate-400">
                     <LayoutDashboard size={24} />
                     <span className="text-[10px] font-black">현황판</span>
+                </button>
+                <button onClick={() => navigate('/mobile-event-sales')} className="flex flex-col items-center gap-1 text-slate-400">
+                    <Store size={24} />
+                    <span className="text-[10px] font-black">특판접수</span>
                 </button>
                 <button onClick={() => navigate('/mobile-worklog')} className="flex flex-col items-center gap-1 text-slate-400">
                     <ClipboardList size={24} />

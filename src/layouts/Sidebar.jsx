@@ -108,8 +108,11 @@ const Sidebar = () => {
             {/* Logo Area */}
             <div className="p-8 pb-6">
                 <div className="flex items-center gap-3 mb-1">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                        <span className="material-symbols-rounded text-white text-2xl">agriculture</span>
+                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-indigo-500/10 overflow-hidden">
+                        <img src="/app-icon.png" alt="Logo" className="w-8 h-8 object-contain" onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = "https://cdn-icons-png.flaticon.com/512/591/591745.png"; // Mushroom backup icon
+                        }} />
                     </div>
                     <h2 className="text-xl font-black tracking-tight text-white truncate" title={companyName}>
                         {companyName}
@@ -176,7 +179,6 @@ const Sidebar = () => {
 
                     {sessionStorage.getItem('userRole') === 'admin' && (
                         <MenuGroup id="settings" icon="settings" label="설정 및 관리" expanded={isExpanded('settings')} onToggle={toggleMenu} currentPath={location.pathname}>
-                            <SubMenuItem to="/manual" icon="help" label="사용자 메뉴얼" />
                             <SubMenuItem to="/settings/user-list" icon="manage_accounts" label="사용자 관리" />
                             <SubMenuItem to="/settings/company-info" icon="business" label="업체 정보 관리" />
                             <SubMenuItem to="/settings/product-list" icon="inventory_2" label="상품/자재 마스터" />
@@ -184,11 +186,13 @@ const Sidebar = () => {
                             <SubMenuItem to="/settings/api-keys" icon="api" label="외부 서비스 연동" />
                             <SubMenuItem to="/settings/iot" icon="router" label="IoT 장비 관리" />
                             <SubMenuItem to="/settings/template-mgmt" icon="chat_bubble" label="메시지 템플릿" />
+                            <SubMenuItem to="/settings/mobile-sync" icon="smartphone" label="모바일 연동 센터" />
                             <SubMenuItem to="/settings/db-backup-restore" icon="backup" label="백업 및 복구" />
-                            <SubMenuItem to="/settings/mobile-sync" icon="smartphone" label="모바일 현장 연동" />
                             <SubMenuItem to="/settings/db-reset" icon="delete_forever" label="데이터 초기화/프리셋" />
                         </MenuGroup>
                     )}
+
+                    <MenuItem to="/manual" icon="help" label="사용자 메뉴얼" />
                 </ul>
             </div>
         </nav>

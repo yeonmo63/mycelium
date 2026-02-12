@@ -6,12 +6,14 @@ import { ModalProvider, useModal } from './contexts/ModalContext';
 import MainLayout from './layouts/MainLayout';
 import SystemSetup from './features/auth/SystemSetup';
 import Login from './features/auth/Login';
+import MobileLogin from './features/mobile/MobileLogin';
 
 // Feature Components
 import Dashboard from './features/dashboard/Dashboard';
 import MobileDashboard from './features/mobile/MobileDashboard';
 import MobileWorkLog from './features/mobile/MobileWorkLog';
 import MobileHarvestEntry from './features/mobile/MobileHarvestEntry';
+import MobileEventSales from './features/mobile/MobileEventSales';
 
 // Desktop Components (Lazy check if needed)
 import CustomerRegister from './features/customer/CustomerRegister';
@@ -82,17 +84,43 @@ function AppContent() {
 
   // Initial State Sync
   const [isConfigured, setIsConfigured] = useState(isWeb ? true : null);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const stored = sessionStorage.getItem('isLoggedIn') === 'true';
-    if (!stored && isWeb && IS_MOBILE) {
-      // Auto-login for mobile users
-      sessionStorage.setItem('username', '현장관리자');
-      sessionStorage.setItem('userRole', 'admin');
-      sessionStorage.setItem('isLoggedIn', 'true');
-      return true;
+  const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('isLoggedIn') === 'true');
+  const [mobileAuthRequired, setMobileAuthRequired] = useState(false);
+
+  // Mobile Auth Check
+  useEffect(() => {
+    if (isWeb && IS_MOBILE) {
+      const checkAuth = async () => {
+        try {
+          const res = await fetch('/api/auth/status');
+          const data = await res.json();
+
+          if (data.require_pin) {
+            // PIN is required, check if we have verified it in this session
+            if (!sessionStorage.getItem('pin_verified')) {
+              setMobileAuthRequired(true);
+              setIsLoggedIn(false);
+            } else {
+              setMobileAuthRequired(false);
+              setIsLoggedIn(true);
+            }
+          } else {
+            // No PIN required, auto-login if not already
+            if (!sessionStorage.getItem('isLoggedIn')) {
+              sessionStorage.setItem('username', '현장관리자');
+              sessionStorage.setItem('userRole', 'admin');
+              sessionStorage.setItem('isLoggedIn', 'true');
+              setIsLoggedIn(true);
+            }
+            setMobileAuthRequired(false);
+          }
+        } catch (e) {
+          console.warn("Mobile auth status check failed", e);
+        }
+      };
+      checkAuth();
     }
-    return stored;
-  });
+  }, [isWeb, IS_MOBILE]);
 
   const router = useMemo(() => createBrowserRouter(
     createRoutesFromElements(
@@ -104,6 +132,7 @@ function AppContent() {
         <Route path="mobile-dashboard" element={<MobileDashboard />} />
         <Route path="mobile-worklog" element={<MobileWorkLog />} />
         <Route path="mobile-harvest" element={<MobileHarvestEntry />} />
+        <Route path="mobile-event-sales" element={<MobileEventSales />} />
 
         {/* Secure Desktop Routes (Omitted if mobile to prevent accidental render) */}
         {!IS_MOBILE && (
@@ -209,6 +238,8 @@ function AppContent() {
         <RouterProvider router={router} />
       ) : !isConfigured ? (
         <SystemSetup onComplete={() => setIsConfigured(true)} />
+      ) : IS_MOBILE && mobileAuthRequired ? (
+        <MobileLogin onLoginSuccess={() => setIsLoggedIn(true)} />
       ) : (
         <Login onLoginSuccess={() => setIsLoggedIn(true)} />
       )}

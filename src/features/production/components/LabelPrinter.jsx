@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 
 const LabelPrinter = forwardRef(({ type, data }, ref) => {
@@ -8,8 +8,15 @@ const LabelPrinter = forwardRef(({ type, data }, ref) => {
     return (
         <div
             ref={ref}
-            className={`qr-label-wrapper hidden ${data?.isPrinting ? 'print:block' : 'print:hidden'} bg-white text-black p-4`}
-            style={{ width: '80mm', height: '40mm', margin: '0 auto' }}
+            className={`qr-label-wrapper bg-white text-black p-4 transition-opacity ${data?.isPrinting ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+            style={{
+                width: '80mm',
+                height: '40mm',
+                position: 'fixed',
+                left: '-9999px',
+                top: '-9999px',
+                zIndex: -1
+            }}
         >
             {data?.isPrinting && (
                 <style>
@@ -63,10 +70,15 @@ const LabelPrinter = forwardRef(({ type, data }, ref) => {
                 {/* QR Code Section */}
                 <div className="flex-shrink-0 flex flex-col items-center gap-1">
                     <div className="bg-white p-1 border border-slate-200 rounded-lg">
-                        <QRCodeCanvas
+                        <QRCodeSVG
                             value={data.qrValue || 'N/A'}
                             size={type === 'harvest' ? 85 : 100}
+                            style={{
+                                width: type === 'harvest' ? '85px' : '100px',
+                                height: type === 'harvest' ? '85px' : '100px'
+                            }}
                             level="M"
+                            bgColor="#ffffff"
                             includeMargin={false}
                         />
                     </div>

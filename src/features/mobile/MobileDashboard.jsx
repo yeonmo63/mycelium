@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useMobileDashboard } from './hooks/useMobileDashboard';
 import { formatCurrency } from '../../utils/common';
 import {
@@ -12,7 +12,8 @@ import {
     Wallet,
     ClipboardList,
     PlusCircle,
-    LayoutDashboard
+    LayoutDashboard,
+    Store
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
@@ -28,16 +29,35 @@ const MobileDashboard = () => {
 
     const [lastUpdated, setLastUpdated] = useState(dayjs().format('HH:mm:ss'));
 
+    const loadStats = useCallback(async () => {
+        await loadData();
+        setLastUpdated(dayjs().format('HH:mm:ss'));
+    }, [loadData]);
+
     useEffect(() => {
-        if (!isLoading) setLastUpdated(dayjs().format('HH:mm:ss'));
-    }, [isLoading]);
+        loadStats();
+
+        // Auto-refresh when returning to the app (visibility change)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log("App returned to foreground, refreshing data...");
+                loadStats();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [loadStats]);
 
     return (
         <div className="mobile-fullscreen bg-slate-50 flex flex-col font-sans overflow-x-hidden">
             {/* Header */}
             <div className="bg-indigo-600 px-6 pt-8 pb-16 rounded-b-[40px] relative shadow-lg shrink-0">
                 <div className="relative z-10 flex justify-between items-start mb-6">
-                    <div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-white p-2 shadow-inner flex items-center justify-center overflow-hidden">
+                            <img src="/app-icon.png" alt="Logo" className="w-full h-full object-contain" />
+                        </div>
                         <h1 className="text-white text-2xl font-black tracking-tight">농장 관리 현황</h1>
                     </div>
                     <button
@@ -176,6 +196,10 @@ const MobileDashboard = () => {
                 <button onClick={() => navigate('/mobile-dashboard')} className="flex flex-col items-center gap-1 text-indigo-600">
                     <LayoutDashboard size={24} />
                     <span className="text-[10px] font-black">현황판</span>
+                </button>
+                <button onClick={() => navigate('/mobile-event-sales')} className="flex flex-col items-center gap-1 text-slate-400">
+                    <Store size={24} />
+                    <span className="text-[10px] font-black">특판접수</span>
                 </button>
                 <button onClick={() => navigate('/mobile-worklog')} className="flex flex-col items-center gap-1 text-slate-400">
                     <ClipboardList size={24} />

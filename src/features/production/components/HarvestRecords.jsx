@@ -168,7 +168,7 @@ const HarvestRecords = () => {
         setTimeout(() => {
             window.print();
             setPrintData(prev => ({ ...prev, isPrinting: false }));
-        }, 100);
+        }, 300);
     };
 
     const handleQuickScan = async (e) => {

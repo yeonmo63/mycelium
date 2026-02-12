@@ -379,7 +379,7 @@ const SettingsProduct = () => {
         setTimeout(() => {
             window.print();
             setPrintData(prev => ({ ...prev, isPrinting: false }));
-        }, 100);
+        }, 300);
     };
 
     const loadPriceHistory = async (productId) => {

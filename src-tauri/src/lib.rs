@@ -91,7 +91,8 @@ pub fn run() {
                 
                 if let Some(p) = pool {
                     println!("System: DB Pool detected. Attaching API Bridge.");
-                    app = app.merge(crate::bridge::create_mobile_router(p));
+                    let config_dir = handle_for_server.path().app_config_dir().unwrap_or_default();
+                    app = app.merge(crate::bridge::create_mobile_router(p, config_dir));
                 } else {
                     println!("System: DB Pool not found within timeout. API Bridge disabled.");
                 }
@@ -502,6 +503,8 @@ pub fn run() {
             commands::courier::batch_sync_courier_statuses,
             commands::courier::sync_courier_status,
             commands::config::get_local_ip_command,
+            commands::config::get_mobile_config,
+            commands::config::save_mobile_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

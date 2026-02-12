@@ -1541,3 +1541,67 @@ pub async fn get_tax_config_for_ui(app: AppHandle) -> MyceliumResult<TaxConfig> 
     }
     Ok(config)
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct MobileConfig {
+    pub remote_ip: String,
+    pub access_pin: String,
+    pub use_pin: bool,
+}
+
+#[command]
+pub async fn save_mobile_config(app: AppHandle, config: MobileConfig) -> MyceliumResult<()> {
+    check_admin(&app)?;
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let config_path = config_dir.join("config.json");
+
+    let mut config_data = if config_path.exists() {
+        let content =
+            fs::read_to_string(&config_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        serde_json::from_str::<Value>(&content).unwrap_or(json!({}))
+    } else {
+        json!({})
+    };
+
+    config_data["mobile_remote_ip"] = Value::String(config.remote_ip);
+    config_data["mobile_access_pin"] = Value::String(config.access_pin);
+    config_data["mobile_use_pin"] = Value::Bool(config.use_pin);
+
+    let config_str = serde_json::to_string_pretty(&config_data)
+        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    fs::write(&config_path, config_str).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    Ok(())
+}
+
+#[command]
+pub async fn get_mobile_config(app: AppHandle) -> MyceliumResult<MobileConfig> {
+    let mut config = MobileConfig::default();
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        let config_path = config_dir.join("config.json");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                    config.remote_ip = json
+                        .get("mobile_remote_ip")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.access_pin = json
+                        .get("mobile_access_pin")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    config.use_pin = json
+                        .get("mobile_use_pin")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                }
+            }
+        }
+    }
+    Ok(config)
+}

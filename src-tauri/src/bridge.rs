@@ -8,7 +8,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-pub fn create_mobile_router(pool: DbPool) -> Router {
+use std::path::PathBuf;
+
+pub fn create_mobile_router(pool: DbPool, config_dir: PathBuf) -> Router {
     Router::new()
         .route("/api/dashboard/priority-stats", get(get_priority_stats))
         .route("/api/dashboard/secondary-stats", get(get_secondary_stats))
@@ -19,10 +21,59 @@ pub fn create_mobile_router(pool: DbPool) -> Router {
         .route("/api/production/batches", get(get_batches))
         .route("/api/farming/save-log", post(save_farming_log))
         .route("/api/production/save-harvest", post(save_harvest))
-        .with_state(pool)
+        .route("/api/auth/status", get(get_auth_status))
+        .route("/api/auth/verify", post(verify_pin))
+        .route("/api/event/all", get(get_all_events_bridge))
+        .route("/api/product/list", get(get_product_list_bridge))
+        .route(
+            "/api/sales/batch-save",
+            post(save_general_sales_batch_bridge),
+        )
+        .with_state((pool, config_dir))
 }
 
-async fn get_priority_stats(State(pool): State<DbPool>) -> impl IntoResponse {
+async fn get_auth_status(State((_, config_dir)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
+    let config_path = config_dir.join("config.json");
+    let mut use_pin = false;
+
+    if let Ok(content) = std::fs::read_to_string(config_path) {
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            use_pin = json
+                .get("mobile_use_pin")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+        }
+    }
+
+    Json(json!({ "require_pin": use_pin }))
+}
+
+async fn verify_pin(
+    State((_, config_dir)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let input_pin = payload.get("pin").and_then(|v| v.as_str()).unwrap_or("");
+    let config_path = config_dir.join("config.json");
+    let mut stored_pin = "".to_string();
+
+    if let Ok(content) = std::fs::read_to_string(config_path) {
+        if let Ok(json) = serde_json::from_str::<Value>(&content) {
+            stored_pin = json
+                .get("mobile_access_pin")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+        }
+    }
+
+    if !stored_pin.is_empty() && stored_pin == input_pin {
+        Json(json!({ "success": true, "username": "현장관리자", "role": "admin" }))
+    } else {
+        Json(json!({ "success": false, "error": "PIN 번호가 일치하지 않습니다." }))
+    }
+}
+
+async fn get_priority_stats(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     println!("Mobile API: Fetching Priority Stats for {}", today);
 
@@ -91,7 +142,7 @@ async fn get_priority_stats(State(pool): State<DbPool>) -> impl IntoResponse {
     }
 }
 
-async fn get_secondary_stats(State(pool): State<DbPool>) -> impl IntoResponse {
+async fn get_secondary_stats(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -120,7 +171,7 @@ async fn get_secondary_stats(State(pool): State<DbPool>) -> impl IntoResponse {
     )
 }
 
-async fn get_weekly_sales(State(pool): State<DbPool>) -> impl IntoResponse {
+async fn get_weekly_sales(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -149,7 +200,7 @@ async fn get_weekly_sales(State(pool): State<DbPool>) -> impl IntoResponse {
     )
 }
 
-async fn get_top_products(State(pool): State<DbPool>) -> impl IntoResponse {
+async fn get_top_products(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let query = r#"
         SELECT 
@@ -182,7 +233,7 @@ async fn get_top_products(State(pool): State<DbPool>) -> impl IntoResponse {
     )
 }
 
-async fn get_top_profitable(State(pool): State<DbPool>) -> impl IntoResponse {
+async fn get_top_profitable(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -215,7 +266,7 @@ async fn get_top_profitable(State(pool): State<DbPool>) -> impl IntoResponse {
     )
 }
 
-async fn get_spaces(State(pool): State<DbPool>) -> Json<Value> {
+async fn get_spaces(State((pool, _)): State<(DbPool, PathBuf)>) -> Json<Value> {
     let rows =
         sqlx::query("SELECT space_id, space_name FROM production_spaces ORDER BY space_name")
             .fetch_all(&pool)
@@ -229,7 +280,7 @@ async fn get_spaces(State(pool): State<DbPool>) -> Json<Value> {
     Json(json!(res))
 }
 
-async fn get_batches(State(pool): State<DbPool>) -> Json<Value> {
+async fn get_batches(State((pool, _)): State<(DbPool, PathBuf)>) -> Json<Value> {
     let rows = sqlx::query("SELECT batch_id, batch_code, status FROM production_batches WHERE status != 'completed' ORDER BY start_date DESC")
         .fetch_all(&pool)
         .await
@@ -249,7 +300,10 @@ async fn get_batches(State(pool): State<DbPool>) -> Json<Value> {
     Json(json!(res))
 }
 
-async fn save_farming_log(State(pool): State<DbPool>, Json(payload): Json<Value>) -> Json<Value> {
+async fn save_farming_log(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> Json<Value> {
     let log = payload.get("log").unwrap_or(&payload);
     let res = sqlx::query(
         "INSERT INTO farming_logs (batch_id, space_id, log_date, worker_name, work_type, work_content, env_data) 
@@ -271,7 +325,10 @@ async fn save_farming_log(State(pool): State<DbPool>, Json(payload): Json<Value>
     }
 }
 
-async fn save_harvest(State(pool): State<DbPool>, Json(payload): Json<Value>) -> Json<Value> {
+async fn save_harvest(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> Json<Value> {
     let rec = payload.get("record").unwrap_or(&payload);
     let res = sqlx::query(
         "INSERT INTO harvest_records (batch_id, harvest_date, quantity, defective_quantity, loss_quantity, unit, grade, memo) 
@@ -291,5 +348,65 @@ async fn save_harvest(State(pool): State<DbPool>, Json(payload): Json<Value>) ->
     match res {
         Ok(_) => Json(json!({ "success": true })),
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn get_all_events_bridge(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
+    let res = sqlx::query_as::<_, crate::db::Event>("SELECT * FROM event ORDER BY start_date DESC")
+        .fetch_all(&pool)
+        .await;
+
+    match res {
+        Ok(events) => Json(json!(events)),
+        Err(_) => Json(json!([])),
+    }
+}
+
+async fn get_product_list_bridge(State((pool, _)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
+    let res = sqlx::query_as::<_, crate::db::Product>(
+        "SELECT * FROM products WHERE status = '판매중' AND (item_type = 'product' OR item_type IS NULL) ORDER BY product_name",
+    )
+    .fetch_all(&pool)
+    .await;
+
+    match res {
+        Ok(products) => Json(json!(products)),
+        Err(_) => Json(json!([])),
+    }
+}
+
+async fn save_general_sales_batch_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let sales = payload.get("sales").and_then(|v| v.as_array());
+    if let Some(sales_list) = sales {
+        let mut success_count = 0;
+        for sale in sales_list {
+            // Very simplified insert for mobile특판
+            let res = sqlx::query(
+                "INSERT INTO sales (sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, memo, status, payment_status, order_date) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE)"
+            )
+            .bind(format!("M-{}", chrono::Local::now().format("%Y%m%d%H%M%S%f")))
+            .bind(sale.get("customer_id").and_then(|v| v.as_str()).unwrap_or("EVENT_GUEST"))
+            .bind(sale.get("product_name").and_then(|v| v.as_str()).unwrap_or(""))
+            .bind(sale.get("specification").and_then(|v| v.as_str()))
+            .bind(sale.get("unit_price").and_then(|v| v.as_i64()).unwrap_or(0))
+            .bind(sale.get("quantity").and_then(|v| v.as_i64()).unwrap_or(1))
+            .bind(sale.get("total_amount").and_then(|v| v.as_i64()).unwrap_or(0))
+            .bind(sale.get("memo").and_then(|v| v.as_str()))
+            .bind(sale.get("status").and_then(|v| v.as_str()).unwrap_or("결제완료"))
+            .bind(sale.get("payment_status").and_then(|v| v.as_str()).unwrap_or("입금완료"))
+            .execute(&pool)
+            .await;
+
+            if res.is_ok() {
+                success_count += 1;
+            }
+        }
+        Json(json!({ "success": true, "count": success_count }))
+    } else {
+        Json(json!({ "success": false, "error": "Invalid payload" }))
     }
 }

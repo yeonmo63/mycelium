@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
-import { Camera, Save, ArrowLeft, Thermometer, Droplets, MapPin, LayoutDashboard, ClipboardList, CirclePlus } from 'lucide-react';
+import { Camera, Save, ArrowLeft, Thermometer, Droplets, MapPin, LayoutDashboard, ClipboardList, CirclePlus, Store } from 'lucide-react';
 import dayjs from 'dayjs';
 
 const MobileWorkLog = () => {
@@ -24,6 +24,9 @@ const MobileWorkLog = () => {
         env_data: { temp: '', humi: '' },
         photos: null
     });
+
+    const [photoPreview, setPhotoPreview] = useState(null);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         loadBaseData();
@@ -70,14 +73,26 @@ const MobileWorkLog = () => {
     };
 
     const handlePhoto = () => {
-        // Placeholder for real camera implementation
-        showAlert("카메라 연동", "모바일 브라우저의 카메라 권한을 요청하거나 사진첩을 엽니다. (현재 시뮬레이션)");
+        fileInputRef.current?.click();
+    };
+
+    const onFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPhotoPreview(reader.result);
+                // In a real app, you might want to save the base64 or file object
+                setFormData(prev => ({ ...prev, photos: reader.result }));
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-20">
             {/* Header */}
-            <div className="bg-white border-b border-slate-100 p-4 pt-8 sticky top-0 z-50 flex items-center justify-between">
+            <div className="bg-white border-b border-slate-100 p-4 pt-4 sticky top-0 z-50 flex items-center justify-between">
                 <button className="p-2 hover:bg-slate-50 rounded-xl text-slate-400" onClick={() => window.history.back()}>
                     <ArrowLeft size={20} />
                 </button>
@@ -85,9 +100,17 @@ const MobileWorkLog = () => {
                 <div className="w-10"></div>
             </div>
 
-            <div className="p-5 space-y-6">
+            <div className="p-4 space-y-4">
+                <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={fileInputRef}
+                    onChange={onFileChange}
+                    className="hidden"
+                />
                 {/* Space & Batch Selection */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 space-y-3">
                     <div className="flex items-center gap-3 text-slate-800 font-black mb-2">
                         <MapPin size={18} className="text-indigo-500" />
                         <span>작업 구역/배치 선택</span>
@@ -149,7 +172,7 @@ const MobileWorkLog = () => {
                 </div>
 
                 {/* Work Content */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 space-y-3">
                     <div className="flex items-center gap-3 text-slate-800 font-black mb-2">
                         <ClipboardList size={18} className="text-indigo-500" />
                         <span>작업 내용 기록</span>
@@ -165,12 +188,23 @@ const MobileWorkLog = () => {
                 {/* Photo */}
                 <button
                     onClick={handlePhoto}
-                    className="w-full bg-white p-6 rounded-3xl shadow-sm border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 group active:bg-slate-50 transition-colors"
+                    className="w-full bg-white p-6 rounded-3xl shadow-sm border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 group active:bg-slate-50 transition-colors overflow-hidden"
                 >
-                    <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
-                        <Camera size={24} />
-                    </div>
-                    <span className="text-sm font-black text-slate-400 group-hover:text-indigo-500">현장 사진 첨부 (선택)</span>
+                    {photoPreview ? (
+                        <div className="w-full aspect-video rounded-xl overflow-hidden relative">
+                            <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Camera size={32} className="text-white" />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
+                                <Camera size={24} />
+                            </div>
+                            <span className="text-sm font-black text-slate-400 group-hover:text-indigo-500">현장 사진 첨부 (선택)</span>
+                        </>
+                    )}
                 </button>
             </div>
 
@@ -190,6 +224,10 @@ const MobileWorkLog = () => {
                 <button onClick={() => navigate('/mobile-dashboard')} className="flex flex-col items-center gap-1 text-slate-400">
                     <LayoutDashboard size={24} />
                     <span className="text-[10px] font-black">현황판</span>
+                </button>
+                <button onClick={() => navigate('/mobile-event-sales')} className="flex flex-col items-center gap-1 text-slate-400">
+                    <Store size={24} />
+                    <span className="text-[10px] font-black">특판접수</span>
                 </button>
                 <button onClick={() => navigate('/mobile-worklog')} className="flex flex-col items-center gap-1 text-indigo-600">
                     <ClipboardList size={24} />

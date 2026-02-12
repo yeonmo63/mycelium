@@ -21,6 +21,11 @@ export async function callBridge(commandName, args = {}) {
             'get_production_batches': '/api/production/batches',
             'save_farming_log': '/api/farming/save-log',
             'save_harvest_record': '/api/production/save-harvest',
+            'get_auth_status': '/api/auth/status',
+            'verify_mobile_pin': '/api/auth/verify',
+            'get_all_events': '/api/event/all',
+            'get_product_list': '/api/product/list',
+            'save_general_sales_batch': '/api/sales/batch-save',
         };
 
         const route = routeMap[commandName];

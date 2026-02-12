@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { callBridge } from '../../../utils/apiBridge';
 import dayjs from 'dayjs';
 
@@ -7,14 +7,9 @@ export const useMobileDashboard = () => {
     const [weeklyData, setWeeklyData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // 모바일에 꼭 필요한 통계와 주간 차트(트렌드용)만 병렬 호출
             const [pri, sec, weekly] = await Promise.all([
                 callBridge('get_dashboard_priority_stats'),
                 callBridge('get_dashboard_secondary_stats'),
@@ -23,9 +18,7 @@ export const useMobileDashboard = () => {
 
             setStats(prev => {
                 const combined = { ...(prev || {}) };
-                // Merge Priority Stats (only non-null)
                 if (pri) Object.keys(pri).forEach(k => { if (pri[k] !== null) combined[k] = pri[k]; });
-                // Merge Secondary Stats (only non-null)
                 if (sec) Object.keys(sec).forEach(k => { if (sec[k] !== null) combined[k] = sec[k]; });
                 return combined;
             });
@@ -35,7 +28,11 @@ export const useMobileDashboard = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     // 매출 트렌드 계산 로직 (기존 useDashboard와 동일)
     const salesTrend = (() => {
