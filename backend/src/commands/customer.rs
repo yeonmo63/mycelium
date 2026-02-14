@@ -97,7 +97,7 @@ pub async fn get_customer_ai_insight(
     );
 
     // 5. Call AI
-    let result_json = call_gemini_ai_internal(&api_key, &prompt).await?;
+    let result_json = call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await?;
 
     // 6. Parse
     Ok(serde_json::from_str(&result_json)

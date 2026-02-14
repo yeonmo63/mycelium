@@ -4,6 +4,7 @@ use crate::commands::config::get_naver_keys;
 use crate::db::{Customer, DbPool};
 use crate::error::{MyceliumError, MyceliumResult};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 // Using global stubs
 use crate::stubs::{AppHandle, State, command, check_admin};
@@ -85,10 +86,29 @@ pub async fn call_gemini_ai(_app: AppHandle, prompt: String) -> MyceliumResult<S
     let api_key = get_gemini_api_key().ok_or_else(|| {
         MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
     })?;
-    call_gemini_ai_internal(&api_key, &prompt).await
+    call_gemini_ai_internal(None, &api_key, &prompt).await
 }
 
-pub async fn call_gemini_ai_internal(api_key: &str, prompt: &str) -> MyceliumResult<String> {
+pub async fn call_gemini_ai_internal(pool: Option<&DbPool>, api_key: &str, prompt: &str) -> MyceliumResult<String> {
+    // 1. Check Cache
+    if let Some(pool) = pool {
+        let mut hasher = Sha256::new();
+        hasher.update(prompt.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+
+        let cached: Option<(String,)> = sqlx::query_as(
+            "SELECT response FROM ai_response_cache WHERE prompt_hash = $1 AND (expires_at IS NULL OR expires_at > NOW())"
+        )
+        .bind(&hash)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some(row) = cached {
+            return Ok(row.0);
+        }
+    }
+
     let clean_key = api_key.trim().trim_matches(|c: char| c == '"' || c == '\'');
     let client = reqwest::Client::new();
 
@@ -184,7 +204,25 @@ pub async fn call_gemini_ai_internal(api_key: &str, prompt: &str) -> MyceliumRes
                     .trim_start_matches("```")
                     .trim_end_matches("```")
                     .trim();
-                return Ok(cleaned.to_string());
+
+                let result = cleaned.to_string();
+                if let Some(pool) = pool {
+                    let mut hasher = Sha256::new();
+                    hasher.update(prompt.as_bytes());
+                    let hash = format!("{:x}", hasher.finalize());
+
+                    let _ = sqlx::query(
+                        "INSERT INTO ai_response_cache (prompt_hash, prompt, response, model, expires_at) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '24 hours')"
+                    )
+                    .bind(&hash)
+                    .bind(prompt)
+                    .bind(&result)
+                    .bind(&model)
+                    .execute(pool)
+                    .await;
+                }
+                
+                return Ok(result);
             } else {
                 errors.push(format!("Empty response from {}", model));
             }
@@ -405,7 +443,7 @@ pub async fn test_gemini_connection(_app: AppHandle, key: Option<String>) -> Myc
         })?
     };
 
-    match call_gemini_ai_internal(&api_key, "Hello, are you there? Response with 'OK' only.").await
+    match call_gemini_ai_internal(Some(&*state), &api_key, "Hello, are you there? Response with 'OK' only.").await
     {
         Ok(res) => {
             if res.contains("OK") || res.len() < 100 {
@@ -490,7 +528,7 @@ pub async fn get_ai_behavior_strategy(
         context
     );
 
-    let json_str = call_gemini_ai_internal(&api_key, &prompt).await?;
+    let json_str = call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await?;
 
     let result: BehaviorAnalysisResult = serde_json::from_str(&json_str).map_err(|e| {
         MyceliumError::Internal(format!("AI 분석 파싱 실패: {}\n결과: {}", e, json_str))
@@ -550,7 +588,7 @@ pub async fn analyze_online_sentiment(
         mentions.len()
     );
 
-    let json_str = call_gemini_ai_internal(&api_key, &prompt).await?;
+    let json_str = call_gemini_ai_internal(None, &api_key, &prompt).await?;
 
     let result: OnlineAnalysisResult = serde_json::from_str(&json_str).map_err(|e| {
         MyceliumError::Internal(format!(
@@ -617,7 +655,7 @@ pub async fn get_morning_briefing(
         context
     );
 
-    call_gemini_ai_internal(&api_key, &prompt).await
+    call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
 
@@ -687,7 +725,7 @@ pub async fn get_consultation_briefing(
         context_str
     );
 
-    call_gemini_ai_internal(&api_key, &prompt).await
+    call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
 pub async fn get_pending_consultations_summary(
@@ -729,7 +767,7 @@ pub async fn get_pending_consultations_summary(
         context
     );
 
-    call_gemini_ai_internal(&api_key, &prompt).await
+    call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
 
