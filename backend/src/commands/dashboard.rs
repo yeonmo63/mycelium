@@ -2,16 +2,18 @@ use crate::db::{
     DashboardStats, DbPool, MonthlyCohortStats, ProductSalesStats, ProfitAnalysisResult, Sales,
     TenYearSalesStats,
 };
-use crate::error::{MyceliumError, MyceliumResult};
-use tauri::{command, State};
+use crate::error::MyceliumResult;
+use crate::state::AppState;
+use axum::{extract::State, Json};
+use serde::{Deserialize, Serialize};
 
-#[derive(serde::Serialize, sqlx::FromRow)]
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct WeeklySales {
-    date: String,
-    total: Option<i64>,
+    pub date: String,
+    pub total: Option<i64>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct BusinessReportData {
     pub period_label: String,
     pub total_sales: i64,
@@ -21,25 +23,22 @@ pub struct BusinessReportData {
     pub top_profitable: Vec<ProfitAnalysisResult>,
 }
 
-#[command]
-pub async fn get_dashboard_schedule_stats(state: State<'_, DbPool>) -> MyceliumResult<i64> {
+pub async fn get_dashboard_schedule_stats(State(state): State<AppState>) -> MyceliumResult<Json<i64>> {
     let today = chrono::Local::now().date_naive();
     let count: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM schedules WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp"
     )
     .bind(today)
-    .fetch_one(&*state)
+    .fetch_one(&state.pool)
     .await
     .unwrap_or((0,));
 
-    Ok(count.0)
+    Ok(Json(count.0))
 }
 
-#[command]
-pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<DashboardStats> {
+pub async fn get_dashboard_stats(State(state): State<AppState>) -> MyceliumResult<Json<DashboardStats>> {
     let today = chrono::Local::now().date_naive();
 
-    // Combined query for much better performance (avoiding multiple separate subqueries)
     let sql = r#"
         WITH sales_stats AS (
             SELECT 
@@ -95,28 +94,26 @@ pub async fn get_dashboard_stats(state: State<'_, DbPool>) -> MyceliumResult<Das
         std::time::Duration::from_secs(15),
         sqlx::query_as::<_, DashboardStats>(sql)
             .bind(today)
-            .fetch_one(&*state),
+            .fetch_one(&state.pool),
     )
     .await
     {
-        Ok(Ok(stats)) => Ok(stats),
+        Ok(Ok(stats)) => Ok(Json(stats)),
         Ok(Err(e)) => {
             eprintln!("Dashboard Stats Error: {:?}", e);
-            Ok(DashboardStats::default())
+            Ok(Json(DashboardStats::default()))
         }
         Err(_) => {
             eprintln!("Dashboard Stats Timeout");
-            Ok(DashboardStats::default())
+            Ok(Json(DashboardStats::default()))
         }
     }
 }
 
-#[command]
 pub async fn get_dashboard_priority_stats(
-    state: State<'_, DbPool>,
-) -> MyceliumResult<DashboardStats> {
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<DashboardStats>> {
     let today = chrono::Local::now().date_naive();
-    // Prioritize Cards 0-5 (Sales, Orders, Customers, Pending Delivery, Schedule)
     let sql = r#"
         SELECT 
             (SELECT CAST(COALESCE(SUM(total_amount), 0) AS BIGINT) FROM sales WHERE order_date = $1 AND status != '취소') as total_sales_amount,
@@ -134,19 +131,17 @@ pub async fn get_dashboard_priority_stats(
 
     let stats = sqlx::query_as::<_, DashboardStats>(sql)
         .bind(today)
-        .fetch_one(&*state)
+        .fetch_one(&state.pool)
         .await
-        .unwrap_or_default(); // Return default if fails, or handle error better? Using unwrap_or_default for safety in UI
+        .unwrap_or_default();
 
-    Ok(stats)
+    Ok(Json(stats))
 }
 
-#[command]
 pub async fn get_dashboard_secondary_stats(
-    state: State<'_, DbPool>,
-) -> MyceliumResult<DashboardStats> {
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<DashboardStats>> {
     let today = chrono::Local::now().date_naive();
-    // Secondary Cards (Experience, Low Stock, Consultations)
     let sql = r#"
         SELECT 
             NULL::bigint as total_sales_amount,
@@ -164,18 +159,23 @@ pub async fn get_dashboard_secondary_stats(
 
     let stats = sqlx::query_as::<_, DashboardStats>(sql)
         .bind(today)
-        .fetch_one(&*state)
+        .fetch_one(&state.pool)
         .await
         .unwrap_or_default();
 
-    Ok(stats)
+    Ok(Json(stats))
 }
 
-#[command]
+#[derive(Deserialize)]
+pub struct BusinessReportRequest {
+    pub period: String,
+}
+
 pub async fn get_business_report_data(
-    state: State<'_, DbPool>,
-    period: String, // "weekly" or "monthly"
-) -> MyceliumResult<BusinessReportData> {
+    State(state): State<AppState>,
+    Json(payload): Json<BusinessReportRequest>,
+) -> MyceliumResult<Json<BusinessReportData>> {
+    let period = payload.period;
     let today = chrono::Local::now().date_naive();
     let start_date = if period == "weekly" {
         today - chrono::Duration::days(7)
@@ -183,7 +183,6 @@ pub async fn get_business_report_data(
         today - chrono::Duration::days(30)
     };
 
-    // 1. Basic Stats
     let stats_row: (Option<i64>, Option<i64>, Option<i64>) = sqlx::query_as(
         r#"
         SELECT 
@@ -193,10 +192,9 @@ pub async fn get_business_report_data(
         "#
     )
     .bind(start_date)
-    .fetch_one(&*state)
+    .fetch_one(&state.pool)
     .await?;
 
-    // 2. Top Products by Quantity
     let top_products = sqlx::query_as::<_, ProductSalesStats>(
         r#"
         SELECT 
@@ -212,10 +210,9 @@ pub async fn get_business_report_data(
         "#,
     )
     .bind(start_date)
-    .fetch_all(&*state)
+    .fetch_all(&state.pool)
     .await?;
 
-    // 3. Top Profitable Products
     let top_profitable = sqlx::query_as::<_, ProfitAnalysisResult>(
         r#"
         SELECT 
@@ -236,10 +233,10 @@ pub async fn get_business_report_data(
         "#,
     )
     .bind(start_date)
-    .fetch_all(&*state)
+    .fetch_all(&state.pool)
     .await?;
 
-    Ok(BusinessReportData {
+    Ok(Json(BusinessReportData {
         period_label: if period == "weekly" {
             "지난 7일"
         } else {
@@ -251,26 +248,23 @@ pub async fn get_business_report_data(
         new_customers: stats_row.2.unwrap_or(0),
         top_products,
         top_profitable,
-    })
+    }))
 }
 
-#[command]
-pub async fn get_recent_sales(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sales>> {
+pub async fn get_recent_sales(State(state): State<AppState>) -> MyceliumResult<Json<Vec<Sales>>> {
     let sales = sqlx::query_as::<_, Sales>(
         "SELECT s.*, c.customer_name 
          FROM sales s
          LEFT JOIN customers c ON s.customer_id = c.customer_id
          ORDER BY s.order_date DESC, s.sales_id DESC LIMIT 5",
     )
-    .fetch_all(&*state)
+    .fetch_all(&state.pool)
     .await?;
 
-    Ok(sales)
+    Ok(Json(sales))
 }
 
-#[command]
-pub async fn get_weekly_sales_data(state: State<'_, DbPool>) -> MyceliumResult<Vec<WeeklySales>> {
-    // Single query using generate_series for better performance
+pub async fn get_weekly_sales_data(State(state): State<AppState>) -> MyceliumResult<Json<Vec<WeeklySales>>> {
     let sql = r#"
         SELECT 
             TO_CHAR(d, 'MM-DD') as date,
@@ -282,17 +276,16 @@ pub async fn get_weekly_sales_data(state: State<'_, DbPool>) -> MyceliumResult<V
     "#;
 
     let rows = sqlx::query_as::<_, WeeklySales>(sql)
-        .fetch_all(&*state)
+        .fetch_all(&state.pool)
         .await
         .unwrap_or_default();
 
-    Ok(rows)
+    Ok(Json(rows))
 }
 
-#[command]
 pub async fn get_ten_year_sales_stats(
-    state: State<'_, DbPool>,
-) -> MyceliumResult<Vec<TenYearSalesStats>> {
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<Vec<TenYearSalesStats>>> {
     let sql = r#"
         WITH RECURSIVE years AS (
             SELECT CAST(TO_CHAR(CURRENT_DATE, 'YYYY') AS INTEGER) - i AS year
@@ -310,19 +303,24 @@ pub async fn get_ten_year_sales_stats(
     "#;
 
     let stats = sqlx::query_as::<_, TenYearSalesStats>(sql)
-        .fetch_all(&*state)
+        .fetch_all(&state.pool)
         .await?;
 
-    Ok(stats)
+    Ok(Json(stats))
 }
 
-#[command]
+#[derive(Deserialize)]
+pub struct CohortRequest {
+    pub year: String,
+}
+
 pub async fn get_monthly_sales_by_cohort(
-    pool: State<'_, DbPool>,
-    year: String,
-) -> MyceliumResult<Vec<MonthlyCohortStats>> {
+    State(state): State<AppState>,
+    Json(payload): Json<CohortRequest>,
+) -> MyceliumResult<Json<Vec<MonthlyCohortStats>>> {
+    let year = payload.year;
     if year.len() != 4 {
-        return Err(MyceliumError::Validation("Invalid year format".to_string()));
+        return Err(crate::error::MyceliumError::Validation("Invalid year format".to_string()));
     }
 
     let sql = r#"
@@ -346,19 +344,24 @@ pub async fn get_monthly_sales_by_cohort(
 
     let stats = sqlx::query_as::<_, MonthlyCohortStats>(sql)
         .bind(year)
-        .fetch_all(&*pool)
+        .fetch_all(&state.pool)
         .await?;
 
-    Ok(stats)
+    Ok(Json(stats))
 }
 
-#[command]
+#[derive(Deserialize)]
+pub struct DailyStatsRequest {
+    pub year_month: String, // "2024-01"
+}
+
 pub async fn get_daily_sales_stats_by_month(
-    pool: State<'_, DbPool>,
-    year_month: String, // "2024-01"
-) -> MyceliumResult<Vec<MonthlyCohortStats>> {
+    State(state): State<AppState>,
+    Json(payload): Json<DailyStatsRequest>,
+) -> MyceliumResult<Json<Vec<MonthlyCohortStats>>> {
+    let year_month = payload.year_month;
     if year_month.len() != 7 {
-        return Err(MyceliumError::Validation(
+        return Err(crate::error::MyceliumError::Validation(
             "Invalid year_month format (Expected YYYY-MM)".to_string(),
         ));
     }
@@ -384,16 +387,15 @@ pub async fn get_daily_sales_stats_by_month(
 
     let stats = sqlx::query_as::<_, MonthlyCohortStats>(sql)
         .bind(year_month)
-        .fetch_all(&*pool)
+        .fetch_all(&state.pool)
         .await?;
 
-    Ok(stats)
+    Ok(Json(stats))
 }
 
-#[command]
 pub async fn get_top_profit_products(
-    state: State<'_, DbPool>,
-) -> MyceliumResult<Vec<ProfitAnalysisResult>> {
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<Vec<ProfitAnalysisResult>>> {
     let today = chrono::Local::now().date_naive();
     let sql = r#"
         SELECT 
@@ -421,16 +423,15 @@ pub async fn get_top_profit_products(
 
     let results = sqlx::query_as::<_, ProfitAnalysisResult>(sql)
         .bind(today)
-        .fetch_all(&*state)
+        .fetch_all(&state.pool)
         .await?;
 
-    Ok(results)
+    Ok(Json(results))
 }
 
-#[command]
 pub async fn get_top3_products_by_qty(
-    state: State<'_, DbPool>,
-) -> MyceliumResult<Vec<ProductSalesStats>> {
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<Vec<ProductSalesStats>>> {
     let today = chrono::Local::now().date_naive();
     let query = r#"
         SELECT 
@@ -451,8 +452,8 @@ pub async fn get_top3_products_by_qty(
 
     let stats = sqlx::query_as::<_, ProductSalesStats>(query)
         .bind(today)
-        .fetch_all(&*state)
+        .fetch_all(&state.pool)
         .await?;
 
-    Ok(stats)
+    Ok(Json(stats))
 }

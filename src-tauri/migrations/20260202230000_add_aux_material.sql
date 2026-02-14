@@ -1,2 +1,0 @@
-ALTER TABLE products ADD COLUMN IF NOT EXISTS aux_material_id INTEGER REFERENCES products(product_id);
-ALTER TABLE products ADD COLUMN IF NOT EXISTS aux_material_ratio DOUBLE PRECISION DEFAULT 1.0;

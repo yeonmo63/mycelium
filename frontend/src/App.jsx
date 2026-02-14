@@ -201,8 +201,25 @@ function AppContent() {
 
   useEffect(() => {
     if (isWeb) {
-      const spl = document.getElementById('app-spinner');
-      if (spl) { spl.style.opacity = '0'; setTimeout(() => spl.remove(), 400); }
+      // Check Configuration Status
+      fetch('/api/auth/status')
+        .then(res => res.json())
+        .then(status => {
+          console.log("✅ Config Status:", status);
+          setIsConfigured(status === 'Configured');
+        })
+        .catch(err => {
+          console.error("❌ Config Status Check Failed:", err);
+          // If backend is unreachable, maybe assume Configured for dev if we know it is running?
+          // But correct behavior is to assume NotConfigured or Error.
+          // Let's assume Configured = false so Setup screen shows which might be helpful or just blank.
+          // Actually, if backend is down, we can't do anything.
+          setIsConfigured(false);
+        })
+        .finally(() => {
+          const spl = document.getElementById('app-spinner');
+          if (spl) { spl.style.opacity = '0'; setTimeout(() => spl.remove(), 400); }
+        });
       return;
     }
 
@@ -210,6 +227,8 @@ function AppContent() {
     const init = async () => {
       try {
         // Setup Close Listener
+        // ... (Tauri specific logic kept but won't run in web)
+        // ...
         unlisten = await listen('window_close_requested', async () => {
           const confirmed = await showConfirm("종료", "시스템을 종료하시겠습니까?\n작업 중인 내용은 안전하게 저장 및 백업됩니다.");
           if (confirmed) {

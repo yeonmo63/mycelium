@@ -54,8 +54,10 @@ const Login = ({ onLoginSuccess }) => {
         setIsLoading(true);
 
         try {
+            const isWeb = !window.__TAURI__;
+
             // Check if we are in a mobile browser (no Tauri bridge)
-            if (!window.__TAURI__ && window.location.pathname.startsWith('/mobile-')) {
+            if (isWeb && window.location.pathname.startsWith('/mobile-')) {
                 console.log("Mobile browser detected. Entering Preview Mode.");
                 sessionStorage.setItem('isLoggedIn', 'true');
                 sessionStorage.setItem('userId', '999');
@@ -70,10 +72,28 @@ const Login = ({ onLoginSuccess }) => {
                 return;
             }
 
-            const response = await invoke('login', {
-                username: username.trim(),
-                password: password.trim()
-            });
+            let response;
+            if (isWeb) {
+                try {
+                    const res = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: username.trim(),
+                            password: password.trim()
+                        })
+                    });
+                    response = await res.json();
+                } catch (e) {
+                    console.error("Web Login Fetch Error:", e);
+                    throw e;
+                }
+            } else {
+                response = await invoke('login', {
+                    username: username.trim(),
+                    password: password.trim()
+                });
+            }
 
             if (response.success) {
                 sessionStorage.setItem('isLoggedIn', 'true');

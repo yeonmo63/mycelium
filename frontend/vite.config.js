@@ -5,13 +5,15 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
-  clearScreen: false,
   server: {
     port: 5173,
-    strictPort: true,
     host: true,
-    watch: {
-      ignored: ["**/src-tauri/**"],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 })
