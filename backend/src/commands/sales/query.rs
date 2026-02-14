@@ -1,9 +1,9 @@
 use crate::db::{DbPool, Sales};
 use crate::error::MyceliumResult;
 use chrono::NaiveDate;
-use tauri::{command, Manager, State};
+use crate::stubs::{command, Manager, State, check_admin};
 
-#[command]
+
 pub async fn get_daily_sales(
     state: State<'_, DbPool>,
     date: String,
@@ -28,7 +28,7 @@ pub async fn get_daily_sales(
         .await?)
 }
 
-#[command]
+
 pub async fn search_sales_by_any(
     state: State<'_, DbPool>,
     query: String,
@@ -55,7 +55,7 @@ pub async fn search_sales_by_any(
         .await?)
 }
 
-#[command]
+
 pub async fn get_sales_by_event_id_and_date_range(
     state: State<'_, DbPool>,
     event_id: String,
@@ -81,7 +81,7 @@ pub async fn get_sales_by_event_id_and_date_range(
         .await?)
 }
 
-#[command]
+
 pub async fn get_daily_receipts(
     state: State<'_, DbPool>,
     date: String,
@@ -107,7 +107,7 @@ pub async fn get_daily_receipts(
         .await?)
 }
 
-#[command]
+
 pub async fn get_sale_detail(
     state: State<'_, DbPool>,
     sales_id: String,
@@ -125,7 +125,7 @@ pub async fn get_sale_detail(
     .await?)
 }
 
-#[command]
+
 pub async fn get_customer_sales_on_date(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -150,7 +150,7 @@ pub async fn get_customer_sales_on_date(
     .await?)
 }
 
-#[command]
+
 pub async fn get_customer_sales_history(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -177,7 +177,7 @@ pub struct TaxReportItem {
     pub tax_exempt_value: i64,
 }
 
-#[command]
+
 pub async fn get_tax_report_v2(
     state: State<'_, DbPool>,
     start_date: String,
@@ -266,16 +266,17 @@ pub async fn get_tax_report_v2(
     Ok(rows)
 }
 
-#[command]
+
 pub async fn submit_tax_report(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     items: Vec<TaxReportItem>,
     start_date: String,
     end_date: String,
 ) -> MyceliumResult<String> {
     // 1. Get Config
     let config = crate::commands::config::get_tax_filing_config_for_ui(app.clone()).await?;
-    if config.api_key.is_empty() {
+    let api_key = config.get("api_key").and_then(|v| v.as_str()).unwrap_or("");
+    if api_key.is_empty() {
         return Err(crate::error::MyceliumError::Internal(
             "세무신고 API 키가 설정되지 않았습니다. 설정 > 외부 서비스 연동에서 키를 입력해주세요."
                 .to_string(),
@@ -293,9 +294,9 @@ pub async fn submit_tax_report(
         }
     }
 
-    // 3. Simulated Transmission (In real app, perform HTTP POST here)
-    // We would use reqwest or similar to call Popbill, Smartbill, etc.
-    let provider_name = match config.provider.as_str() {
+    // 3. Simulated Transmission
+    let provider = config.get("provider").and_then(|v| v.as_str()).unwrap_or("");
+    let provider_name = match provider {
         "sim_hometax" => "국세청 홈택스(모의)",
         "popbill" => "팝빌(연동)",
         "smartbill" => "스마트빌(연동)",
@@ -310,20 +311,10 @@ pub async fn submit_tax_report(
     println!("- Net VAT to pay: {}", total_sales_vat - total_purchase_vat);
 
     // 4. Log Action
-    if let Some(pool) = app.try_state::<crate::db::DbPool>() {
-        crate::commands::config::log_system_action(
-            &app,
-            &*pool,
-            "TAX_FILING",
-            Some("tax_reports"),
-            None,
-            Some(&format!(
-                "Submitted tax report via {}: {} ~ {}",
-                provider_name, start_date, end_date
-            )),
-        )
-        .await?;
-    }
+    tracing::info!(
+        "Submitted tax report via {}: {} ~ {}",
+        provider_name, start_date, end_date
+    );
 
     // 5. Success Message
     Ok(format!("{} 서비스를 통해 {} ~ {} 기간의 세무신고 자료({}) 전송에 성공하였습니다. (납부예정 세액: {}원)", 

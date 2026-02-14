@@ -3,11 +3,11 @@ use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 use chrono::Local;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
 use super::utils::{calculate_bom_tax_distribution, parse_date_safe};
 
-#[command]
+
 pub async fn create_sale(
     state: State<'_, DbPool>,
     customer_id: Option<String>,
@@ -98,7 +98,7 @@ pub async fn create_sale(
     Ok(sale_id)
 }
 
-#[command]
+
 pub async fn update_sale_status(
     state: State<'_, DbPool>,
     sales_id: String,
@@ -113,7 +113,7 @@ pub async fn update_sale_status(
     Ok(())
 }
 
-#[command]
+
 pub async fn cancel_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("UPDATE sales SET status = '취소' WHERE sales_id = $1")
@@ -123,7 +123,7 @@ pub async fn cancel_sale(state: State<'_, DbPool>, sales_id: String) -> Mycelium
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM sales WHERE sales_id = $1")
@@ -133,7 +133,7 @@ pub async fn delete_sale(state: State<'_, DbPool>, sales_id: String) -> Mycelium
     Ok(())
 }
 
-#[command]
+
 pub async fn update_sale(
     state: State<'_, DbPool>,
     sales_id: String,
@@ -261,7 +261,7 @@ pub async fn update_sale(
     Ok(())
 }
 
-#[command]
+
 pub async fn complete_shipment(
     state: State<'_, DbPool>,
     sales_id: String,

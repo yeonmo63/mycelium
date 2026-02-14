@@ -2,7 +2,7 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
 use chrono::NaiveDate;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct PendingShipment {
@@ -25,7 +25,7 @@ pub struct PendingShipment {
     pub tracking_number: Option<String>,
 }
 
-#[command]
+
 pub async fn get_shipments_by_status(
     state: State<'_, DbPool>,
     status: String,
@@ -108,7 +108,7 @@ pub async fn get_shipments_by_status(
     Ok(query.fetch_all(&*state).await?)
 }
 
-#[command]
+
 pub async fn get_shipping_base_date(state: State<'_, DbPool>) -> MyceliumResult<Option<NaiveDate>> {
     Ok(
         sqlx::query_scalar(

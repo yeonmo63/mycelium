@@ -1,7 +1,7 @@
 // AI Error Handler Utility
 // Detects AI quota exceeded errors and shows user-friendly modal
 
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge as invoke } from './apiBridge';
 
 /**
  * Wrapper for AI-related invoke calls with quota error handling

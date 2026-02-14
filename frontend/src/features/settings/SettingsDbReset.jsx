@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import {
@@ -333,7 +333,7 @@ const SettingsDbReset = () => {
 
     const fetchCustomPresets = async () => {
         try {
-            const data = await invoke('get_custom_presets');
+            const data = await callBridge('get_custom_presets');
             setCustomPresets(data.map(cp => ({
                 id: `custom_${cp.preset_id}`,
                 name: cp.name,
@@ -363,7 +363,7 @@ const SettingsDbReset = () => {
     const handleSaveCurrent = async ({ name, description }) => {
         setLoading(true);
         try {
-            await invoke('save_current_as_preset', { name, description });
+            await callBridge('save_current_as_preset', { name, description });
             setShowSaveModal(false);
             await showAlert("저장 완료", "현재 구성이 커스텀 프리셋으로 저장되었습니다.");
             fetchCustomPresets();
@@ -380,7 +380,7 @@ const SettingsDbReset = () => {
         if (await showConfirm("삭제 확인", "이 커스텀 프리셋을 정말 삭제하시겠습니까?")) {
             setLoading(true);
             try {
-                await invoke('delete_custom_preset', { presetId: dbId });
+                await callBridge('delete_custom_preset', { presetId: dbId });
                 fetchCustomPresets();
                 if (selectedPreset === `custom_${dbId}`) setSelectedPreset(null);
             } catch (error) {
@@ -397,7 +397,7 @@ const SettingsDbReset = () => {
 
         setLoading(true);
         try {
-            const data = await invoke('get_preset_data', { presetType: selectedPreset });
+            const data = await callBridge('get_preset_data', { presetType: selectedPreset });
             setPreviewData(data);
             setShowPreview(true);
         } catch (error) {
@@ -411,7 +411,7 @@ const SettingsDbReset = () => {
     const handleApply = async () => {
         setLoading(true);
         try {
-            await invoke('apply_preset', { presetType: selectedPreset });
+            await callBridge('apply_preset', { presetType: selectedPreset });
             setShowPreview(false);
             await showAlert("적용 완료", "프리셋 데이터가 성공적으로 반영되었습니다.");
             navigate('/settings/product-list');
@@ -436,7 +436,7 @@ const SettingsDbReset = () => {
 
         setLoading(true);
         try {
-            const msg = await invoke('reset_database');
+            const msg = await callBridge('reset_database');
             await showAlert('초기화 완료', msg);
             setConfirmText('');
             fetchCustomPresets();

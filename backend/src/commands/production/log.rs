@@ -1,9 +1,9 @@
 use crate::db::{DbPool, FarmingLog};
 use crate::error::MyceliumResult;
 use sqlx::{query, query_as};
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_farming_logs(
     state: State<'_, DbPool>,
     batch_id: Option<i32>,
@@ -11,7 +11,7 @@ pub async fn get_farming_logs(
     start_date: Option<String>,
     end_date: Option<String>,
 ) -> MyceliumResult<Vec<FarmingLog>> {
-    let pool = state.inner();
+    let pool = &*state;
 
     let logs = query_as::<_, FarmingLog>(
         "SELECT * FROM farming_logs 
@@ -31,9 +31,9 @@ pub async fn get_farming_logs(
     Ok(logs)
 }
 
-#[command]
+
 pub async fn save_farming_log(state: State<'_, DbPool>, log: FarmingLog) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     if log.log_id > 0 {
         query(
             "UPDATE farming_logs SET batch_id = $1, space_id = $2, log_date = $3, worker_name = $4, work_type = $5, work_content = $6, input_materials = $7, env_data = $8, photos = $9, updated_at = CURRENT_TIMESTAMP WHERE log_id = $10"
@@ -69,9 +69,9 @@ pub async fn save_farming_log(state: State<'_, DbPool>, log: FarmingLog) -> Myce
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_farming_log(state: State<'_, DbPool>, log_id: i32) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     query("DELETE FROM farming_logs WHERE log_id = $1")
         .bind(log_id)
         .execute(pool)

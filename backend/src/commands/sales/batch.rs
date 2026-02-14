@@ -3,7 +3,7 @@ use crate::error::MyceliumResult;
 use crate::DB_MODIFIED;
 use chrono::{Local, NaiveDate};
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
 use super::utils::calculate_bom_tax_distribution;
 
@@ -173,7 +173,7 @@ pub async fn handle_bom_stock_change(
     Ok(())
 }
 
-#[command]
+
 pub async fn save_special_sales_batch(
     state: State<'_, DbPool>,
     event: SpecialEventInput,
@@ -728,7 +728,7 @@ pub struct GeneralSalesBatchItem {
     pub isDirty: String,
 }
 
-#[command]
+
 pub async fn save_general_sales_batch(
     state: State<'_, DbPool>,
     items: Vec<GeneralSalesBatchItem>,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge as invoke } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { invokeAI } from '../../utils/aiErrorHandler';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
@@ -86,35 +86,31 @@ const SettingsApiKeys = () => {
         if (isAuthorized) {
             const loadConfigs = async () => {
                 try {
-                    const geminiKey = await invoke('get_gemini_api_key_for_ui');
-                    const smsConfig = await invoke('get_sms_config_for_ui');
-                    const naverId = await invoke('get_naver_client_id_for_ui');
-                    const mallConfig = await invoke('get_mall_config_for_ui');
-                    const courierConfig = await invoke('get_courier_config_for_ui');
-                    const taxConfig = await invoke('get_tax_filing_config_for_ui');
+                    const config = await invoke('get_all_integrations_config');
 
                     setFormData(prev => ({
                         ...prev,
-                        gemini_api_key: geminiKey || '',
-                        sms_api_key: smsConfig?.api_key || '',
-                        sms_sender_number: smsConfig?.sender_number || '',
-                        sms_provider: smsConfig?.provider || 'aligo',
-                        naver_client_id: naverId || '',
-                        naver_commerce_id: mallConfig?.naver_commerce_id || '',
-                        naver_commerce_secret: mallConfig?.naver_commerce_secret || '',
-                        coupang_access_key: mallConfig?.coupang_access_key || '',
-                        coupang_secret_key: mallConfig?.coupang_secret_key || '',
-                        coupang_vendor_id: mallConfig?.coupang_vendor_id || '',
-                        sabangnet_api_key: mallConfig?.sabangnet_api_key || '',
-                        sabangnet_id: mallConfig?.sabangnet_id || '',
-                        playauto_api_key: mallConfig?.playauto_api_key || '',
-                        playauto_id: mallConfig?.playauto_id || '',
-                        courier_provider: courierConfig?.provider || 'sweettracker',
-                        courier_api_key: courierConfig?.api_key || '',
-                        courier_client_id: courierConfig?.client_id || '',
-                        tax_provider: taxConfig?.provider || 'sim_hometax',
-                        tax_api_key: taxConfig?.api_key || '',
-                        tax_client_id: taxConfig?.client_id || ''
+                        gemini_api_key: config.gemini_api_key || '',
+                        sms_api_key: config.sms?.apiKey || '',
+                        sms_sender_number: config.sms?.senderNumber || '',
+                        sms_provider: config.sms?.provider || 'aligo',
+                        naver_client_id: config.naver?.clientId || '',
+                        naver_client_secret: config.naver?.clientSecret || '',
+                        naver_commerce_id: config.mall?.naver_commerce_id || '',
+                        naver_commerce_secret: config.mall?.naver_commerce_secret || '',
+                        coupang_access_key: config.mall?.coupang_access_key || '',
+                        coupang_secret_key: config.mall?.coupang_secret_key || '',
+                        coupang_vendor_id: config.mall?.coupang_vendor_id || '',
+                        sabangnet_api_key: config.mall?.sabangnet_api_key || '',
+                        sabangnet_id: config.mall?.sabangnet_id || '',
+                        playauto_api_key: config.mall?.playauto_api_key || '',
+                        playauto_id: config.mall?.playauto_id || '',
+                        courier_provider: config.courier?.provider || 'sweettracker',
+                        courier_api_key: config.courier?.api_key || '',
+                        courier_client_id: config.courier?.client_id || '',
+                        tax_provider: config.tax?.provider || 'sim_hometax',
+                        tax_api_key: config.tax?.api_key || '',
+                        tax_client_id: config.tax?.client_id || ''
                     }));
                 } catch (err) {
                     console.error("Failed to load configs:", err);

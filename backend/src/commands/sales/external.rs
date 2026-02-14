@@ -1,6 +1,6 @@
 use crate::error::{MyceliumError, MyceliumResult};
 use std::fs;
-use tauri::{command, AppHandle, Manager};
+use crate::stubs::{command, AppHandle, Manager, check_admin};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,7 +16,7 @@ pub struct MallOrderItem {
     pub unit_price: i32,
 }
 
-#[command]
+
 pub async fn fetch_external_mall_orders(
     app: AppHandle,
     mall_type: String,

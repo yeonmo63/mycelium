@@ -9,3 +9,6 @@ pub use logic::*;
 pub use maintenance::*;
 pub use models::*;
 pub use status::*;
+
+pub mod web;
+pub use web::*;

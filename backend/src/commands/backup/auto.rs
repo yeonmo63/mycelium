@@ -1,22 +1,21 @@
 use crate::commands::backup::logic::{backup_database, backup_database_internal};
 use crate::commands::backup::models::AutoBackupItem;
 use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at};
-use crate::commands::config::check_admin;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::{BACKUP_CANCELLED, DB_MODIFIED, IS_EXITING};
 use chrono::Datelike;
 use std::sync::atomic::Ordering;
-use tauri::{command, AppHandle, Manager, State};
+use crate::stubs::{command, AppHandle, Manager, State, check_admin};
 
-#[command]
+
 pub async fn cancel_backup_restore() {
     BACKUP_CANCELLED.store(true, Ordering::Relaxed);
     println!("[System] Cancellation requested by user.");
 }
 
-#[command]
-pub async fn confirm_exit(app: tauri::AppHandle, skip_auto_backup: bool) -> MyceliumResult<()> {
+
+pub async fn confirm_exit(app: crate::stubs::AppHandle, skip_auto_backup: bool) -> MyceliumResult<()> {
     // Prevent re-entry
     if IS_EXITING.load(Ordering::Relaxed) {
         return Ok(());
@@ -74,9 +73,9 @@ pub async fn confirm_exit(app: tauri::AppHandle, skip_auto_backup: bool) -> Myce
     std::process::exit(0);
 }
 
-#[command]
+
 pub async fn trigger_auto_backup(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     state: State<'_, DbPool>,
 ) -> MyceliumResult<String> {
     if !DB_MODIFIED.load(Ordering::Relaxed) {
@@ -95,7 +94,7 @@ pub async fn trigger_auto_backup(
 
         match backup_database(
             app.clone(),
-            state.clone(),
+            &state,
             backup_path.to_string_lossy().to_string(),
             true, // is_incremental
             true, // use_compression (default)
@@ -120,7 +119,7 @@ pub async fn trigger_auto_backup(
                                             let ext_backup_path = ext_dir.join(backup_file_name);
                                             let _ = backup_database(
                                                 app.clone(),
-                                                state.clone(),
+                                                &state,
                                                 ext_backup_path.to_string_lossy().to_string(),
                                                 true, // is_incremental
                                                 true, // use_compression
@@ -191,8 +190,8 @@ pub fn format_and_push(
     });
 }
 
-#[command]
-pub async fn get_auto_backups(app: tauri::AppHandle) -> MyceliumResult<Vec<AutoBackupItem>> {
+
+pub async fn get_auto_backups(app: crate::stubs::AppHandle) -> MyceliumResult<Vec<AutoBackupItem>> {
     let mut list = Vec::new();
 
     if let Ok(config_dir) = app.path().app_config_dir() {
@@ -252,7 +251,7 @@ pub async fn get_auto_backups(app: tauri::AppHandle) -> MyceliumResult<Vec<AutoB
     Ok(list)
 }
 
-#[command]
+
 pub async fn run_daily_custom_backup(
     app: AppHandle,
     state: State<'_, DbPool>,
@@ -263,16 +262,16 @@ pub async fn run_daily_custom_backup(
     run_backup_logic(app, state, is_incremental, use_compression, true).await
 }
 
-#[command]
+
 pub async fn check_daily_backup(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     state: State<'_, DbPool>,
 ) -> MyceliumResult<String> {
     run_backup_logic(app, state, true, true, false).await
 }
 
 async fn run_backup_logic(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     state: State<'_, DbPool>,
     is_incremental: bool,
     use_compression: bool,
@@ -293,7 +292,7 @@ async fn run_backup_logic(
         if force || !daily_path.exists() {
             match backup_database(
                 app.clone(),
-                state.clone(),
+                &state,
                 daily_path.to_string_lossy().to_string(),
                 is_incremental,
                 use_compression,
@@ -358,7 +357,7 @@ async fn run_backup_logic(
     }
 }
 
-#[command]
+
 pub async fn delete_backup(app: AppHandle, path: String) -> MyceliumResult<()> {
     check_admin(&app)?;
     std::fs::remove_file(path)

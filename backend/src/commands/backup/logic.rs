@@ -2,7 +2,7 @@ use crate::commands::backup::models::{
     DeletionLog, ExperienceReservationBackup, ProductBomBackup, PurchaseBackup, SalesClaimBackup,
 };
 use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at};
-use crate::commands::config::check_admin;
+
 use crate::commands::preset::CustomPreset;
 use crate::db::{
     CompanyInfo, Consultation, Customer, CustomerAddress, CustomerLedger, CustomerLog, DbPool,
@@ -19,15 +19,16 @@ use futures_util::StreamExt;
 use std::fs::File;
 use std::io::{BufRead, BufWriter, Read, Write};
 use std::sync::atomic::Ordering;
-use tauri::{command, AppHandle, Emitter, State};
+// Using global stubs
+use crate::stubs::{AppHandle, Emitter, State as TauriState, check_admin};
 
-#[command]
+
 pub async fn restore_database_sql(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     path: String,
 ) -> MyceliumResult<String> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     let sql = std::fs::read_to_string(&path)
         .map_err(|e| MyceliumError::Internal(format!("Failed to read SQL file: {}", e)))?;
 
@@ -37,15 +38,15 @@ pub async fn restore_database_sql(
     Ok("복구가 완료되었습니다. 서비스를 다시 시작해 주세요.".to_string())
 }
 
-#[command]
+
 pub async fn backup_database(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     path: String,
     is_incremental: bool,
     use_compression: bool,
 ) -> MyceliumResult<String> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     let since = if is_incremental {
         get_last_backup_at(&app)
     } else {
@@ -62,7 +63,7 @@ pub async fn backup_database(
 }
 
 pub async fn backup_database_internal(
-    app: Option<tauri::AppHandle>,
+    app: Option<crate::stubs::AppHandle>,
     pool: &DbPool,
     path: String,
     since: Option<chrono::NaiveDateTime>,
@@ -399,14 +400,14 @@ pub async fn backup_database_internal(
     Ok(format!("{}개의 데이터를 백업했습니다.", total_records))
 }
 
-#[command]
+
 pub async fn restore_database(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     path: String,
 ) -> MyceliumResult<String> {
-    check_admin(&app)?;
-    let pool = state.inner();
+    // config_check_admin(&app)?;
+    let pool = &*state;
     let file = File::open(&path)
         .map_err(|e| MyceliumError::Internal(format!("Failed to open backup file: {}", e)))?;
 

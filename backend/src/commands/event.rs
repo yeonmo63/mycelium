@@ -4,9 +4,9 @@ use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 use chrono::{Local, NaiveDate};
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_last_event(state: State<'_, DbPool>) -> MyceliumResult<Option<Event>> {
     Ok(
         sqlx::query_as::<_, Event>("SELECT * FROM event ORDER BY created_at DESC LIMIT 1")
@@ -15,7 +15,7 @@ pub async fn get_last_event(state: State<'_, DbPool>) -> MyceliumResult<Option<E
     )
 }
 
-#[command]
+
 pub async fn create_event(
     state: State<'_, DbPool>,
     event_name: String,
@@ -93,7 +93,7 @@ pub async fn create_event(
     Ok(event_id)
 }
 
-#[command]
+
 pub async fn search_events_by_name(
     state: State<'_, DbPool>,
     name: String,
@@ -106,7 +106,7 @@ pub async fn search_events_by_name(
     .await?)
 }
 
-#[command]
+
 pub async fn update_event(
     state: State<'_, DbPool>,
     event_id: String,
@@ -166,7 +166,7 @@ pub async fn update_event(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_all_events(state: State<'_, DbPool>) -> MyceliumResult<Vec<Event>> {
     Ok(
         sqlx::query_as::<_, Event>("SELECT * FROM event ORDER BY start_date DESC")
@@ -175,7 +175,7 @@ pub async fn get_all_events(state: State<'_, DbPool>) -> MyceliumResult<Vec<Even
     )
 }
 
-#[command]
+
 pub async fn delete_event(state: State<'_, DbPool>, event_id: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM event WHERE event_id = $1")

@@ -4,7 +4,9 @@ use chrono::{Local, Timelike};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row};
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
+use crate::state::AppState;
+use axum::extract::{State as AxumState, Json};
 
 #[derive(Serialize, Deserialize, FromRow)]
 pub struct Sensor {
@@ -25,25 +27,25 @@ pub struct SensorReading {
     pub recorded_at: String,
 }
 
-#[command]
+
 pub async fn get_sensors(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sensor>> {
-    let pool = state.inner();
+    let pool = &*state;
     let sensors = sqlx::query_as::<_, Sensor>("SELECT sensor_id, sensor_name, space_id, device_type, connection_info, is_active FROM sensors WHERE is_active = TRUE")
         .fetch_all(pool)
         .await?;
     Ok(sensors)
 }
 
-#[command]
+
 pub async fn get_latest_readings(
     state: State<'_, DbPool>,
     sensor_ids: Vec<i32>,
 ) -> MyceliumResult<Vec<SensorReading>> {
-    let pool = state.inner();
+    let pool = &*state;
     let mut readings = Vec::new();
 
     for id in sensor_ids {
-        let record = sqlx::query(
+        let record: Option<sqlx::postgres::PgRow> = sqlx::query(
             "SELECT temperature, humidity, co2, recorded_at 
              FROM sensor_readings 
              WHERE sensor_id = $1 
@@ -118,12 +120,12 @@ fn get_virtual_simulation_data() -> VirtualSensorData {
     }
 }
 
-#[command]
+
 pub async fn get_virtual_sensor_data() -> MyceliumResult<VirtualSensorData> {
     Ok(get_virtual_simulation_data())
 }
 
-#[command]
+
 pub async fn push_sensor_data(
     state: State<'_, DbPool>,
     sensor_id: i32,
@@ -131,7 +133,7 @@ pub async fn push_sensor_data(
     humid: f64,
     co2: f64,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
 
     let t = rust_decimal::Decimal::from_f64_retain(temp).unwrap_or_default();
     let h = rust_decimal::Decimal::from_f64_retain(humid).unwrap_or_default();
@@ -150,9 +152,9 @@ pub async fn push_sensor_data(
     Ok(())
 }
 
-#[command]
+
 pub async fn save_sensor(state: State<'_, DbPool>, sensor: Sensor) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     if sensor.sensor_id > 0 {
         sqlx::query(
             "UPDATE sensors SET sensor_name = $1, space_id = $2, device_type = $3, connection_info = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP WHERE sensor_id = $6"
@@ -180,12 +182,77 @@ pub async fn save_sensor(state: State<'_, DbPool>, sensor: Sensor) -> MyceliumRe
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_sensor(state: State<'_, DbPool>, sensor_id: i32) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     sqlx::query("UPDATE sensors SET is_active = FALSE WHERE sensor_id = $1")
         .bind(sensor_id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+// Axum Handlers & Payloads
+
+#[derive(Deserialize)]
+pub struct SaveSensorPayload {
+    pub sensor: Sensor,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteSensorPayload {
+    pub sensor_id: i32,
+}
+
+pub async fn get_sensors_axum(
+    AxumState(state): AxumState<AppState>,
+) -> MyceliumResult<Json<Vec<Sensor>>> {
+    let sensors = sqlx::query_as::<_, Sensor>("SELECT sensor_id, sensor_name, space_id, device_type, connection_info, is_active FROM sensors WHERE is_active = TRUE")
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(sensors))
+}
+
+pub async fn save_sensor_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<SaveSensorPayload>,
+) -> MyceliumResult<Json<()>> {
+    let sensor = payload.sensor;
+    if sensor.sensor_id > 0 {
+        sqlx::query(
+            "UPDATE sensors SET sensor_name = $1, space_id = $2, device_type = $3, connection_info = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP WHERE sensor_id = $6"
+        )
+        .bind(&sensor.sensor_name)
+        .bind(sensor.space_id)
+        .bind(&sensor.device_type)
+        .bind(&sensor.connection_info)
+        .bind(sensor.is_active)
+        .bind(sensor.sensor_id)
+        .execute(&state.pool)
+        .await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO sensors (sensor_name, space_id, device_type, connection_info, is_active) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(&sensor.sensor_name)
+        .bind(sensor.space_id)
+        .bind(&sensor.device_type)
+        .bind(&sensor.connection_info)
+        .bind(sensor.is_active)
+        .execute(&state.pool)
+        .await?;
+    }
+    Ok(Json(()))
+}
+
+pub async fn delete_sensor_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<DeleteSensorPayload>,
+) -> MyceliumResult<Json<()>> {
+    sqlx::query("UPDATE sensors SET is_active = FALSE WHERE sensor_id = $1")
+        .bind(payload.sensor_id)
+        .execute(&state.pool)
+        .await?;
+    Ok(Json(()))
 }

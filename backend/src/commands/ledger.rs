@@ -5,9 +5,9 @@ use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_customer_ledger(
     state: State<'_, DbPool>,
     customerId: String,
@@ -51,7 +51,7 @@ pub async fn get_customer_ledger(
     }
 }
 
-#[command]
+
 pub async fn create_ledger_entry(
     state: State<'_, DbPool>,
     customerId: String,
@@ -104,7 +104,7 @@ pub async fn create_ledger_entry(
     Ok(row.0)
 }
 
-#[command]
+
 pub async fn update_ledger_entry(
     state: State<'_, DbPool>,
     ledgerId: i32,
@@ -165,7 +165,7 @@ pub async fn update_ledger_entry(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_ledger_entry(state: State<'_, DbPool>, ledgerId: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
@@ -197,7 +197,7 @@ pub async fn delete_ledger_entry(state: State<'_, DbPool>, ledgerId: i32) -> Myc
     Ok(())
 }
 
-#[command]
+
 pub async fn get_customers_with_debt(state: State<'_, DbPool>) -> MyceliumResult<Vec<Customer>> {
     // 1. Sync current_balance from ledger sum for all customers to ensure integrity
     // This repairs any discrepancies caused by manual edits or bugs.

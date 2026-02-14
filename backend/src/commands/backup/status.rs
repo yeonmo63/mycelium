@@ -2,9 +2,9 @@ use crate::commands::backup::models::DbLocationInfo;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use chrono::Datelike;
-use tauri::{command, Manager, State};
+use crate::stubs::{command, Manager, State, check_admin};
 
-#[command]
+
 pub async fn check_db_location(state: State<'_, DbPool>) -> MyceliumResult<DbLocationInfo> {
     let pool = &*state;
 
@@ -65,7 +65,7 @@ pub fn get_local_ip() -> Option<String> {
     None
 }
 
-pub fn get_last_backup_at(app: &tauri::AppHandle) -> Option<chrono::NaiveDateTime> {
+pub fn get_last_backup_at(app: &crate::stubs::AppHandle) -> Option<chrono::NaiveDateTime> {
     if let Ok(config_dir) = app.path().app_config_dir() {
         let config_path = config_dir.join("config.json");
         if config_path.exists() {
@@ -82,7 +82,7 @@ pub fn get_last_backup_at(app: &tauri::AppHandle) -> Option<chrono::NaiveDateTim
 }
 
 pub fn update_last_backup_at(
-    app: &tauri::AppHandle,
+    app: &crate::stubs::AppHandle,
     ts: chrono::NaiveDateTime,
 ) -> MyceliumResult<()> {
     let config_dir = app
@@ -104,8 +104,8 @@ pub fn update_last_backup_at(
     Ok(())
 }
 
-#[command]
-pub async fn get_backup_status(app: tauri::AppHandle) -> MyceliumResult<serde_json::Value> {
+
+pub async fn get_backup_status(app: crate::stubs::AppHandle) -> MyceliumResult<serde_json::Value> {
     let last_at = get_last_backup_at(&app);
     Ok(serde_json::json!({
         "last_backup_at": last_at.map(|ts| ts.format("%Y-%m-%dT%H:%M:%S").to_string()),
@@ -114,8 +114,8 @@ pub async fn get_backup_status(app: tauri::AppHandle) -> MyceliumResult<serde_js
     }))
 }
 
-#[command]
-pub fn get_internal_backup_path(app: tauri::AppHandle) -> MyceliumResult<String> {
+
+pub fn get_internal_backup_path(app: crate::stubs::AppHandle) -> MyceliumResult<String> {
     if let Ok(config_dir) = app.path().app_config_dir() {
         let daily_dir = config_dir.join("daily_backups");
         return Ok(daily_dir.to_string_lossy().to_string());

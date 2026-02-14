@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use crate::stubs::{AppHandle, Manager, check_admin};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 

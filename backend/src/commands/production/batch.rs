@@ -1,13 +1,13 @@
 use crate::db::{DbPool, ProductionBatch};
 use crate::error::MyceliumResult;
 use sqlx::{query, query_as};
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_production_batches(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<ProductionBatch>> {
-    let pool = state.inner();
+    let pool = &*state;
     let batches =
         query_as::<_, ProductionBatch>("SELECT * FROM production_batches ORDER BY start_date DESC")
             .fetch_all(pool)
@@ -15,12 +15,12 @@ pub async fn get_production_batches(
     Ok(batches)
 }
 
-#[command]
+
 pub async fn save_production_batch(
     state: State<'_, DbPool>,
     batch: ProductionBatch,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     if batch.batch_id > 0 {
         query(
             "UPDATE production_batches SET batch_code = $1, product_id = $2, space_id = $3, start_date = $4, end_date = $5, expected_harvest_date = $6, status = $7, initial_quantity = $8, unit = $9, updated_at = CURRENT_TIMESTAMP WHERE batch_id = $10"
@@ -56,12 +56,12 @@ pub async fn save_production_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_production_batch(
     state: State<'_, DbPool>,
     batch_id: i32,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     query("DELETE FROM production_batches WHERE batch_id = $1")
         .bind(batch_id)
         .execute(pool)

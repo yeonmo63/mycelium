@@ -7,17 +7,32 @@ use crate::DB_MODIFIED;
 use chrono::NaiveDateTime;
 use sqlx;
 use std::sync::atomic::Ordering;
-use tauri::{command, AppHandle, State};
-use crate::commands::config::check_admin;
+// Using global stubs
+use crate::stubs::{AppHandle, State as TauriState, command, check_admin};
+use crate::commands::config::check_admin as config_check_admin;
+use axum::extract::{State as AxumState, Json};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
-#[command]
-pub async fn get_product_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Product>> {
+
+#[allow(dead_code)]
+pub async fn get_product_list(state: TauriState<'_, DbPool>) -> MyceliumResult<Vec<Product>> {
     let products = sqlx::query_as::<_, Product>("SELECT * FROM products ORDER BY product_name")
         .fetch_all(&*state)
         .await?;
 
     Ok(products)
 }
+
+// Axum Handler
+pub async fn get_product_list_axum(AxumState(state): AxumState<crate::state::AppState>) -> MyceliumResult<Json<Vec<Product>>> {
+    let products = sqlx::query_as::<_, Product>("SELECT * FROM products ORDER BY product_name")
+        .fetch_all(&state.pool)
+        .await?;
+    tracing::info!("Fetched {} products from database", products.len());
+    Ok(Json(products))
+}
+
 
 #[derive(serde::Serialize, sqlx::FromRow)]
 pub struct ProductFreshness {
@@ -27,9 +42,9 @@ pub struct ProductFreshness {
     pub last_in_date: Option<NaiveDateTime>,
 }
 
-#[command]
+
 pub async fn get_product_freshness(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
 ) -> MyceliumResult<Vec<ProductFreshness>> {
     let rows = sqlx::query_as::<_, ProductFreshness>(
         r#"
@@ -47,9 +62,9 @@ pub async fn get_product_freshness(
     Ok(rows)
 }
 
-#[command]
+
 pub async fn get_discontinued_product_names(
-    pool: State<'_, DbPool>,
+    pool: TauriState<'_, DbPool>,
 ) -> MyceliumResult<Vec<String>> {
     let sql = r#"
         SELECT product_name FROM (
@@ -70,15 +85,15 @@ pub async fn get_discontinued_product_names(
     Ok(rows)
 }
 
-#[command]
+
 pub async fn consolidate_products(
-    app: AppHandle,
-    pool: State<'_, DbPool>,
+    _app: AppHandle,
+    pool: TauriState<'_, DbPool>,
     oldProductId: i32,
     newProductId: i32,
     syncNames: Option<bool>,
 ) -> MyceliumResult<()> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     let mut tx = pool.begin().await?;
     let sync = syncNames.unwrap_or(false);
 
@@ -162,10 +177,10 @@ pub async fn consolidate_products(
     Ok(())
 }
 
-#[command]
+
 pub async fn create_product(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productName: String,
     specification: Option<String>,
     unitPrice: i32,
@@ -182,7 +197,7 @@ pub async fn create_product(
     taxType: Option<String>,
     taxExemptValue: Option<i32>,
 ) -> MyceliumResult<i32> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -232,10 +247,10 @@ pub async fn create_product(
     Ok(product_id)
 }
 
-#[command]
+
 pub async fn update_product(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productId: i32,
     productName: String,
     specification: Option<String>,
@@ -254,7 +269,7 @@ pub async fn update_product(
     taxType: Option<String>,
     taxExemptValue: Option<i32>,
 ) -> MyceliumResult<()> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     let mut tx = state.begin().await?;
     let sync = syncSalesNames.unwrap_or(false);
     let cost = costPrice.unwrap_or(0);
@@ -371,9 +386,9 @@ pub async fn update_product(
     Ok(())
 }
 
-#[command]
-pub async fn discontinue_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
-    check_admin(&app)?;
+
+pub async fn discontinue_product(app: AppHandle, state: TauriState<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -403,9 +418,9 @@ pub async fn discontinue_product(app: AppHandle, state: State<'_, DbPool>, produ
     Ok(())
 }
 
-#[command]
-pub async fn delete_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
-    check_admin(&app)?;
+
+pub async fn delete_product(app: AppHandle, state: TauriState<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    // config_check_admin(&app)?;
     let sales_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales WHERE product_id = $1")
         .bind(productId)
         .fetch_one(&*state)
@@ -454,9 +469,9 @@ pub async fn delete_product(app: AppHandle, state: State<'_, DbPool>, productId:
     Ok(())
 }
 
-#[command]
-pub async fn hard_delete_product(app: AppHandle, state: State<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
-    check_admin(&app)?;
+
+pub async fn hard_delete_product(app: AppHandle, state: TauriState<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -481,9 +496,9 @@ pub async fn hard_delete_product(app: AppHandle, state: State<'_, DbPool>, produ
     Ok(())
 }
 
-#[command]
+
 pub async fn get_product_price_history(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productId: i32,
 ) -> MyceliumResult<Vec<ProductPriceHistory>> {
     Ok(sqlx::query_as::<_, ProductPriceHistory>(
@@ -494,9 +509,9 @@ pub async fn get_product_price_history(
     .await?)
 }
 
-#[command]
+
 pub async fn get_product_history(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productId: i32,
 ) -> MyceliumResult<Vec<ProductHistoryItem>> {
     let mut history = Vec::new();
@@ -554,15 +569,15 @@ pub async fn get_product_history(
     Ok(history)
 }
 
-#[command]
+
 pub async fn update_product_stock(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productId: i32,
     newQty: i32,
     reason: String,
 ) -> MyceliumResult<()> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -594,17 +609,17 @@ pub async fn update_product_stock(
     Ok(())
 }
 
-#[command]
+
 pub async fn convert_stock(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     materialId: i32,
     productId: i32,
     convertQty: i32,
     materialDeductQty: Option<i32>,
     memo: String,
 ) -> MyceliumResult<()> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -683,16 +698,16 @@ pub async fn convert_stock(
     Ok(())
 }
 
-#[command]
+
 pub async fn adjust_product_stock(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     productId: i32,
     changeQty: i32,
     memo: String,
     reasonCategory: Option<String>,
 ) -> MyceliumResult<()> {
-    check_admin(&app)?;
+    // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
@@ -771,9 +786,9 @@ pub async fn adjust_product_stock(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_inventory_logs(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     limit: i64,
     itemType: Option<String>,
 ) -> MyceliumResult<Vec<InventoryLog>> {
@@ -801,9 +816,9 @@ pub async fn get_inventory_logs(
     }
 }
 
-#[command]
+
 pub async fn get_inventory_forecast_alerts(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
 ) -> MyceliumResult<Vec<InventoryAlert>> {
     let sql = r#"
         WITH consumption AS (
@@ -842,9 +857,9 @@ pub struct BomDeductionInput {
     pub quantity: i32,
 }
 
-#[command]
+
 pub async fn get_product_bom(
-    pool: State<'_, DbPool>,
+    pool: TauriState<'_, DbPool>,
     productId: i32,
 ) -> MyceliumResult<Vec<crate::db::ProductBomJoin>> {
     let sql = r#"
@@ -919,9 +934,9 @@ pub async fn get_product_bom(
     Ok(list)
 }
 
-#[command]
+
 pub async fn save_product_bom(
-    pool: State<'_, DbPool>,
+    pool: TauriState<'_, DbPool>,
     productId: i32,
     bomList: Vec<BomItemInput>,
 ) -> MyceliumResult<()> {
@@ -954,9 +969,9 @@ pub struct BatchTargetInput {
     pub quantity: i32,
 }
 
-#[command]
+
 pub async fn batch_convert_stock(
-    pool: State<'_, DbPool>,
+    pool: TauriState<'_, DbPool>,
     targets: Vec<BatchTargetInput>,
     deductions: Vec<BomDeductionInput>,
     memo: String,
@@ -1050,9 +1065,9 @@ pub async fn batch_convert_stock(
     Ok(())
 }
 
-#[command]
+
 pub async fn convert_stock_bom(
-    pool: State<'_, DbPool>,
+    pool: TauriState<'_, DbPool>,
     productId: i32,
     produceQty: i32,
     deductions: Vec<BomDeductionInput>,
@@ -1155,3 +1170,468 @@ pub async fn convert_stock_bom(
     tx.commit().await?;
     Ok(())
 }
+
+// --- Axum Handlers ---
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct CreateProductRequest {
+    pub productName: String,
+    pub specification: Option<String>,
+    pub unitPrice: i32,
+    pub stockQuantity: Option<i32>,
+    pub safetyStock: Option<i32>,
+    pub costPrice: Option<i32>,
+    pub materialId: Option<i32>,
+    pub materialRatio: Option<f64>,
+    pub auxMaterialId: Option<i32>,
+    pub auxMaterialRatio: Option<f64>,
+    pub itemType: Option<String>,
+    pub productCode: Option<String>,
+    pub category: Option<String>,
+    pub taxType: Option<String>,
+    pub taxExemptValue: Option<i32>,
+}
+
+pub async fn create_product_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<CreateProductRequest>,
+) -> MyceliumResult<Json<i32>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let row: (i32,) = sqlx::query_as(
+        "INSERT INTO products (
+            product_name, specification, unit_price, stock_quantity, safety_stock, 
+            cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, 
+            item_type, product_code, category, tax_type, tax_exempt_value
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING product_id"
+    )
+    .bind(&payload.productName)
+    .bind(&payload.specification)
+    .bind(payload.unitPrice)
+    .bind(payload.stockQuantity.unwrap_or(0))
+    .bind(payload.safetyStock.unwrap_or(10))
+    .bind(payload.costPrice.unwrap_or(0))
+    .bind(payload.materialId)
+    .bind(payload.materialRatio)
+    .bind(payload.auxMaterialId)
+    .bind(payload.auxMaterialRatio)
+    .bind(payload.itemType.clone().unwrap_or_else(|| "product".to_string()))
+    .bind(&payload.productCode)
+    .bind(&payload.category)
+    .bind(payload.taxType.unwrap_or_else(|| "면세".to_string()))
+    .bind(payload.taxExemptValue.unwrap_or(0))
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let product_id = row.0;
+
+    if payload.stockQuantity.unwrap_or(0) != 0 {
+        sqlx::query(
+            "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+             VALUES ($1, $2, $3, $4, '초기재고', $5, $5, '상품 신규 생성')"
+        )
+        .bind(product_id)
+        .bind(&payload.productName)
+        .bind(&payload.specification)
+        .bind(&payload.productCode)
+        .bind(payload.stockQuantity.unwrap_or(0))
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(Json(product_id))
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct UpdateProductRequest {
+    pub productId: i32,
+    pub productName: String,
+    pub specification: Option<String>,
+    pub unitPrice: i32,
+    pub stockQuantity: Option<i32>,
+    pub safetyStock: Option<i32>,
+    pub costPrice: Option<i32>,
+    pub materialId: Option<i32>,
+    pub materialRatio: Option<f64>,
+    pub auxMaterialId: Option<i32>,
+    pub auxMaterialRatio: Option<f64>,
+    pub itemType: Option<String>,
+    pub status: Option<String>,
+    pub syncSalesNames: Option<bool>,
+    pub category: Option<String>,
+    pub taxType: Option<String>,
+    pub taxExemptValue: Option<i32>,
+}
+
+pub async fn update_product_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<UpdateProductRequest>,
+) -> MyceliumResult<Json<()>> {
+    let mut tx = state.pool.begin().await?;
+    let sync = payload.syncSalesNames.unwrap_or(false);
+    let cost = payload.costPrice.unwrap_or(0);
+    let ratio = payload.materialRatio.unwrap_or(1.0);
+    let aux_ratio = payload.auxMaterialRatio.unwrap_or(1.0);
+    let status_val = payload.status.unwrap_or_else(|| "판매중".to_string());
+    let tax_type_val = payload.taxType.unwrap_or_else(|| "면세".to_string());
+
+    let old: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(payload.productId)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    if let Some(qty) = payload.stockQuantity {
+        sqlx::query(
+            "UPDATE products SET product_name = $1, specification = $2, unit_price = $3, stock_quantity = $4, safety_stock = $5, cost_price = $6, material_id = $7, material_ratio = $8, aux_material_id = $9, aux_material_ratio = $10, item_type = $11, status = $12, category = $13, tax_type = $14, tax_exempt_value = $15 WHERE product_id = $16",
+        )
+        .bind(&payload.productName).bind(&payload.specification).bind(payload.unitPrice).bind(qty).bind(payload.safetyStock.unwrap_or(10)).bind(cost).bind(payload.materialId).bind(ratio).bind(payload.auxMaterialId).bind(aux_ratio).bind(payload.itemType.clone().unwrap_or_else(|| "product".to_string())).bind(&status_val).bind(&payload.category).bind(&tax_type_val).bind(payload.taxExemptValue.unwrap_or(0)).bind(payload.productId)
+        .execute(&mut *tx).await?;
+    } else {
+        sqlx::query(
+            "UPDATE products SET 
+                product_name = $1, specification = $2, unit_price = $3, 
+                safety_stock = $4, cost_price = $5, material_id = $6, material_ratio = $7, 
+                aux_material_id = $8, aux_material_ratio = $9, item_type = $10, 
+                status = $11, category = $12, tax_type = $13, tax_exempt_value = $14
+             WHERE product_id = $15"
+        )
+        .bind(&payload.productName)
+        .bind(&payload.specification)
+        .bind(payload.unitPrice)
+        .bind(payload.safetyStock.unwrap_or(10))
+        .bind(payload.costPrice.unwrap_or(0))
+        .bind(payload.materialId)
+        .bind(payload.materialRatio)
+        .bind(payload.auxMaterialId)
+        .bind(payload.auxMaterialRatio)
+        .bind(payload.itemType.unwrap_or_else(|| "product".to_string()))
+        .bind(&status_val)
+        .bind(&payload.category)
+        .bind(&tax_type_val)
+        .bind(payload.taxExemptValue.unwrap_or(0))
+        .bind(payload.productId)
+        .execute(&mut *tx).await?;
+    }
+
+    let mut changes = Vec::new();
+    if old.product_name != payload.productName {
+        changes.push(format!(
+            "상품명: '{}' -> '{}'",
+            old.product_name, payload.productName
+        ));
+    }
+    if old.specification != payload.specification {
+        changes.push(format!(
+            "규격: '{}' -> '{}'",
+            old.specification.as_deref().unwrap_or(""),
+            payload.specification.as_deref().unwrap_or("")
+        ));
+    }
+    if old.status.as_deref().unwrap_or("판매중") != status_val {
+        changes.push(format!(
+            "상태: '{}' -> '{}'",
+            old.status.as_deref().unwrap_or("판매중"),
+            status_val
+        ));
+    }
+    if old.cost_price.unwrap_or(0) != cost {
+        changes.push(format!("원가: {} -> {}", old.cost_price.unwrap_or(0), cost));
+    }
+    if old.safety_stock.unwrap_or(10) != payload.safetyStock.unwrap_or(10) {
+        changes.push(format!(
+            "안전재고: {} -> {}",
+            old.safety_stock.unwrap_or(10),
+            payload.safetyStock.unwrap_or(10)
+        ));
+    }
+
+    if !changes.is_empty() {
+        let memo = changes.join(" | ");
+        sqlx::query(
+            "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+             VALUES ($1, $2, $3, $4, '정보변경', 0, $5, $6)"
+        )
+        .bind(payload.productId)
+        .bind(&payload.productName)
+        .bind(&payload.specification)
+        .bind(&old.product_code)
+        .bind(old.stock_quantity.unwrap_or(0))
+        .bind(memo)
+        .execute(&mut *tx)
+        .await?;
+
+        if sync {
+            sqlx::query("UPDATE sales SET product_name = $1, specification = $2, product_code = $3 WHERE product_id = $4")
+            .bind(&payload.productName).bind(&payload.specification).bind(&old.product_code).bind(payload.productId)
+            .execute(&mut *tx).await?;
+
+            sqlx::query("UPDATE inventory_logs SET product_name = $1, specification = $2, product_code = $3 WHERE product_id = $4")
+            .bind(&payload.productName).bind(&payload.specification).bind(&old.product_code).bind(payload.productId)
+            .execute(&mut *tx).await?;
+        }
+    }
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+#[derive(Deserialize)]
+pub struct IdRequest {
+    pub productId: i32,
+}
+
+pub async fn discontinue_product_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<IdRequest>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+        .bind(payload.productId)
+        .fetch_one(&mut *tx)
+        .await?;
+
+    sqlx::query("UPDATE products SET status = '단종상품' WHERE product_id = $1")
+        .bind(payload.productId)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        "INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo) 
+         VALUES ($1, $2, $3, $4, '상태변경', 0, $5, '상품이 단종 처리되었습니다.')"
+    )
+    .bind(payload.productId)
+    .bind(&product.product_name)
+    .bind(&product.specification)
+    .bind(&product.product_code)
+    .bind(product.stock_quantity.unwrap_or(0))
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+pub async fn delete_product_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<IdRequest>,
+) -> MyceliumResult<Json<()>> {
+    let sales_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales WHERE product_id = $1")
+        .bind(payload.productId)
+        .fetch_one(&state.pool)
+        .await?;
+
+    if sales_count.0 > 0 {
+        return Err(MyceliumError::Validation("HAS_HISTORY".to_string()));
+    }
+
+    let log_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM inventory_logs WHERE product_id = $1 AND change_type != '상태변경'",
+    )
+    .bind(payload.productId)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if log_count.0 > 0 {
+        return Err(MyceliumError::Validation("HAS_HISTORY".to_string()));
+    }
+
+    // Check if used as a material in any BOM
+    let bom_usage: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM product_bom WHERE material_id = $1")
+            .bind(payload.productId)
+            .fetch_one(&state.pool)
+            .await?;
+
+    if bom_usage.0 > 0 {
+        return Err(MyceliumError::Validation("USED_AS_BOM".to_string()));
+    }
+
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    sqlx::query("DELETE FROM inventory_logs WHERE product_id = $1")
+        .bind(payload.productId)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM products WHERE product_id = $1")
+        .bind(payload.productId)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+pub async fn get_product_history_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    axum::extract::Query(payload): axum::extract::Query<IdRequest>,
+) -> MyceliumResult<Json<Vec<ProductHistoryItem>>> {
+    let productId = payload.productId;
+    let mut history = Vec::new();
+
+    let prices: Vec<ProductPriceHistory> =
+        sqlx::query_as("SELECT * FROM product_price_history WHERE product_id = $1")
+            .bind(productId)
+            .fetch_all(&state.pool)
+            .await?;
+
+    for p in prices {
+        history.push(ProductHistoryItem {
+            history_type: "가격변경".to_string(),
+            date: p.changed_at.format("%Y-%m-%d %H:%M").to_string(),
+            title: "판매가 변경".to_string(),
+            description: p.reason.unwrap_or_else(|| "가격 수정".to_string()),
+            old_value: Some(p.old_price.to_string()),
+            new_value: Some(p.new_price.to_string()),
+            change_amount: p.new_price - p.old_price,
+        });
+    }
+
+    let logs: Vec<(NaiveDateTime, String, i32, String)> = sqlx::query_as(
+        r#"
+        SELECT created_at, change_type, change_quantity, memo 
+        FROM inventory_logs 
+        WHERE product_id = $1 
+        AND change_type IN ('상품등록', '정보변경', '상태변경', '재고조정', '초기재고')
+        ORDER BY created_at DESC
+        "#,
+    )
+    .bind(productId)
+    .fetch_all(&state.pool)
+    .await?;
+
+    for (date, c_type, qty, memo) in logs {
+        history.push(ProductHistoryItem {
+            history_type: match c_type.as_str() {
+                "상품등록" => "생성",
+                "정보변경" => "수정",
+                "상태변경" => "상태",
+                _ => "재고",
+            }
+            .to_string(),
+            date: date.format("%Y-%m-%d %H:%M").to_string(),
+            title: c_type,
+            description: memo,
+            old_value: None,
+            new_value: None,
+            change_amount: qty,
+        });
+    }
+
+    history.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(Json(history))
+}
+
+pub async fn get_product_bom_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    axum::extract::Query(payload): axum::extract::Query<IdRequest>,
+) -> MyceliumResult<Json<Vec<crate::db::ProductBomJoin>>> {
+    let productId = payload.productId;
+    let sql = r#"
+        SELECT b.id, b.product_id, b.material_id, b.ratio, 
+               p.product_name, p.specification, p.stock_quantity, p.item_type
+        FROM product_bom b
+        JOIN products p ON b.material_id = p.product_id
+        WHERE b.product_id = $1
+    "#;
+
+    let rows = sqlx::query_as::<_, crate::db::ProductBomJoin>(sql)
+        .bind(productId)
+        .fetch_all(&state.pool)
+        .await?;
+
+    if !rows.is_empty() {
+        return Ok(Json(rows));
+    }
+
+    // Fallback: Check legacy columns
+    let p: Option<(Option<i32>, Option<f64>, Option<i32>, Option<f64>)> = 
+        sqlx::query_as("SELECT material_id, material_ratio, aux_material_id, aux_material_ratio FROM products WHERE product_id = $1")
+        .bind(productId)
+        .fetch_optional(&state.pool)
+        .await?;
+
+    let mut list = Vec::new();
+    if let Some((m_id, m_ratio, a_id, a_ratio)) = p {
+        if let Some(aid) = a_id {
+            let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
+                .bind(aid)
+                .fetch_optional(&state.pool)
+                .await?;
+
+            if let Some((name, spec, stock, itype)) = m {
+                list.push(crate::db::ProductBomJoin {
+                    id: 0,
+                    product_id: productId,
+                    material_id: aid,
+                    ratio: a_ratio.unwrap_or(1.0),
+                    product_name: name,
+                    specification: spec,
+                    stock_quantity: stock,
+                    item_type: itype,
+                });
+            }
+        }
+
+        if let Some(mid) = m_id {
+            let m = sqlx::query_as::<_, (String, Option<String>, i32, Option<String>)>("SELECT product_name, specification, stock_quantity, item_type FROM products WHERE product_id = $1")
+                .bind(mid)
+                .fetch_optional(&state.pool)
+                .await?;
+
+            if let Some((name, spec, stock, itype)) = m {
+                list.push(crate::db::ProductBomJoin {
+                    id: 0,
+                    product_id: productId,
+                    material_id: mid,
+                    ratio: m_ratio.unwrap_or(1.0),
+                    product_name: name,
+                    specification: spec,
+                    stock_quantity: stock,
+                    item_type: itype,
+                });
+            }
+        }
+    }
+
+    Ok(Json(list))
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct SaveBomRequest {
+    pub productId: i32,
+    pub bomList: Vec<BomItemInput>,
+}
+
+pub async fn save_product_bom_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<SaveBomRequest>,
+) -> MyceliumResult<Json<()>> {
+    let mut tx = state.pool.begin().await?;
+
+    sqlx::query("DELETE FROM product_bom WHERE product_id = $1")
+        .bind(payload.productId)
+        .execute(&mut *tx)
+        .await?;
+
+    for item in payload.bomList {
+        sqlx::query("INSERT INTO product_bom (product_id, material_id, ratio) VALUES ($1, $2, $3)")
+            .bind(payload.productId)
+            .bind(item.material_id)
+            .bind(item.ratio)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+

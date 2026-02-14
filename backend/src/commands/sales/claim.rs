@@ -3,9 +3,9 @@ use crate::error::MyceliumResult;
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_sales_claims(
     state: State<'_, DbPool>,
     start_date: Option<String>,
@@ -37,7 +37,7 @@ pub async fn get_sales_claims(
     Ok(rows)
 }
 
-#[command]
+
 pub async fn create_sales_claim(
     state: State<'_, DbPool>,
     sales_id: String,
@@ -64,7 +64,7 @@ pub async fn create_sales_claim(
     Ok(row.0)
 }
 
-#[command]
+
 pub async fn process_sales_claim(
     state: State<'_, DbPool>,
     claim_id: i32,
@@ -107,7 +107,7 @@ pub async fn process_sales_claim(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_sales_claim(state: State<'_, DbPool>, claim_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM sales_claims WHERE claim_id = $1")
@@ -117,7 +117,7 @@ pub async fn delete_sales_claim(state: State<'_, DbPool>, claim_id: i32) -> Myce
     Ok(())
 }
 
-#[command]
+
 pub async fn update_sales_claim(
     state: State<'_, DbPool>,
     claim_id: i32,

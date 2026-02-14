@@ -1,5 +1,5 @@
 use crate::db::{
-    DashboardStats, DbPool, MonthlyCohortStats, ProductSalesStats, ProfitAnalysisResult, Sales,
+    DashboardStats, MonthlyCohortStats, ProductSalesStats, ProfitAnalysisResult, Sales,
     TenYearSalesStats,
 };
 use crate::error::MyceliumResult;

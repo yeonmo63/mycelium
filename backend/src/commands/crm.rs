@@ -6,9 +6,9 @@ use crate::error::MyceliumResult;
 use crate::DB_MODIFIED;
 use std::fs;
 use std::sync::atomic::Ordering;
-use tauri::{command, Manager, State};
+use crate::stubs::{command, Manager, State, check_admin};
 
-#[command]
+
 pub async fn get_ltv_analysis(
     state: State<'_, DbPool>,
     limit: i64,
@@ -38,7 +38,7 @@ pub async fn get_ltv_analysis(
         .await?)
 }
 
-#[command]
+
 pub async fn get_churn_risk_customers(
     state: State<'_, DbPool>,
     days_threshold: i32,
@@ -70,7 +70,7 @@ pub async fn get_churn_risk_customers(
         .await?)
 }
 
-#[command]
+
 pub async fn get_rfm_analysis(state: State<'_, DbPool>) -> MyceliumResult<Vec<CustomerLifecycle>> {
     let raw_data = sqlx::query_as::<_, RawRfmData>(
         r#"
@@ -166,7 +166,7 @@ pub async fn get_rfm_analysis(state: State<'_, DbPool>) -> MyceliumResult<Vec<Cu
     Ok(results)
 }
 
-#[command]
+
 pub async fn update_customer_level(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -181,7 +181,7 @@ pub async fn update_customer_level(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_claim_customer_count(state: State<'_, DbPool>) -> MyceliumResult<i64> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT customer_id) FROM sales_claims")
         .fetch_one(&*state)
@@ -189,7 +189,7 @@ pub async fn get_claim_customer_count(state: State<'_, DbPool>) -> MyceliumResul
     Ok(count.0)
 }
 
-#[command]
+
 pub async fn get_claim_targets(state: State<'_, DbPool>) -> MyceliumResult<Vec<serde_json::Value>> {
     let list = sqlx::query_as::<_, (String, String, i64, i32)>(
         r#"
@@ -207,7 +207,7 @@ pub async fn get_claim_targets(state: State<'_, DbPool>) -> MyceliumResult<Vec<s
         .collect())
 }
 
-#[command]
+
 pub async fn get_special_care_customers(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<serde_json::Value>> {
@@ -226,9 +226,9 @@ pub async fn get_special_care_customers(
         .collect())
 }
 
-#[command]
+
 pub async fn send_sms_simulation(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     mode: String,
     recipients: Vec<String>,
     content: String,
@@ -314,7 +314,7 @@ pub async fn send_sms_simulation(
     }))
 }
 
-#[command]
+
 pub async fn get_repurchase_candidates(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<crate::db::RepurchaseCandidate>> {
@@ -342,7 +342,7 @@ pub async fn get_repurchase_candidates(
         .await?)
 }
 
-#[command]
+
 pub async fn get_product_associations(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<ProductAssociation>> {

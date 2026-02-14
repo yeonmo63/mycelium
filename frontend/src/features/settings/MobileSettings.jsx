@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge as invoke } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { Smartphone, Laptop, QrCode, Wifi, ShieldCheck, ArrowRight, Lock, Globe, Save, RefreshCw } from 'lucide-react';
 

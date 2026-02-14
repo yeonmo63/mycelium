@@ -3,9 +3,9 @@ use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use chrono::NaiveDate;
 use polars::prelude::*;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn sales_polars_analysis_v4(
     state: State<'_, DbPool>,
     year: i32,
@@ -165,7 +165,7 @@ pub async fn sales_polars_analysis_v4(
     }))
 }
 
-#[command]
+
 pub async fn get_all_time_customer_analysis(
     state: State<'_, DbPool>,
     year: i32,
@@ -328,7 +328,7 @@ pub async fn get_all_time_customer_analysis(
     }))
 }
 
-#[command]
+
 pub async fn get_sales_by_region_analysis(
     state: State<'_, DbPool>,
     year: i32,
@@ -446,7 +446,7 @@ pub async fn get_sales_by_region_analysis(
     Ok(serde_json::json!(result_list))
 }
 
-#[command]
+
 pub async fn get_order_value_distribution(
     state: State<'_, DbPool>,
     year: i32,
@@ -513,7 +513,7 @@ pub async fn get_order_value_distribution(
     Ok(serde_json::json!(result))
 }
 
-#[command]
+
 pub async fn get_sales_period_analysis(
     state: State<'_, DbPool>,
     start_date: String,

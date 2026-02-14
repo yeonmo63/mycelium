@@ -1,5 +1,4 @@
 #![allow(non_snake_case)]
-use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::AppState;
 use axum::{
@@ -39,6 +38,7 @@ pub async fn init_db_schema(state: State<'_, DbPool>) -> MyceliumResult<()> {
 }
 */
 
+#[allow(dead_code)]
 pub async fn open_external_url(Json(payload): Json<serde_json::Value>) -> MyceliumResult<Json<()>> {
     let url = payload.get("url").and_then(|v| v.as_str()).unwrap_or("");
     if !url.is_empty() {
@@ -49,7 +49,7 @@ pub async fn open_external_url(Json(payload): Json<serde_json::Value>) -> Myceli
 
 /*
 // Restart is not supported in standard web server typically, or requires supervisor
-pub async fn restart_app(app: tauri::AppHandle) {
+pub async fn restart_app(app: crate::stubs::AppHandle) {
     app.restart();
 }
 */
@@ -61,6 +61,7 @@ pub async fn save_qr_image(...) -> MyceliumResult<String> {
 }
 */
 
+#[allow(dead_code)]
 pub async fn generate_qr_code(_data: String) -> MyceliumResult<Json<String>> {
     Ok(Json("QR Code Logic Placeholder".to_string()))
 }

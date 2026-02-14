@@ -4,9 +4,9 @@ use crate::error::MyceliumResult;
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_schedules(
     state: State<'_, DbPool>,
     start_date: String,
@@ -23,7 +23,7 @@ pub async fn get_schedules(
     .await?)
 }
 
-#[command]
+
 pub async fn create_schedule(
     state: State<'_, DbPool>,
     title: String,
@@ -48,7 +48,7 @@ pub async fn create_schedule(
     Ok(id)
 }
 
-#[command]
+
 pub async fn update_schedule(
     state: State<'_, DbPool>,
     schedule_id: i32,
@@ -76,7 +76,7 @@ pub async fn update_schedule(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_schedule(state: State<'_, DbPool>, schedule_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM schedules WHERE schedule_id = $1")
@@ -86,7 +86,7 @@ pub async fn delete_schedule(state: State<'_, DbPool>, schedule_id: i32) -> Myce
     Ok(())
 }
 
-#[command]
+
 pub async fn get_upcoming_anniversaries(
     state: State<'_, DbPool>,
     days: i32,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import {
@@ -53,7 +53,7 @@ const SettingsUser = () => {
     const loadUsers = useCallback(async () => {
         setIsLoading(true);
         try {
-            const list = await invoke('get_all_users');
+            const list = await callBridge('get_all_users');
             setUsers(list || []);
         } catch (err) {
             console.error("Failed to load users:", err);
@@ -97,7 +97,7 @@ const SettingsUser = () => {
 
         try {
             if (editingUser) {
-                await invoke('update_user', {
+                await callBridge('update_user', {
                     id: editingUser.id,
                     username: formData.username,
                     password: formData.password || null,
@@ -109,7 +109,7 @@ const SettingsUser = () => {
                     showAlert('필수 입력', '비밀번호를 입력해주세요.');
                     return;
                 }
-                await invoke('create_user', {
+                await callBridge('create_user', {
                     username: formData.username,
                     password: formData.password,
                     role: formData.role
@@ -131,7 +131,7 @@ const SettingsUser = () => {
         }
         if (!await showConfirm('삭제 확인', `[${u.username}] 계정을 정말 삭제하시겠습니까?`)) return;
         try {
-            await invoke('delete_user', { id: u.id });
+            await callBridge('delete_user', { id: u.id });
 
             // If we deleted the user currently being edited, reset the form
             if (editingUser && editingUser.id === u.id) {

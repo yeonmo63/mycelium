@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import {
@@ -8,7 +8,8 @@ import {
     Save,
     Lock,
     Phone,
-    FileText
+    FileText,
+    CheckCircle2 as CheckCircle
 } from 'lucide-react';
 
 const SettingsCompany = () => {
@@ -51,7 +52,7 @@ const SettingsCompany = () => {
         if (isAuthorized) {
             const loadInfo = async () => {
                 try {
-                    const info = await invoke('get_company_info');
+                    const info = await callBridge('get_company_info');
                     if (info) {
                         setFormData({
                             company_name: info.company_name || '',
@@ -84,7 +85,7 @@ const SettingsCompany = () => {
 
         setIsLoading(true);
         try {
-            await invoke('save_company_info', {
+            await callBridge('save_company_info', {
                 companyName: formData.company_name,
                 representativeName: formData.representative_name || null,
                 phoneNumber: formData.phone_number || null,

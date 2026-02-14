@@ -1,9 +1,9 @@
 use crate::error::{MyceliumError, MyceliumResult};
-use tauri::{command, Manager};
+use crate::stubs::{command, Manager, check_admin};
 
-#[command]
+
 pub async fn upload_farming_photo(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     file_path: String,
 ) -> MyceliumResult<String> {
     let app_dir = app
@@ -29,8 +29,8 @@ pub async fn upload_farming_photo(
     Ok(file_name)
 }
 
-#[command]
-pub async fn get_media_base64(app: tauri::AppHandle, file_name: String) -> MyceliumResult<String> {
+
+pub async fn get_media_base64(app: crate::stubs::AppHandle, file_name: String) -> MyceliumResult<String> {
     let app_dir = app
         .path()
         .app_data_dir()

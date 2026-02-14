@@ -7,7 +7,7 @@ use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
@@ -32,7 +32,7 @@ pub struct SyncItem {
     pub quantity: i32,
 }
 
-#[command]
+
 pub async fn get_vendor_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Vendor>> {
     Ok(
         sqlx::query_as::<_, Vendor>("SELECT * FROM vendors ORDER BY vendor_name")
@@ -55,7 +55,7 @@ pub struct VendorInput {
     pub is_active: Option<bool>,
 }
 
-#[command]
+
 pub async fn save_vendor(state: State<'_, DbPool>, vendor: VendorInput) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     if let Some(id) = vendor.vendor_id {
@@ -74,7 +74,7 @@ pub async fn save_vendor(state: State<'_, DbPool>, vendor: VendorInput) -> Mycel
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_vendor(state: State<'_, DbPool>, vendor_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM vendors WHERE vendor_id = $1")
@@ -84,7 +84,7 @@ pub async fn delete_vendor(state: State<'_, DbPool>, vendor_id: i32) -> Mycelium
     Ok(())
 }
 
-#[command]
+
 pub async fn get_purchase_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Purchase>> {
     Ok(sqlx::query_as::<_, Purchase>(
         "SELECT p.*, v.vendor_name FROM purchases p LEFT JOIN vendors v ON p.vendor_id = v.vendor_id ORDER BY p.purchase_date DESC"
@@ -93,7 +93,7 @@ pub async fn get_purchase_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<P
     .await?)
 }
 
-#[command]
+
 pub async fn save_purchase(
     state: State<'_, DbPool>,
     purchase: PurchaseInput,
@@ -155,7 +155,7 @@ pub async fn save_purchase(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_purchase(state: State<'_, DbPool>, purchase_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM purchases WHERE purchase_id = $1")
@@ -165,7 +165,7 @@ pub async fn delete_purchase(state: State<'_, DbPool>, purchase_id: i32) -> Myce
     Ok(())
 }
 
-#[command]
+
 pub async fn get_expense_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Expense>> {
     Ok(
         sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY expense_date DESC")
@@ -184,7 +184,7 @@ pub struct ExpenseInput {
     pub memo: Option<String>,
 }
 
-#[command]
+
 pub async fn save_expense(state: State<'_, DbPool>, expense: ExpenseInput) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let e_date =
@@ -216,7 +216,7 @@ pub async fn save_expense(state: State<'_, DbPool>, expense: ExpenseInput) -> My
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_expense(state: State<'_, DbPool>, expense_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM expenses WHERE expense_id = $1")
@@ -234,7 +234,7 @@ pub struct MonthlyPL {
     pub profit: i64,
 }
 
-#[command]
+
 pub async fn get_monthly_pl_report(
     state: State<'_, DbPool>,
     year: i32,
@@ -304,7 +304,7 @@ pub struct CostBreakdownItem {
     pub percentage: f64,
 }
 
-#[command]
+
 pub async fn get_cost_breakdown_stats(
     state: State<'_, DbPool>,
     year: i32,
@@ -356,7 +356,7 @@ pub struct VendorRankItem {
     pub purchase_count: i64,
 }
 
-#[command]
+
 pub async fn get_vendor_purchase_ranking(
     state: State<'_, DbPool>,
     year: i32, // Added year param to match frontend call
@@ -379,7 +379,7 @@ pub async fn get_vendor_purchase_ranking(
     Ok(ranking)
 }
 
-#[command]
+
 pub async fn get_profit_margin_analysis(
     state: State<'_, DbPool>,
     year: i32,
@@ -441,7 +441,7 @@ pub struct MembershipSalesStats {
     pub total_amount: i64,
 }
 
-#[command]
+
 pub async fn get_membership_sales_analysis(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<MembershipSalesStats>> {
@@ -456,7 +456,7 @@ pub async fn get_membership_sales_analysis(
     Ok(analysis)
 }
 
-#[command]
+
 pub async fn get_product_sales_stats(
     pool: State<'_, DbPool>,
     year: Option<String>,
@@ -496,7 +496,7 @@ pub struct ProductMonthlyStat {
     pub total_amount: i64,
 }
 
-#[command]
+
 pub async fn get_product_monthly_analysis(
     state: State<'_, DbPool>,
     product_name: String,
@@ -513,7 +513,7 @@ pub async fn get_product_monthly_analysis(
         .await?)
 }
 
-#[command]
+
 pub async fn get_product_10yr_sales_stats(
     state: State<'_, DbPool>,
     product_name: String,

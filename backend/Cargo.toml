@@ -35,3 +35,4 @@ genpdf = { version = "0.2", features = ["images"] }
 image = "0.24"
 aes-gcm = "0.10.3"
 aead = "0.5.2"
+local-ip-address = "0.6.10"

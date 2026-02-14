@@ -5,7 +5,9 @@ use crate::DB_MODIFIED;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use sqlx::FromRow;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
+use axum::{extract::State as AxumState, Json};
+use crate::state::AppState;
 
 #[derive(Debug, serde::Serialize, FromRow)]
 pub struct ExpMonthlyTrend {
@@ -26,7 +28,7 @@ pub struct ExperienceDashboardStats {
     pub program_popularity: Vec<ExpProgramPopularity>,
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn get_experience_programs(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<ExperienceProgram>> {
@@ -37,7 +39,7 @@ pub async fn get_experience_programs(
     .await?)
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn create_experience_program(
     state: State<'_, DbPool>,
     program_name: String,
@@ -64,7 +66,7 @@ pub async fn create_experience_program(
     Ok(row.0)
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn update_experience_program(
     state: State<'_, DbPool>,
     program_id: i32,
@@ -92,7 +94,7 @@ pub async fn update_experience_program(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn delete_experience_program(
     state: State<'_, DbPool>,
     program_id: i32,
@@ -105,7 +107,7 @@ pub async fn delete_experience_program(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn get_experience_reservations(
     state: State<'_, DbPool>,
     start_date: Option<String>,
@@ -135,7 +137,7 @@ pub async fn get_experience_reservations(
     Ok(query.fetch_all(&*state).await?)
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn create_experience_reservation(
     state: State<'_, DbPool>,
     program_id: i32,
@@ -207,7 +209,7 @@ pub async fn create_experience_reservation(
     Ok(r_id)
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn update_experience_reservation(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -294,7 +296,7 @@ pub async fn update_experience_reservation(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn delete_experience_reservation(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -318,7 +320,7 @@ pub async fn delete_experience_reservation(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn update_experience_status(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -399,7 +401,7 @@ pub async fn update_experience_status(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn update_experience_payment_status(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -414,7 +416,7 @@ pub async fn update_experience_payment_status(
     Ok(())
 }
 
-#[command(rename_all = "snake_case")]
+
 pub async fn get_experience_dashboard_stats(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<ExperienceDashboardStats> {
@@ -462,4 +464,95 @@ pub async fn get_experience_dashboard_stats(
         monthly_trend,
         program_popularity,
     })
+}
+
+#[derive(serde::Deserialize)]
+pub struct CreateExpProgramPayload {
+    pub program_name: String,
+    pub description: Option<String>,
+    pub duration_min: i32,
+    pub max_capacity: i32,
+    pub price_per_person: i32,
+    pub is_active: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateExpProgramPayload {
+    pub program_id: i32,
+    pub program_name: String,
+    pub description: Option<String>,
+    pub duration_min: i32,
+    pub max_capacity: i32,
+    pub price_per_person: i32,
+    pub is_active: bool,
+}
+
+#[derive(serde::Deserialize)]
+pub struct DeleteExpProgramPayload {
+    pub program_id: i32,
+}
+
+pub async fn get_experience_programs_axum(
+    AxumState(state): AxumState<AppState>,
+) -> MyceliumResult<Json<Vec<ExperienceProgram>>> {
+    let programs = sqlx::query_as::<_, ExperienceProgram>(
+        "SELECT * FROM experience_programs ORDER BY program_name",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(programs))
+}
+
+pub async fn create_experience_program_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<CreateExpProgramPayload>,
+) -> MyceliumResult<Json<i32>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let row: (i32,) = sqlx::query_as(
+        "INSERT INTO experience_programs (program_name, description, duration_min, max_capacity, price_per_person, is_active) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING program_id",
+    )
+    .bind(payload.program_name)
+    .bind(payload.description)
+    .bind(payload.duration_min)
+    .bind(payload.max_capacity)
+    .bind(payload.price_per_person)
+    .bind(payload.is_active)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(row.0))
+}
+
+pub async fn update_experience_program_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<UpdateExpProgramPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    sqlx::query(
+        "UPDATE experience_programs SET program_name=$1, description=$2, duration_min=$3, max_capacity=$4, price_per_person=$5, is_active=$6 WHERE program_id=$7",
+    )
+    .bind(payload.program_name)
+    .bind(payload.description)
+    .bind(payload.duration_min)
+    .bind(payload.max_capacity)
+    .bind(payload.price_per_person)
+    .bind(payload.is_active)
+    .bind(payload.program_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(()))
+}
+
+pub async fn delete_experience_program_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<DeleteExpProgramPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    sqlx::query("DELETE FROM experience_programs WHERE program_id = $1")
+        .bind(payload.program_id)
+        .execute(&state.pool)
+        .await?;
+    Ok(Json(()))
 }

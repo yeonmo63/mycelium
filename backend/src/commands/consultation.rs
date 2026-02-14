@@ -4,9 +4,9 @@ use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn create_consultation(
     state: State<'_, DbPool>,
     customer_id: Option<String>,
@@ -60,7 +60,7 @@ pub async fn create_consultation(
     Ok(consult_id.0)
 }
 
-#[command]
+
 pub async fn get_consultations(
     state: State<'_, DbPool>,
     start_date: Option<String>,
@@ -85,7 +85,7 @@ pub async fn get_consultations(
     Ok(rows)
 }
 
-#[command]
+
 pub async fn update_consultation(
     state: State<'_, DbPool>,
     consult_id: i32,
@@ -120,7 +120,7 @@ pub async fn update_consultation(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_consultation(state: State<'_, DbPool>, consult_id: i32) -> MyceliumResult<()> {
     sqlx::query("DELETE FROM consultations WHERE consult_id=$1")
         .bind(consult_id)
@@ -138,7 +138,7 @@ pub struct PendingConsultation {
     pub priority: String,
 }
 
-#[command]
+
 pub async fn get_top_pending_consultations(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<PendingConsultation>> {

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../utils/apiBridge';
 import { useModal } from '../contexts/ModalContext';
 
 export const useAdminGuard = () => {
@@ -16,7 +16,7 @@ export const useAdminGuard = () => {
 
         setIsVerifying(true);
         try {
-            const isValid = await invoke('verify_admin_password', { password });
+            const isValid = await callBridge('verify_admin_password', { password });
             if (isValid) {
                 setIsAuthorized(true);
                 return true;
@@ -35,7 +35,7 @@ export const useAdminGuard = () => {
     const verifyPassword = useCallback(async (password) => {
         setIsVerifying(true);
         try {
-            const isValid = await invoke('verify_admin_password', { password });
+            const isValid = await callBridge('verify_admin_password', { password });
             if (isValid) {
                 setIsAuthorized(true);
                 return true;

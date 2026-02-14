@@ -1,13 +1,15 @@
 use crate::db::{DbPool, ProductionSpace};
 use crate::error::MyceliumResult;
 use sqlx::{query, query_as};
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
+use crate::state::AppState;
+use axum::extract::{State as AxumState, Json};
 
-#[command]
+
 pub async fn get_production_spaces(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<ProductionSpace>> {
-    let pool = state.inner();
+    let pool = &*state;
     let spaces =
         query_as::<_, ProductionSpace>("SELECT * FROM production_spaces ORDER BY space_id ASC")
             .fetch_all(pool)
@@ -15,12 +17,12 @@ pub async fn get_production_spaces(
     Ok(spaces)
 }
 
-#[command]
+
 pub async fn save_production_space(
     state: State<'_, DbPool>,
     space: ProductionSpace,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     if space.space_id > 0 {
         query(
             "UPDATE production_spaces SET space_name = $1, space_type = $2, location_info = $3, area_size = $4, area_unit = $5, is_active = $6, memo = $7, updated_at = CURRENT_TIMESTAMP WHERE space_id = $8"
@@ -52,15 +54,24 @@ pub async fn save_production_space(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_production_space(
     state: State<'_, DbPool>,
     space_id: i32,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     query("DELETE FROM production_spaces WHERE space_id = $1")
         .bind(space_id)
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn get_production_spaces_axum(
+    AxumState(state): AxumState<AppState>,
+) -> MyceliumResult<Json<Vec<ProductionSpace>>> {
+    let spaces = query_as::<_, ProductionSpace>("SELECT * FROM production_spaces ORDER BY space_id ASC")
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(spaces))
 }

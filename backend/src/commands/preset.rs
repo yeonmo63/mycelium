@@ -1,9 +1,12 @@
-use crate::commands::config::check_admin;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use tauri::{command, AppHandle, State};
+
+// Using global stubs
+use crate::stubs::{AppHandle, State as TauriState, command, check_admin};
+use crate::commands::config::check_admin as config_check_admin;
+use axum::extract::{State as AxumState, Json};
 
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct CustomPreset {
@@ -13,6 +16,7 @@ pub struct CustomPreset {
     pub preset_data: serde_json::Value,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
+
 
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]
 pub struct PresetProduct {
@@ -204,13 +208,36 @@ const TOMATO_PRESET_JSON: &str = r#"{
     ]
 }"#;
 
-#[command]
+
+#[allow(dead_code)]
 pub async fn apply_preset(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     preset_type: String,
 ) -> MyceliumResult<()> {
     check_admin(&app)?;
+    internal_apply_preset(&state, preset_type).await
+}
+
+#[derive(Deserialize)]
+pub struct ApplyPresetRequest {
+    pub presetType: String,
+}
+
+#[derive(Deserialize)]
+pub struct PresetQuery {
+    pub presetType: String,
+}
+
+pub async fn apply_preset_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<ApplyPresetRequest>,
+) -> MyceliumResult<Json<()>> {
+    internal_apply_preset(&state.pool, payload.presetType).await?;
+    Ok(Json(()))
+}
+
+async fn internal_apply_preset(pool: &sqlx::Pool<sqlx::Postgres>, preset_type: String) -> MyceliumResult<()> {
     let preset: Preset = if preset_type.starts_with("custom_") {
         let id_str = &preset_type[7..];
         let preset_id = id_str
@@ -219,7 +246,7 @@ pub async fn apply_preset(
         let row: (serde_json::Value,) =
             sqlx::query_as("SELECT preset_data FROM custom_presets WHERE preset_id = $1")
                 .bind(preset_id)
-                .fetch_one(&*state)
+                .fetch_one(pool)
                 .await?;
         serde_json::from_value(row.0)?
     } else {
@@ -234,7 +261,7 @@ pub async fn apply_preset(
         };
         serde_json::from_str(preset_json)?
     };
-    let mut tx = state.begin().await?;
+    let mut tx = pool.begin().await?;
 
     // 1. Insert Products
     for p in preset.products {
@@ -324,11 +351,24 @@ pub async fn apply_preset(
     Ok(())
 }
 
-#[command]
+
+#[allow(dead_code)]
 pub async fn get_preset_data(
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     preset_type: String,
 ) -> MyceliumResult<Preset> {
+    internal_get_preset_data(&state, preset_type).await
+}
+
+pub async fn get_preset_data_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    axum::extract::Query(payload): axum::extract::Query<PresetQuery>,
+) -> MyceliumResult<Json<Preset>> {
+    let preset = internal_get_preset_data(&state.pool, payload.presetType).await?;
+    Ok(Json(preset))
+}
+
+async fn internal_get_preset_data(pool: &sqlx::Pool<sqlx::Postgres>, preset_type: String) -> MyceliumResult<Preset> {
     if preset_type.starts_with("custom_") {
         let id_str = &preset_type[7..];
         let preset_id = id_str
@@ -337,7 +377,7 @@ pub async fn get_preset_data(
         let row: (serde_json::Value,) =
             sqlx::query_as("SELECT preset_data FROM custom_presets WHERE preset_id = $1")
                 .bind(preset_id)
-                .fetch_one(&*state)
+                .fetch_one(pool)
                 .await?;
         let preset: Preset = serde_json::from_value(row.0)?;
         return Ok(preset);
@@ -357,15 +397,34 @@ pub async fn get_preset_data(
     Ok(preset)
 }
 
-#[command]
+#[derive(Deserialize)]
+pub struct SavePresetRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+
+#[allow(dead_code)]
 pub async fn save_current_as_preset(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     name: String,
     description: Option<String>,
 ) -> MyceliumResult<i32> {
     check_admin(&app)?;
-    let mut conn = state.acquire().await?;
+    internal_save_current_as_preset(&state, name, description).await
+}
+
+pub async fn save_current_as_preset_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<SavePresetRequest>,
+) -> MyceliumResult<Json<i32>> {
+    let id = internal_save_current_as_preset(&state.pool, payload.name, payload.description).await?;
+    Ok(Json(id))
+}
+
+async fn internal_save_current_as_preset(pool: &sqlx::Pool<sqlx::Postgres>, name: String, description: Option<String>) -> MyceliumResult<i32> {
+    let mut conn = pool.acquire().await?;
 
     // 1. Fetch Products
     let products: Vec<PresetProduct> = sqlx::query_as(
@@ -424,25 +483,53 @@ pub async fn save_current_as_preset(
     Ok(row.0)
 }
 
-#[command]
-pub async fn get_custom_presets(state: State<'_, DbPool>) -> MyceliumResult<Vec<CustomPreset>> {
+
+#[allow(dead_code)]
+pub async fn get_custom_presets(state: TauriState<'_, DbPool>) -> MyceliumResult<Vec<CustomPreset>> {
+    internal_get_custom_presets(&state).await
+}
+
+pub async fn get_custom_presets_axum(AxumState(state): AxumState<crate::state::AppState>) -> MyceliumResult<Json<Vec<CustomPreset>>> {
+    let presets = internal_get_custom_presets(&state.pool).await?;
+    Ok(Json(presets))
+}
+
+async fn internal_get_custom_presets(pool: &sqlx::Pool<sqlx::Postgres>) -> MyceliumResult<Vec<CustomPreset>> {
     let presets =
         sqlx::query_as::<_, CustomPreset>("SELECT * FROM custom_presets ORDER BY created_at DESC")
-            .fetch_all(&*state)
+            .fetch_all(pool)
             .await?;
     Ok(presets)
 }
 
-#[command]
+#[derive(Deserialize)]
+pub struct DeletePresetRequest {
+    pub presetId: i32,
+}
+
+
+#[allow(dead_code)]
 pub async fn delete_custom_preset(
     app: AppHandle,
-    state: State<'_, DbPool>,
+    state: TauriState<'_, DbPool>,
     preset_id: i32,
 ) -> MyceliumResult<()> {
     check_admin(&app)?;
+    internal_delete_custom_preset(&state, preset_id).await
+}
+
+pub async fn delete_custom_preset_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<DeletePresetRequest>,
+) -> MyceliumResult<Json<()>> {
+    internal_delete_custom_preset(&state.pool, payload.presetId).await?;
+    Ok(Json(()))
+}
+
+async fn internal_delete_custom_preset(pool: &sqlx::Pool<sqlx::Postgres>, preset_id: i32) -> MyceliumResult<()> {
     sqlx::query("DELETE FROM custom_presets WHERE preset_id = $1")
         .bind(preset_id)
-        .execute(&*state)
+        .execute(pool)
         .await?;
     Ok(())
 }

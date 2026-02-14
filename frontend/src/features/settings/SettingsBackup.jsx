@@ -1,8 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useBlocker } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { save, open } from '@tauri-apps/plugin-dialog';
+import { callBridge as invoke } from '../../utils/apiBridge';
+// Safe wrappers for Web/Desktop compatibility
+const listen = async (event, handler) => {
+    if (window.__TAURI__) {
+        try {
+            const { listen: tauriListen } = await import('@tauri-apps/api/event');
+            return await tauriListen(event, handler);
+        } catch (e) { console.warn("Tauri event listen error", e); }
+    }
+    return () => { };
+};
+
+const open = async (options) => {
+    if (window.__TAURI__) {
+        try {
+            const { open: tauriOpen } = await import('@tauri-apps/plugin-dialog');
+            return await tauriOpen(options);
+        } catch (e) { console.warn("Tauri dialog open error", e); }
+    } else {
+        alert("웹 버전에서는 사용할 수 없는 기능입니다.");
+    }
+    return null;
+};
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
 import { Lock } from 'lucide-react';

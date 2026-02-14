@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use bcrypt;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};

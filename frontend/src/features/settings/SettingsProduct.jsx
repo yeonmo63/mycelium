@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { callBridge } from '../../utils/apiBridge';
 import { formatCurrency, formatDateTime } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import { useAdminGuard } from '../../hooks/useAdminGuard';
@@ -91,7 +91,7 @@ const SettingsProduct = () => {
     const loadProducts = useCallback(async () => {
         setIsLoading(true);
         try {
-            const list = await invoke('get_product_list');
+            const list = await callBridge('get_product_list');
             setAllProducts(list || []);
         } catch (err) {
             console.error("Failed to load products:", err);
@@ -132,7 +132,7 @@ const SettingsProduct = () => {
 
                 // Fetch real BOM list from backend
                 try {
-                    const boms = await invoke('get_product_bom', { productId: product.product_id });
+                    const boms = await callBridge('get_product_bom', { productId: product.product_id });
                     if (boms && boms.length > 0) {
                         initialBoms = boms.map(b => ({
                             materialId: b.material_id,
@@ -225,7 +225,7 @@ const SettingsProduct = () => {
         if (!sourceId) return;
         setImportSourceId(sourceId);
         try {
-            const boms = await invoke('get_product_bom', { productId: Number(sourceId) });
+            const boms = await callBridge('get_product_bom', { productId: Number(sourceId) });
             setSourceBoms(boms || []);
             // Default all selected
             setSelectedImports(boms.map(b => b.material_id));
@@ -304,7 +304,7 @@ const SettingsProduct = () => {
             let productId;
             if (editingProduct) {
                 productId = editingProduct.product_id;
-                await invoke('update_product', {
+                await callBridge('update_product', {
                     productId,
                     ...payload,
                     stockQuantity: null,
@@ -312,7 +312,7 @@ const SettingsProduct = () => {
                     syncSalesNames: formData.sync || false
                 });
             } else {
-                productId = await invoke('create_product', {
+                productId = await callBridge('create_product', {
                     ...payload,
                     stockQuantity: 0
                 });
@@ -323,7 +323,7 @@ const SettingsProduct = () => {
                 .filter(b => b.materialId && Number(b.materialId) > 0)
                 .map(b => ({ material_id: Number(b.materialId), ratio: Number(b.ratio) }));
 
-            await invoke('save_product_bom', { productId, bomList: validBoms });
+            await callBridge('save_product_bom', { productId, bomList: validBoms });
 
             closeModal();
             loadProducts();
@@ -338,7 +338,7 @@ const SettingsProduct = () => {
     const handleDelete = async (p) => {
         if (!await showConfirm('삭제 확인', `[${p.product_name}] 항목을 정말 삭제하시겠습니까?`)) return;
         try {
-            await invoke('delete_product', { productId: p.product_id });
+            await callBridge('delete_product', { productId: p.product_id });
             loadProducts();
             window.dispatchEvent(new Event('product-data-changed'));
         } catch (err) {
@@ -350,7 +350,7 @@ const SettingsProduct = () => {
 
                 if (confirmed) {
                     try {
-                        await invoke('discontinue_product', { productId: p.product_id });
+                        await callBridge('discontinue_product', { productId: p.product_id });
                         showAlert('처리 완료', '해당 상품이 단종 처리되었습니다.');
                         loadProducts();
                         window.dispatchEvent(new Event('product-data-changed'));
@@ -379,7 +379,7 @@ const SettingsProduct = () => {
     const loadPriceHistory = async (productId) => {
         setHistoryLoading(true);
         try {
-            const data = await invoke('get_product_history', { productId });
+            const data = await callBridge('get_product_history', { productId });
             setPriceHistory(data || []);
             setShowHistoryModal(true);
         } catch (err) {
@@ -402,7 +402,7 @@ const SettingsProduct = () => {
 
         setIsApplyingPreset(true);
         try {
-            await invoke('apply_preset', { presetType: presetId });
+            await callBridge('apply_preset', { presetType: presetId });
             showAlert("성공", "프리셋 데이터가 성공적으로 반영되었습니다.");
             loadProducts();
             setSelectedPreset('');

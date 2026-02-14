@@ -4,7 +4,7 @@ use crate::DB_MODIFIED;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
-use tauri::{command, Manager, State};
+use crate::stubs::{command, Manager, State, check_admin};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CourierStatus {
@@ -15,10 +15,10 @@ pub struct CourierStatus {
     pub updated_at: String,
 }
 
-#[command]
+
 pub async fn sync_courier_status(
     state: State<'_, DbPool>,
-    state_app: tauri::AppHandle,
+    state_app: crate::stubs::AppHandle,
     sales_id: String,
 ) -> MyceliumResult<CourierStatus> {
     // 1. Fetch sale and customer info
@@ -165,10 +165,10 @@ pub async fn sync_courier_status(
     ))
 }
 
-#[command]
+
 pub async fn batch_sync_courier_statuses(
     state: State<'_, DbPool>,
-    state_app: tauri::AppHandle,
+    state_app: crate::stubs::AppHandle,
 ) -> MyceliumResult<usize> {
     // Fetch all sales that are currently '배송중'
     let active_shipments: Vec<String> = sqlx::query_scalar(
@@ -180,7 +180,7 @@ pub async fn batch_sync_courier_statuses(
     let mut updated_count = 0;
     for sid in active_shipments {
         // Reuse simulation logic
-        let res = sync_courier_status(state.clone(), state_app.clone(), sid).await;
+        let res = sync_courier_status(&state, state_app.clone(), sid).await;
         if res.is_ok() {
             updated_count += 1;
         }

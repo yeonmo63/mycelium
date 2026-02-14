@@ -16,15 +16,15 @@ use crate::DB_MODIFIED;
 
 use sqlx;
 use std::sync::atomic::Ordering;
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_customer_ai_insight(
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     state: State<'_, DbPool>,
     customerId: String,
 ) -> MyceliumResult<AiCustomerInsight> {
-    let api_key = get_gemini_api_key(&app)
+    let api_key = get_gemini_api_key()
         .ok_or_else(|| MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".into()))?;
 
     // 1. Fetch Customer Info
@@ -104,7 +104,7 @@ pub async fn get_customer_ai_insight(
         .map_err(|e| MyceliumError::Internal(format!("AI 응답 파싱 실패: {}", e)))?)
 }
 
-#[command]
+
 pub async fn search_customers_by_name(
     state: State<'_, DbPool>,
     name: String,
@@ -117,7 +117,7 @@ pub async fn search_customers_by_name(
     .await?)
 }
 
-#[command]
+
 pub async fn search_customers_by_mobile(
     state: State<'_, DbPool>,
     mobile: String,
@@ -130,7 +130,7 @@ pub async fn search_customers_by_mobile(
     .await?)
 }
 
-#[command]
+
 pub async fn get_customer(
     state: State<'_, DbPool>,
     customerId: String,
@@ -143,7 +143,7 @@ pub async fn get_customer(
     )
 }
 
-#[command]
+
 pub async fn create_customer(
     state: State<'_, DbPool>,
     customerName: String,
@@ -216,7 +216,7 @@ pub async fn create_customer(
     Ok(new_id)
 }
 
-#[command]
+
 pub async fn update_customer(
     state: State<'_, DbPool>,
     customerId: String,
@@ -327,7 +327,7 @@ pub async fn update_customer(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_customer_logs(
     state: State<'_, DbPool>,
     customerId: String,
@@ -340,7 +340,7 @@ pub async fn get_customer_logs(
     .await?)
 }
 
-#[command]
+
 pub async fn delete_customer(state: State<'_, DbPool>, customerId: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("UPDATE customers SET status = '말소' WHERE customer_id = $1")
@@ -350,7 +350,7 @@ pub async fn delete_customer(state: State<'_, DbPool>, customerId: String) -> My
     Ok(())
 }
 
-#[command]
+
 pub async fn reactivate_customer(
     state: State<'_, DbPool>,
     customerId: String,
@@ -363,7 +363,7 @@ pub async fn reactivate_customer(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_customers_batch(
     state: State<'_, DbPool>,
     ids: Vec<String>,
@@ -395,7 +395,7 @@ pub async fn delete_customers_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn reactivate_customers_batch(
     state: State<'_, DbPool>,
     ids: Vec<String>,
@@ -408,7 +408,7 @@ pub async fn reactivate_customers_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn create_customer_address(
     state: State<'_, DbPool>,
     customerId: String,
@@ -455,7 +455,7 @@ pub async fn create_customer_address(
     Ok(row.0)
 }
 
-#[command]
+
 pub async fn update_customer_address(
     state: State<'_, DbPool>,
     addressId: i32,
@@ -509,7 +509,7 @@ pub async fn update_customer_address(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_customer_addresses(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -522,7 +522,7 @@ pub async fn get_customer_addresses(
     .await?)
 }
 
-#[command]
+
 pub async fn delete_customer_address(
     state: State<'_, DbPool>,
     address_id: i32,
@@ -535,7 +535,7 @@ pub async fn delete_customer_address(
     Ok(())
 }
 
-#[command]
+
 pub async fn set_default_customer_address(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -558,7 +558,7 @@ pub async fn set_default_customer_address(
     Ok(())
 }
 
-#[command]
+
 pub async fn search_customers_by_date(
     state: State<'_, DbPool>,
     start: String,
@@ -603,7 +603,7 @@ pub async fn search_customers_by_date(
     Ok(query.fetch_all(&*state).await?)
 }
 
-#[command]
+
 pub async fn search_dormant_customers(
     state: State<'_, DbPool>,
     daysThreshold: i32,
@@ -627,7 +627,7 @@ pub async fn search_dormant_customers(
         .await?)
 }
 
-#[command]
+
 pub async fn check_duplicate_customer(
     state: State<'_, DbPool>,
     name: String,
@@ -642,7 +642,7 @@ pub async fn check_duplicate_customer(
     .await?)
 }
 
-#[command]
+
 pub async fn search_best_customers(
     state: State<'_, DbPool>,
     minQty: i64,
@@ -684,7 +684,7 @@ pub async fn search_best_customers(
         .await?)
 }
 
-#[command]
+
 pub async fn update_customer_membership_batch(
     state: State<'_, DbPool>,
     customerIds: Vec<String>,
@@ -699,7 +699,7 @@ pub async fn update_customer_membership_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn update_customer_memo_batch(
     state: State<'_, DbPool>,
     customerIds: Vec<String>,
@@ -723,7 +723,7 @@ pub async fn update_customer_memo_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn get_sales_by_customer_id(
     state: State<'_, DbPool>,
     customer_id: String,

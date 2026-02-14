@@ -6,12 +6,12 @@ use printpdf::*;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
-use tauri::{command, Manager, State};
+use crate::stubs::{command, Manager, State, check_admin};
 
-#[command]
+
 pub async fn generate_production_pdf(
     state: State<'_, DbPool>,
-    app: tauri::AppHandle,
+    app: crate::stubs::AppHandle,
     save_path: String,
     start_date: String,
     end_date: String,
@@ -19,7 +19,7 @@ pub async fn generate_production_pdf(
     include_approval: bool,
     report_type: String,
 ) -> MyceliumResult<()> {
-    let pool = state.inner().clone();
+    let pool = (*state).clone();
 
     // 1. Fetch Data
     let company_info = sqlx::query_as::<_, crate::db::CompanyInfo>(

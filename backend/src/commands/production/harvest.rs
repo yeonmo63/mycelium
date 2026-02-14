@@ -2,14 +2,14 @@ use crate::db::{DbPool, HarvestRecord};
 use crate::error::MyceliumResult;
 use chrono::Local;
 use sqlx::{query, query_as};
-use tauri::{command, State};
+use crate::stubs::{command, State, check_admin};
 
-#[command]
+
 pub async fn get_harvest_records(
     state: State<'_, DbPool>,
     batch_id: Option<i32>,
 ) -> MyceliumResult<Vec<HarvestRecord>> {
-    let pool = state.inner();
+    let pool = &*state;
     let records = if let Some(bid) = batch_id {
         query_as::<_, HarvestRecord>(
             "SELECT * FROM harvest_records WHERE batch_id = $1 ORDER BY harvest_date DESC",
@@ -27,13 +27,13 @@ pub async fn get_harvest_records(
     Ok(records)
 }
 
-#[command]
+
 pub async fn save_harvest_record(
     state: State<'_, DbPool>,
     record: HarvestRecord,
     complete_batch: Option<bool>,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     let mut tx = pool.begin().await?;
 
     // 1. Get Product ID from Batch
@@ -177,12 +177,12 @@ pub async fn save_harvest_record(
     Ok(())
 }
 
-#[command]
+
 pub async fn save_harvest_batch(
     state: State<'_, DbPool>,
     records: Vec<HarvestRecord>,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     let mut tx = pool.begin().await?;
 
     for record in records {
@@ -288,12 +288,12 @@ pub async fn save_harvest_batch(
     Ok(())
 }
 
-#[command]
+
 pub async fn delete_harvest_record(
     state: State<'_, DbPool>,
     harvest_id: i32,
 ) -> MyceliumResult<()> {
-    let pool = state.inner();
+    let pool = &*state;
     query("DELETE FROM harvest_records WHERE harvest_id = $1")
         .bind(harvest_id)
         .execute(pool)
