@@ -26,8 +26,8 @@ const ReceptionFooter = ({ summary, handleReset, handlePrintStatement, handleSav
             </div>
             <div className="flex gap-3 h-12">
                 <button onClick={handleReset} className="px-6 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-black transition-all text-xs">초기화</button>
-                <button onClick={handlePrintStatement} disabled={!customer || salesRows.length === 0}
-                    className="px-6 rounded-xl bg-white border-2 border-slate-700 text-slate-700 hover:bg-slate-50 font-black transition-all text-xs flex items-center gap-2">
+                <button onClick={handlePrintStatement}
+                    className={`px-6 rounded-xl border-2 font-black transition-all text-xs flex items-center gap-2 ${(!customer || salesRows.length === 0) ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-50' : 'bg-white border-slate-700 text-slate-700 hover:bg-slate-50'}`}>
                     <span className="material-symbols-rounded text-lg">print</span> 거래명세서 출력
                 </button>
                 <button onClick={handleSaveAll} disabled={isProcessing || !customer}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useModal } from '../../contexts/ModalContext';
 import { invokeAI } from '../../utils/aiErrorHandler';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { handlePrintRaw } from '../../utils/printUtils';
 
 /**
  * OnlineReputation.jsx
@@ -140,7 +141,91 @@ const OnlineReputation = () => {
     };
 
     const handlePrint = () => {
-        window.print();
+        if (!analysisResult) {
+            showAlert('알림', '인쇄할 데이터가 없습니다. 먼저 분석을 실행해 주세요.');
+            return;
+        }
+
+        const title = `온라인 평판 분석 보고서 - ${companyInfo.name}`;
+        const html = `
+            <style>
+                @page { size: A4; margin: 20mm; }
+                .report-print-wrapper { font-family: 'Pretendard', sans-serif; padding: 20px; color: #334155; line-height: 1.6; }
+                .report-print-wrapper .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #7c3aed; padding-bottom: 20px; }
+                .report-print-wrapper .header h1 { margin: 0; font-size: 28px; font-weight: 900; color: #1e1b4b; }
+                .report-print-wrapper .header p { margin: 10px 0 0; font-weight: bold; font-size: 14px; color: #64748b; }
+                .report-print-wrapper .score-section { display: flex; justify-content: space-around; align-items: center; margin-bottom: 40px; background: #f5f3ff; padding: 30px; rounded: 20px; border: 1px solid #ddd6fe; }
+                .report-print-wrapper .score-box { text-align: center; }
+                .report-print-wrapper .score-label { font-size: 12px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.1em; }
+                .report-print-wrapper .score-value { font-size: 48px; font-weight: 900; color: #1e1b4b; }
+                .report-print-wrapper .verdict { font-size: 18px; font-weight: 800; color: #7c3aed; }
+                .report-print-wrapper .section-title { font-size: 18px; font-weight: 900; color: #1e1b4b; margin-bottom: 15px; border-left: 5px solid #7c3aed; padding-left: 12px; }
+                .report-print-wrapper .content-box { background: #fff; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
+                .report-print-wrapper .summary { font-size: 14px; white-space: pre-wrap; }
+                .report-print-wrapper .keyword-tag { display: inline-block; padding: 4px 12px; background: #ede9fe; color: #6d28d9; border-radius: 20px; font-size: 12px; font-weight: bold; margin: 4px; }
+                .report-print-wrapper table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 20px; }
+                .report-print-wrapper th, .report-print-wrapper td { border-bottom: 1px solid #e2e8f0; padding: 12px 8px; text-align: left; }
+                .report-print-wrapper th { color: #64748b; font-weight: 800; text-transform: uppercase; font-size: 10px; }
+                .report-print-wrapper .sentiment-pos { color: #059669; font-weight: bold; }
+                .report-print-wrapper .sentiment-neg { color: #dc2626; font-weight: bold; }
+                .footer { text-align: center; margin-top: 50px; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+            </style>
+            <div class="report-print-wrapper">
+                    <div class="header">
+                        <h1>온라인 AI 평판 분석 보고서</h1>
+                        <p>분석 대상: ${companyInfo.name} | 출력일시: ${new Date().toLocaleString()}</p>
+                    </div>
+                    
+                    <div class="score-section">
+                        <div class="score-box">
+                            <div class="score-label">Sentiment Score</div>
+                            <div class="score-value">${analysisResult.totalScore}점</div>
+                            <div class="verdict">${analysisResult.verdict}</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title">주요 언급 키워드</div>
+                    <div class="content-box">
+                        ${analysisResult.keywords.map(kw => `<span class="keyword-tag">#${kw.text}</span>`).join('')}
+                    </div>
+
+                    <div class="section-title">AI 종합 분석 요약</div>
+                    <div class="content-box summary">
+                        <strong>[제니의 진단]</strong><br/>
+                        ${analysisResult.summary}
+                    </div>
+
+                    <div class="section-title">최근 소셜 미디어 언급 (Top 10)</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>채널</th>
+                                <th>내용 요약</th>
+                                <th>감성</th>
+                                <th>영향력</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${mentions.slice(0, 10).map(m => `
+                                <tr>
+                                    <td>${m.date}</td>
+                                    <td style="font-weight:bold;">${m.channel}</td>
+                                    <td>${m.text}</td>
+                                    <td class="${m.sentiment === 'pos' ? 'sentiment-pos' : m.sentiment === 'neg' ? 'sentiment-neg' : ''}">
+                                        ${m.sentiment === 'pos' ? '긍정' : m.sentiment === 'neg' ? '부정' : '중립'}
+                                    </td>
+                                    <td>${m.score}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="footer">본 보고서는 Mycelium Social Intelligence 엔진에 의해 자동 생성되었습니다.</div>
+                </div>
+        `;
+
+        handlePrintRaw(html);
     };
 
     const handlePdfExport = async () => {

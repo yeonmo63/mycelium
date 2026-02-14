@@ -11,6 +11,7 @@ import ReceptionFooter from './components/reception/ReceptionFooter';
 import CustomerSelectionModal from './components/reception/CustomerSelectionModal';
 import QuickRegisterModal from './components/reception/QuickRegisterModal';
 import AddressLayer from './components/reception/AddressLayer';
+import TransactionStatementView from './components/reception/TransactionStatementView';
 
 const SalesReception = () => {
     const { showAlert, showConfirm } = useModal();
@@ -33,7 +34,10 @@ const SalesReception = () => {
         handleSaveAll,
         handleReset,
         handlePrintStatement,
+        closeStatement,
+        showStatement,
         handleCsvUpload,
+        companyInfo,
         summary,
         isDraftRestored,
         tempDraft,
@@ -183,6 +187,16 @@ const SalesReception = () => {
             />
 
             <AddressLayer isOpen={showAddrLayer} onClose={() => setShowAddrLayer(false)} />
+
+            <TransactionStatementView
+                isOpen={showStatement}
+                onClose={closeStatement}
+                customer={customer}
+                salesRows={salesRows}
+                companyInfo={companyInfo}
+                orderDate={orderDate}
+                summary={summary}
+            />
 
             {/* Draft Recovery Modal */}
             {tempDraft && (

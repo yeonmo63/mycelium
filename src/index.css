@@ -2,40 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 212.7 26.8% 83.9%;
+  --radius: 0.5rem;
+}
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+/* Desktop Dark Theme */
+html.is-desktop {
+  background-color: #020617;
+  color-scheme: dark !important;
+}
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+/* Mobile/Light Theme */
+html.is-mobile {
+  background-color: #f8fafc;
+  color-scheme: light !important;
+}
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-
-    --radius: 0.5rem;
-    color-scheme: dark;
-    /* Helps browser defaults */
-  }
+/* Global Print Mode Class - Final Override */
+html.printing-active,
+html.printing-active body,
+html.printing-active :root {
+  background: white !important;
+  background-color: white !important;
+  color: black !important;
+  color-scheme: light !important;
+  --background: 0 0% 100% !important;
+  /* Force Tailwind white */
+  --foreground: 222.2 84% 4.9% !important;
 }
 
 /* Force Autofill styles to match dark theme */
@@ -991,8 +1003,11 @@ button .material-symbols-rounded {
     overflow: visible !important;
   }
 
+  html,
   body {
     background: white !important;
+    color: black !important;
+    color-scheme: light !important;
     overflow: visible !important;
   }
 
@@ -1654,8 +1669,11 @@ body.modern-theme .status-badge {
     margin: 10mm;
   }
 
+  html,
   body {
-    background: white;
+    background: white !important;
+    color: black !important;
+    color-scheme: light !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -3530,5 +3548,65 @@ code {
   /* Ensure page breaks are handled */
   .page-break {
     page-break-after: always;
+  }
+}
+
+/* Robust Printing System for Tauri - Final Clean Version */
+@media print {
+
+  /* 1. Hide everything except print mount */
+  #root,
+  #app-root,
+  .tauri-drag-region,
+  #app-spinner {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body>*:not(#print-mount-point) {
+    display: none !important;
+  }
+
+  /* 2. Standard Layout Reset */
+  html,
+  body {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 3. Show Print Mount naturally */
+  #print-mount-point {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  /* 4. EXTREME FORCE: Ensure all text is black and visible */
+  #print-mount-point *,
+  .ultimate-print-wrapper * {
+    color: black !important;
+    background-color: transparent !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Keep background for specific elements if needed */
+  #print-mount-point th,
+  #print-mount-point .header,
+  #print-mount-point .report-section {
+    background-color: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact !important;
   }
 }

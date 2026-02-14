@@ -92,7 +92,9 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
             <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
 
                 {/* Header */}
-                <div className="bg-slate-900 px-6 py-4 flex justify-between items-center bg-[url('/patterns/grid.svg')]">
+                <div className="bg-slate-900 px-6 py-4 flex justify-between items-center relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-teal-400 via-slate-900 to-slate-900 pointer-events-none"></div>
+
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>

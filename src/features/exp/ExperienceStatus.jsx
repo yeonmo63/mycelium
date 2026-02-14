@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../contexts/ModalContext';
 import { formatPhoneNumber } from '../../utils/common';
+import { handlePrintRaw } from '../../utils/printUtils';
 
 const ExperienceStatus = () => {
     const { showAlert, showConfirm } = useModal();
@@ -242,23 +243,19 @@ const ExperienceStatus = () => {
 
         const title = `체험 예약 현황 (${filters.startDate} ~ ${filters.endDate})`;
         const html = `
-            <html>
-            <head>
-                <title>${title}</title>
-                <style>
-                    @page { size: A4 landscape; margin: 15mm; }
-                    body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; }
-                    .header { text-align: center; margin-bottom: 30px; }
-                    .header h1 { margin: 0; font-size: 24px; }
-                    .header p { margin: 5px 0 0; color: #666; font-size: 12px; }
-                    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-                    th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
-                    th { background: #f0f0f0; font-weight: bold; }
-                    .text-left { text-align: left; }
-                    .text-right { text-align: right; }
-                </style>
-            </head>
-            <body>
+            <style>
+                @page { size: A4 landscape; margin: 15mm; }
+                .report-print-wrapper { font-family: 'Malgun Gothic', sans-serif; padding: 20px; }
+                .report-print-wrapper .header { text-align: center; margin-bottom: 30px; }
+                .report-print-wrapper .header h1 { margin: 0; font-size: 24px; }
+                .report-print-wrapper .header p { margin: 5px 0 0; color: #666; font-size: 12px; }
+                .report-print-wrapper table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                .report-print-wrapper th, .report-print-wrapper td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+                .report-print-wrapper th { background: #f0f0f0; font-weight: bold; }
+                .report-print-wrapper .text-left { text-align: left; }
+                .report-print-wrapper .text-right { text-align: right; }
+            </style>
+            <div class="report-print-wrapper">
                 <div class="header">
                     <h1>체험 예약 현황</h1>
                 </div>
@@ -298,25 +295,10 @@ const ExperienceStatus = () => {
                         `).join('')}
                     </tbody>
                 </table>
-            </body>
-            </html>
+            </div>
         `;
 
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'absolute';
-        iframe.style.width = '0px';
-        iframe.style.height = '0px';
-        iframe.style.border = 'none';
-        document.body.appendChild(iframe);
-        const doc = iframe.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
-        iframe.contentWindow.focus();
-        setTimeout(() => {
-            iframe.contentWindow.print();
-            setTimeout(() => document.body.removeChild(iframe), 1000);
-        }, 500);
+        handlePrintRaw(html);
     };
 
     useEffect(() => {
@@ -577,7 +559,7 @@ const ExperienceStatus = () => {
                                     </tr>
                                 ) : (
                                     reservations.map(r => (
-                                        <tr key={r.reservation_id} className={`group hover:bg-slate-50/80 transition-all ${selectedIds.includes(r.reservation_id) ? 'bg-amber-50/30' : ''}`}>
+                                        <tr key={r.reservation_id} className={`group hover: bg - slate - 50 / 80 transition - all ${selectedIds.includes(r.reservation_id) ? 'bg-amber-50/30' : ''} `}>
                                             <td className="px-6 py-4 text-center">
                                                 <input
                                                     type="checkbox"
@@ -604,12 +586,12 @@ const ExperienceStatus = () => {
                                                 <div className="text-[10px] font-bold text-slate-400">{r.participant_count}명</div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`text-[10px] font-black px-2.5 py-1.5 rounded-full border shadow-sm inline-block min-w-[60px] text-center ${getStatusStyle(r.status)}`}>
+                                                <span className={`text - [10px] font - black px - 2.5 py - 1.5 rounded - full border shadow - sm inline - block min - w - [60px] text - center ${getStatusStyle(r.status)} `}>
                                                     {r.status}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`text-[10px] font-black px-2.5 py-1.5 rounded-full border shadow-sm inline-block min-w-[60px] text-center ${getPaymentStyle(r.payment_status)}`}>
+                                                <span className={`text - [10px] font - black px - 2.5 py - 1.5 rounded - full border shadow - sm inline - block min - w - [60px] text - center ${getPaymentStyle(r.payment_status)} `}>
                                                     {r.payment_status}
                                                 </span>
                                             </td>

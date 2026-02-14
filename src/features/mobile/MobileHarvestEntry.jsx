@@ -30,31 +30,51 @@ const MobileHarvestEntry = () => {
     const [isScanning, setIsScanning] = useState(false);
 
     const handleQrScan = () => {
+        const rawInput = prompt("배치 QR 코드를 스캔하세요.");
+        if (!rawInput) return;
+
+        const rawCode = rawInput.trim();
         setIsScanning(true);
-        // QR 스캔 시뮬레이션: 진행 중인 배치 중 하나를 랜덤하게 선택
         setTimeout(() => {
             setIsScanning(false);
-            if (batches.length > 0) {
-                const randomBatch = batches[Math.floor(Math.random() * batches.length)];
-                setFormData(prev => ({ ...prev, batch_id: randomBatch.batch_id }));
+            console.log("Harvest Scanned QR:", rawCode);
+
+            const parts = rawCode.split('|').map(p => p.trim());
+            let foundBatch = null;
+
+            if (parts[0] === 'BATCH' && parts[1]) {
+                const bid = parseInt(parts[1]);
+                foundBatch = batches.find(b => Number(b.batch_id) === bid);
             } else {
-                showAlert("스캔 실패", "선택할 수 있는 활성 배치가 없습니다.");
+                // Precise match by code
+                foundBatch = batches.find(b => b.batch_code === rawCode);
             }
-        }, 1200);
+
+            if (foundBatch) {
+                setFormData(prev => ({ ...prev, batch_id: foundBatch.batch_id }));
+            } else {
+                showAlert("인식 실패", `[${rawCode}] 배치 정보를 찾을 수 없습니다.`);
+            }
+        }, 300);
     };
 
     useEffect(() => {
         loadBatches();
     }, []);
 
+    const [products, setProducts] = useState([]);
+
     const loadBatches = async () => {
         try {
-            const res = await callBridge('get_production_batches');
-            // Filter only active batches if possible, or show all
-            setBatches(res?.filter(b => b.status !== 'completed') || []);
+            const [bRes, pRes] = await Promise.all([
+                callBridge('get_production_batches'),
+                callBridge('get_product_list')
+            ]);
+            setBatches(bRes?.filter(b => b.status !== 'completed') || []);
+            setProducts(pRes || []);
         } catch (e) {
             console.error(e);
-            showAlert("배치 로드 실패", "진행 중인 생산 배치 정보를 가져오지 못했습니다.");
+            showAlert("데이터 로드 실패", "배치 및 상품 정보를 가져오지 못했습니다.");
         } finally {
             setIsLoading(false);
         }
@@ -151,9 +171,14 @@ const MobileHarvestEntry = () => {
                         onChange={(e) => setFormData({ ...formData, batch_id: e.target.value ? parseInt(e.target.value) : null })}
                     >
                         <option value="">배치를 선택하세요</option>
-                        {batches.map(b => (
-                            <option key={b.batch_id} value={b.batch_id}>{b.batch_code} ({b.status})</option>
-                        ))}
+                        {batches.map(b => {
+                            const p = products.find(x => x.product_id === b.product_id);
+                            return (
+                                <option key={b.batch_id} value={b.batch_id}>
+                                    {b.batch_code} - {p ? `${p.product_name}${p.specification ? ` (${p.specification})` : ''}` : '미지정 상품'}
+                                </option>
+                            );
+                        })}
                     </select>
                 </div>
 

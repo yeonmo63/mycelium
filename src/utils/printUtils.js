@@ -1,69 +1,130 @@
 import dayjs from 'dayjs';
 
-export const handlePrint = (title, contentHTML) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
+/**
+ * Robust Printing System for Tauri
+ * Instead of iframes (which are buggy in Tauri builds), 
+ * we use a dedicated mount point in the main document index.html.
+ */
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
-
-    let processedContent = contentHTML;
-    if (typeof contentHTML === 'string' && contentHTML.includes('===')) {
-        processedContent = contentHTML.split('===').map((section, idx) => {
-            if (!section.trim()) return '';
-            if (idx === 0 && !contentHTML.startsWith('===')) return `<div>${section}</div>`;
-            const lines = section.trim().split('\n');
-            const header = lines[0];
-            const rest = lines.slice(1).join('\n');
-            return `<div class="p-section">
-                <h2 class="section-title">${header}</h2>
-                <div class="section-body">${rest}</div>
-            </div>`;
-        }).join('');
+export const handlePrintRaw = (htmlContent, cleanupMs = 3000) => {
+    const printMount = document.getElementById('print-mount-point');
+    if (!printMount) {
+        console.error("❌ Print mount point not found.");
+        window.print();
+        return;
     }
 
-    doc.write(`
-        <html>
-        <head>
-            <title>${title}</title>
+    const docEl = document.documentElement;
+    const isMobile = window.__MYCELIUM_MOBILE__;
+    const originalDocBg = docEl.style.backgroundColor;
+    const originalDocScheme = docEl.style.colorScheme;
+    const themeMeta = document.querySelector('meta[name="color-scheme"]');
+
+    // 1. Inject Style to Hide App & Show Print Mount
+    // This strictly enforces that ONLY the print mount is visible.
+    const styleEl = document.createElement('style');
+    styleEl.id = 'print-enforcer';
+    styleEl.textContent = `
+        @media print {
+            html, body { background: white !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            #root, #app-root, .tauri-drag-region, .no-print { display: none !important; }
+            #print-mount-point { 
+                display: block !important; 
+                position: absolute !important; 
+                top: 0 !important; 
+                left: 0 !important; 
+                width: 100% !important; 
+                min-height: 100vh !important;
+                z-index: 99999 !important; 
+                background: white !important;
+                visibility: visible !important;
+            }
+            #print-mount-point * { visibility: visible !important; }
+        }
+    `;
+    document.head.appendChild(styleEl);
+
+    // 2. Inject Full Content (Styles + HTML) directly
+    // We do NOT strip styles anymore. We let the browser handle scaping and application.
+    printMount.innerHTML = htmlContent;
+
+    // 3. Ensure Visibility of Content
+    // Only clear explicit 'display: none' to avoid breaking flex/grid layouts
+    const forceVisible = (node) => {
+        if (node.style && node.style.display === 'none') {
+            node.style.display = '';
+        }
+        if (node.children) {
+            Array.from(node.children).forEach(forceVisible);
+        }
+    };
+    forceVisible(printMount);
+
+    docEl.classList.add('printing-active');
+    printMount.classList.remove('hidden');
+
+    // 4. Print with extended delay (1000ms) to ensure styles and layout are fully applied by WebView2
+    setTimeout(() => {
+        window.print();
+
+        // 5. Cleanup
+        setTimeout(() => {
+            if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+            printMount.innerHTML = '';
+            printMount.classList.add('hidden');
+            docEl.classList.remove('printing-active');
+            docEl.style.backgroundColor = originalDocBg;
+            docEl.style.colorScheme = originalDocScheme;
+            if (themeMeta) themeMeta.content = isMobile ? 'light' : 'dark';
+        }, 1000);
+    }, 1000);
+};
+
+export const handlePrint = (title, contentHTML) => {
+    let processedContent = contentHTML;
+    if (typeof contentHTML === 'string' && contentHTML.includes('===')) {
+        processedContent = contentHTML.split('===').map((section, idx) => `
+            <div class="report-section ${idx === 0 ? 'first' : ''}">
+                ${section.trim().replace(/\n/g, '<br/>')}
+            </div>
+        `).join('');
+    }
+
+    const html = `
+        <div class="print-container" style="background: white !important; color: #1e293b !important; padding: 20px;">
             <style>
-                @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-                @page { size: A4; margin: 25mm 20mm; }
-                body { font-family: 'Pretendard', -apple-system, sans-serif; line-height: 1.7; color: #1e293b; word-break: keep-all; }
-                .print-header { margin-bottom: 40px; padding-bottom: 15px; border-bottom: 3px solid #4f46e5; display: flex; justify-content: space-between; align-items: flex-end; }
-                h1 { font-size: 28px; font-weight: 900; margin: 0; color: #0f172a; }
-                .date { font-size: 11px; color: #64748b; font-weight: 700; letter-spacing: 0.05em; }
-                .p-section { margin-bottom: 30px; page-break-inside: avoid; }
-                .section-title { font-size: 18px; font-weight: 900; color: #4f46e5; margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
-                .section-body { white-space: pre-wrap; color: #334155; }
-                .bg-slate-50 { background-color: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #f1f5f9; }
-                .bg-amber-50 { background-color: #fffbeb; padding: 20px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #f59e0b; }
-                .text-indigo-600 { color: #4f46e5; font-weight: 800; }
-                .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-                table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
-                th { background-color: #f1f5f9; color: #475569; font-weight: 800; text-align: left; padding: 12px; border: 1px solid #e2e8f0; }
-                td { padding: 10px 12px; border: 1px solid #e2e8f0; color: #334155; }
-                .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; font-size: 10px; color: #94a3b8; }
+                @page { size: A4; margin: 15mm; }
+                .print-container { font-family: 'Pretendard', 'Inter', sans-serif; line-height: 1.6; }
+                .print-header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #334155; padding-bottom: 20px; }
+                .print-header h1 { margin: 0; font-size: 28px; font-weight: 800; color: #0f172a !important; }
+                .print-header .date { font-size: 11px; color: #64748b !important; margin-top: 8px; font-weight: bold; }
+                .content { font-size: 14px; white-space: pre-wrap; font-weight: 500; color: #1e293b !important; }
+                .report-section { margin-bottom: 25px; padding: 15px; background: #f8fafc !important; border-radius: 12px; border: 1px solid #e2e8f0 !important; }
+                .report-section.first { border-left: 5px solid #6366f1 !important; }
+                .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #94a3b8 !important; border-top: 1px solid #f1f5f9 !important; padding-top: 20px; }
+                
+                @media print {
+                    @page { margin: 15mm; }
+                    html, body { 
+                        background: white !important; 
+                        color: #1e293b !important;
+                        color-scheme: light !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    #root, #app-root { display: none !important; }
+                    .print-container { background: white !important; width: 100% !important; margin: 0 !important; }
+                    .report-section { background: #f8fafc !important; -webkit-print-color-adjust: exact; }
+                }
             </style>
-        </head>
-        <body>
             <div class="print-header">
                 <h1>${title}</h1>
                 <div class="date">REPORTED ON ${dayjs().format('YYYY. MM. DD. HH:mm')}</div>
             </div>
             <div class="content">${processedContent}</div>
             <div class="footer">본 리포트는 Mycelium Intelligence System에 의해 자동 생성된 문서입니다.</div>
-        </body>
-        </html>
-    `);
-    doc.close();
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-        iframe.contentWindow.print();
-        document.body.removeChild(iframe);
-    }, 800);
+        </div>
+    `;
+
+    handlePrintRaw(html);
 };

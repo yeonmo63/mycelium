@@ -260,14 +260,88 @@ const SalesSpecial = () => {
     };
 
     const handleQrScan = () => {
-        // Mock QR Scan
         if (!eventData.event_name) {
             showAlert("알림", "행사 정보를 먼저 입력해주세요.");
             return;
         }
-        showAlert("QR 스캔", "카메라 스캔 시뮬레이션: '상품 A'가 인식되었습니다.");
+
+        const rawInput = prompt("상품 QR 코드를 스캔하세요.");
+        if (!rawInput) return;
+
+        const rawCode = rawInput.trim();
+        console.log("Special Sales Scanned QR:", rawCode);
+
+        // Standard Format: TYPE|ID|CODE|NAME|SPEC
+        const parts = rawCode.split('|').map(p => p.trim());
+        let p = null;
+
+        if (parts[0] === 'PRODUCT' && parts[1]) {
+            const pid = parseInt(parts[1]);
+            const nameInQr = parts[3];
+            const specInQr = (parts[4] === 'NA' || !parts[4]) ? '' : parts[4];
+
+            // 1. Primary: Match by Unique ID
+            p = products.find(x => Number(x.product_id) === pid);
+
+            // 2. Defensive: If ID match fails OR name doesn't match, verify Name+Spec
+            if (!p || (p && nameInQr && p.product_name !== nameInQr)) {
+                const matchedNameSpec = products.find(x =>
+                    x.product_name === nameInQr &&
+                    (specInQr ? x.specification === specInQr : true)
+                );
+                if (matchedNameSpec) p = matchedNameSpec;
+            }
+            console.log(`Matched by PRODUCT structure: ${pid} | ${nameInQr}`, p);
+        } else if (parts[0] === 'HARVEST' && parts[3]) {
+            const name = parts[3];
+            const gradeOrSpec = parts[4] || '';
+
+            // Try to find by name + spec match first
+            p = products.find(x =>
+                x.product_name === name &&
+                (x.specification === gradeOrSpec || (x.specification && gradeOrSpec && x.specification.includes(gradeOrSpec)))
+            );
+
+            // Ambiguity fallback
+            if (!p) {
+                const sameNameProducts = products.filter(x => x.product_name === name);
+                if (sameNameProducts.length === 1) {
+                    p = sameNameProducts[0];
+                } else if (sameNameProducts.length > 1) {
+                    showAlert("인식 모호함", `[${name}] 상품이 여러 규격으로 존재합니다. 목록에서 직접 선택해 주세요.`);
+                    return;
+                }
+            }
+            console.log(`Matched by HARVEST Name/Spec: ${name}`, p);
+        } else if (rawCode.includes('ID:')) {
+            // Legacy support
+            const idPart = rawCode.split('ID:').pop().trim();
+            const pid = parseInt(idPart.replace(/[^0-9]/g, ''));
+            p = products.find(x => Number(x.product_id) === pid);
+            console.log(`Matched by Legacy ID: ${pid}`, p);
+        } else {
+            // Last resort: search by exact code or name or combined name+spec
+            p = products.find(x =>
+                (x.product_code && x.product_code === rawCode) ||
+                x.product_name === rawCode ||
+                `${x.product_name} ${x.specification || ''}`.trim() === rawCode ||
+                `${x.product_name}(${x.specification || ''})`.trim() === rawCode
+            );
+
+            // Numeric ID fallback
+            if (!p && /^\d+$/.test(rawCode)) {
+                const pid = parseInt(rawCode);
+                p = products.find(x => Number(x.product_id) === pid);
+            }
+            console.log(`Matched by fallback/numeric: ${rawCode}`, p);
+        }
+
+        if (!p) {
+            showAlert("인식 실패", `[${rawCode}] 상품을 찾을 수 없습니다. 신규 라벨인지 확인해 주세요.`);
+            return;
+        }
+
         const date = new Date().toISOString().split('T')[0];
-        const p = products.find(x => x.product_name === '상품 A') || (products[0] || { product_name: '상품 A', unit_price: 10000, specification: '1kg' });
         setSalesRows(prev => [{
             tempId: Date.now() + Math.random(),
             orderDate: date,
@@ -460,7 +534,11 @@ const SalesSpecial = () => {
                                             <input list={`dl-${row.tempId}`} value={row.product} onChange={e => handleRowChange(row.tempId, 'product', e.target.value)}
                                                 className="w-full h-10 bg-white border border-slate-200 rounded-lg px-3 text-left text-xs text-slate-800 font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder:font-normal" placeholder="상품선택" />
                                             <datalist id={`dl-${row.tempId}`}>
-                                                {products.map(p => <option key={p.product_name} value={p.product_name} />)}
+                                                {products.map(p => (
+                                                    <option key={`${p.product_id}-${p.product_name}`} value={p.product_name}>
+                                                        {p.specification ? `${p.product_name} (${p.specification})` : p.product_name}
+                                                    </option>
+                                                ))}
                                             </datalist>
                                         </td>
                                         <td className="p-2">

@@ -172,7 +172,7 @@ const HarvestRecords = () => {
             code: displayCode,
             date: dayjs(record.harvest_date).format('YYYY.MM.DD'),
             producer: companyInfo?.representative_name || '관리자',
-            qrValue: `${product?.product_name || '수확물'} | ${record.grade}등급 | ${dayjs(record.harvest_date).format('YYYY-MM-DD')} | ${companyInfo?.representative_name || '관리자'} | ${displayCode}`
+            qrValue: `HARVEST|${record.harvest_id}|${displayCode}|${product?.product_name || 'NA'}|${record.grade}`
         };
 
         setPrintJob(jobData);
@@ -313,7 +313,7 @@ const HarvestRecords = () => {
                 </button>
             </div>
 
-            {/* Continuous Scanner Mode Control */}
+            {/* 현장 무인 수확 모드 (모바일 직접 입력으로 대체되어 주석 처리)
             <div className={`transition-all duration-300 ${isScannerMode ? 'bg-slate-900 border-none p-8 rounded-[2.5rem] shadow-2xl shadow-slate-200' : 'bg-slate-50 p-4 rounded-3xl border border-slate-200'}`}>
                 <div className="flex flex-col lg:flex-row gap-6 items-center">
                     <div className="flex items-center gap-4 min-w-[200px]">
@@ -406,6 +406,7 @@ const HarvestRecords = () => {
                     </div>
                 )}
             </div>
+            */}
 
             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
                 <div className="overflow-x-auto">
@@ -658,31 +659,42 @@ const HarvestRecords = () => {
                                 생성된 정보를 확인하고 라벨 프린터로<br />인쇄를 진행하시겠습니까?
                             </p>
 
-                            {/* QR Preview Card */}
-                            <div className="w-full bg-slate-50 rounded-[2rem] p-6 border border-slate-100 mb-8 flex flex-col items-center">
-                                <div className="bg-white p-4 rounded-2xl shadow-sm mb-4 border border-slate-100">
-                                    <QRCodeSVG
-                                        value={printJob.qrValue}
-                                        size={140}
-                                        level="M"
-                                    />
+                            {/* QR Preview Card - Refined to match LabelPrinter.jsx */}
+                            <div className="w-full bg-slate-50 rounded-[2.5rem] p-8 border border-slate-100 mb-8 flex flex-row items-center gap-6">
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className="bg-white p-2 rounded-xl border-2 border-slate-900 leading-[0]">
+                                        <QRCodeSVG
+                                            value={printJob.qrValue}
+                                            size={90}
+                                            level="M"
+                                        />
+                                    </div>
+                                    <div className="text-[9px] font-black border border-slate-900 px-1.5 py-0.5 bg-white whitespace-nowrap">
+                                        GAP 인증 농산물
+                                    </div>
                                 </div>
-                                <div className="w-full space-y-2 mt-4 text-left border-t border-slate-100 pt-4 px-2">
-                                    <div className="flex justify-between items-center bg-white p-2 rounded-xl mb-1">
-                                        <span className="text-[10px] font-black text-slate-400 w-12">품&nbsp;&nbsp;&nbsp;명:</span>
-                                        <span className="text-xs font-black text-slate-700 flex-1">{printJob.title}</span>
+
+                                <div className="flex-1 flex flex-col justify-center min-w-0">
+                                    <div className="border-t-2 border-slate-900 pt-2 pb-1 space-y-2">
+                                        <div className="flex items-center text-[11px] leading-none">
+                                            <span className="font-black text-slate-900 w-12 shrink-0">품&nbsp;&nbsp;&nbsp;명:</span>
+                                            <span className="font-black text-slate-900 truncate">{printJob.title}</span>
+                                        </div>
+                                        <div className="flex items-center text-[11px] leading-none">
+                                            <span className="font-black text-slate-900 w-12 shrink-0">생산일:</span>
+                                            <span className="font-black text-slate-900 truncate">{printJob.date}</span>
+                                        </div>
+                                        <div className="flex items-center text-[11px] leading-none">
+                                            <span className="font-black text-slate-900 w-12 shrink-0">생산자:</span>
+                                            <span className="font-black text-slate-900 truncate">{printJob.producer}</span>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center bg-white p-2 rounded-xl mb-1">
-                                        <span className="text-[10px] font-black text-slate-400 w-12">생산일:</span>
-                                        <span className="text-xs font-black text-slate-700 flex-1">{printJob.date}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center bg-white p-2 rounded-xl mb-1">
-                                        <span className="text-[10px] font-black text-slate-400 w-12">생산자:</span>
-                                        <span className="text-xs font-black text-slate-700 flex-1">{printJob.producer}</span>
-                                    </div>
-                                    <p className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg mt-3 text-center tracking-wider">
+                                    <div className="text-[11px] font-black text-slate-900 pt-2 border-t-2 border-slate-900 mt-1 truncate">
                                         {printJob.code}
-                                    </p>
+                                    </div>
+                                    <div className="text-[7px] font-bold text-slate-400 text-right mt-1 opacity-60">
+                                        Smart Mycelium Logic v3
+                                    </div>
                                 </div>
                             </div>
 

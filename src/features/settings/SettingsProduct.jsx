@@ -370,9 +370,9 @@ const SettingsProduct = () => {
         printLabel('product', {
             title: product.product_name,
             code: product.product_code || `PRD-${product.product_id}`,
-            spec: product.specification,
-            date: `단가: ₩${product.unit_price?.toLocaleString() || 0}`,
-            qrValue: `[${product.product_name}] ${product.specification || '규격미정'} | ₩${product.unit_price?.toLocaleString() || 0} | ${product.product_code || 'ID:' + product.product_id}`
+            spec: product.specification || '-',
+            price: product.unit_price || 0,
+            qrValue: `PRODUCT|${product.product_id}|${product.product_code || 'NA'}|${product.product_name}|${product.specification || 'NA'}`
         });
     };
 

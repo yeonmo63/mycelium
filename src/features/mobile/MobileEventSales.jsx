@@ -91,15 +91,86 @@ const MobileEventSales = () => {
     };
 
     const handleQrScan = () => {
+        const rawInput = prompt("상품 QR 코드를 스캔하세요.");
+        if (!rawInput) return;
+
+        const rawCode = rawInput.trim();
         setIsScanning(true);
-        // Simulate a QR scan result
         setTimeout(() => {
             setIsScanning(false);
-            const randomProduct = products[Math.floor(Math.random() * products.length)];
-            if (randomProduct) {
-                addToCart(randomProduct);
+            console.log("Scanned QR Content:", rawCode);
+
+            const parts = rawCode.split('|').map(p => p.trim());
+            let foundProduct = null;
+
+            if (parts[0] === 'PRODUCT' && parts[1]) {
+                const pid = parseInt(parts[1]);
+                const nameInQr = parts[3];
+                const specInQr = (parts[4] === 'NA' || !parts[4]) ? '' : parts[4];
+
+                // 1. Primary: Match by Unique ID
+                foundProduct = products.find(p => Number(p.product_id) === pid);
+
+                // 2. Defensive: If ID match fails OR name doesn't match, try Name+Spec
+                if (!foundProduct || (foundProduct && nameInQr && foundProduct.product_name !== nameInQr)) {
+                    const matchedNameSpec = products.find(p =>
+                        p.product_name === nameInQr &&
+                        (specInQr ? p.specification === specInQr : true)
+                    );
+                    if (matchedNameSpec) foundProduct = matchedNameSpec;
+                }
+                console.log(`Matched by PRODUCT structure: ${pid} | ${nameInQr}`, foundProduct);
+            } else if (parts[0] === 'HARVEST' && parts[3]) {
+                const name = parts[3];
+                const gradeOrSpec = parts[4] || '';
+
+                // Try to find by name + spec match first
+                foundProduct = products.find(p =>
+                    p.product_name === name &&
+                    (p.specification === gradeOrSpec || (p.specification && gradeOrSpec && p.specification.includes(gradeOrSpec)))
+                );
+
+                // If not found, check if only one product exists with this name
+                if (!foundProduct) {
+                    const sameNameProducts = products.filter(p => p.product_name === name);
+                    if (sameNameProducts.length === 1) {
+                        foundProduct = sameNameProducts[0];
+                    } else if (sameNameProducts.length > 1) {
+                        // User needs to select manually if name is ambiguous
+                        showAlert("인식 모호함", `[${name}] 상품이 여러 규격으로 존재합니다. 목록에서 직접 선택해 주세요.`);
+                        return;
+                    }
+                }
+                console.log(`Matched by HARVEST Name/Spec: ${name}`, foundProduct);
+            } else if (rawCode.includes('ID:')) {
+                // Legacy support for labels like "... | ID:123"
+                const idPart = rawCode.split('ID:').pop().trim();
+                const pid = parseInt(idPart.replace(/[^0-9]/g, ''));
+                foundProduct = products.find(p => Number(p.product_id) === pid);
+                console.log(`Matched by Legacy ID: ${pid}`, foundProduct);
+            } else {
+                // Last resort: search by exact code or name or combined name+spec
+                foundProduct = products.find(p =>
+                    (p.product_code && p.product_code === rawCode) ||
+                    p.product_name === rawCode ||
+                    `${p.product_name} ${p.specification || ''}`.trim() === rawCode ||
+                    `${p.product_name}(${p.specification || ''})`.trim() === rawCode
+                );
+
+                // Numeric ID fallback
+                if (!foundProduct && /^\d+$/.test(rawCode)) {
+                    const pid = parseInt(rawCode);
+                    foundProduct = products.find(p => Number(p.product_id) === pid);
+                }
+                console.log(`Matched by fallback/numeric: ${rawCode}`, foundProduct);
             }
-        }, 1200);
+
+            if (foundProduct) {
+                addToCart(foundProduct);
+            } else {
+                showAlert("인식 실패", `[${rawCode}] 상품을 찾을 수 없습니다. 상품명과 규격이 정확히 일치하는지 확인해 주세요.`);
+            }
+        }, 300);
     };
 
     const updateQuantity = (productId, delta) => {
@@ -242,9 +313,10 @@ const MobileEventSales = () => {
                             <button
                                 key={p.product_id}
                                 onClick={() => addToCart(p)}
-                                className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 whitespace-nowrap active:scale-95 transition-all"
+                                className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100 whitespace-nowrap active:scale-95 transition-all flex flex-col items-center"
                             >
                                 <div className="text-sm font-black text-slate-700">{p.product_name}</div>
+                                {p.specification && <div className="text-[10px] text-slate-400 font-bold mb-1">{p.specification}</div>}
                                 <div className="text-[10px] text-indigo-500 font-bold">{p.unit_price.toLocaleString()}원</div>
                             </button>
                         ))}
@@ -283,6 +355,7 @@ const MobileEventSales = () => {
                                 <div key={item.product_id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-50 flex items-center justify-between">
                                     <div className="flex-1 min-w-0 pr-4">
                                         <div className="text-sm font-black text-slate-800 truncate">{item.product_name}</div>
+                                        {item.specification && <div className="text-[10px] text-slate-400 font-bold mb-1">{item.specification}</div>}
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] text-slate-400 font-bold line-through">{item.unit_price.toLocaleString()}원</span>
                                             <span className="text-[10px] text-indigo-600 font-black">

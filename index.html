@@ -12,6 +12,40 @@
   <title>Mycelium Smart Farm</title>
 
   <!-- 1. Immediate Environment Detection -->
+  <style id="print-force-style">
+    @media print {
+
+      /* Only hide root if we are using the robust printing system (printing-active) */
+      html.printing-active #root,
+      html.printing-active #app-root,
+      html.printing-active .tauri-drag-region {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      /* In normal print mode, the mount point should be hidden if not active */
+      html:not(.printing-active) #print-mount-point {
+        display: none !important;
+      }
+
+      #print-mount-point {
+        display: block !important;
+        visibility: visible !important;
+      }
+
+      /* Basic resets for light theme printing */
+      html,
+      body {
+        background: white !important;
+        background-color: white !important;
+        color: black !important;
+        color-scheme: light !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+
   <script>
     (function () {
       var isTauri = !!window.__TAURI__;
@@ -20,9 +54,24 @@
       var isSmallScreen = window.innerWidth < 1024;
       var isMobile = !isTauri && (isMobilePort || isMobileUA || isSmallScreen);
 
-      // Set background color immediately to avoid flashy transitions
+      // Meta tag reference for theme
+      var themeMeta = document.querySelector('meta[name="color-scheme"]');
+      if (!themeMeta) {
+        themeMeta = document.createElement('meta');
+        themeMeta.name = "color-scheme";
+        document.head.appendChild(themeMeta);
+      }
+      themeMeta.content = isMobile ? "light" : "dark";
+
+      // Set theme class AND immediate style to prevent blank screen
       var bgColor = isMobile ? "#f8fafc" : "#020617";
       document.documentElement.style.backgroundColor = bgColor;
+
+      if (isMobile) {
+        document.documentElement.classList.add('is-mobile');
+      } else {
+        document.documentElement.classList.add('is-desktop');
+      }
       window.__MYCELIUM_MOBILE__ = isMobile;
     })();
   </script>
@@ -124,6 +173,7 @@
   </div>
 
   <div id="root"></div>
+  <div id="print-mount-point" class="hidden"></div>
   <script type="module" src="/src/main.jsx"></script>
 
   <script>

@@ -1,9 +1,105 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { formatCurrency } from '../../utils/common';
+import { handlePrintRaw } from '../../utils/printUtils';
 import { useModal } from '../../contexts/ModalContext';
 
 Chart.register(...registerables);
+
+const financePrintStyles = `
+    @media print {
+        @page { size: A4 portrait; margin: 15mm; }
+        html, body { 
+            background: white !important; 
+            color: black !important;
+            color-scheme: light !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+    .print-report-wrapper { 
+        font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+        padding: 0; 
+        color: #000; 
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .report-card {
+        border: 1px solid #000;
+        padding: 30px;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .report-header { 
+        text-align: center; 
+        margin-bottom: 40px; 
+    }
+    .report-header h1 { 
+        margin: 0; 
+        font-size: 32px; 
+        font-weight: 900; 
+        letter-spacing: 0.2em; 
+        text-decoration: underline;
+        text-underline-offset: 10px;
+    }
+    .report-header .info {
+        margin-top: 20px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    .stats-grid {
+        display: grid;
+        grid-template-cols: repeat(3, 1fr);
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-box {
+        border: 2px solid #000;
+        padding: 15px;
+        text-align: center;
+    }
+    .stat-box .label { font-size: 12px; color: #555; margin-bottom: 5px; font-weight: bold; }
+    .stat-box .value { font-size: 20px; font-weight: 900; }
+    
+    .section-title {
+        font-size: 18px;
+        font-weight: 900;
+        margin: 30px 0 15px 0;
+        padding-left: 10px;
+        border-left: 5px solid #000;
+    }
+    
+    table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        font-size: 12px; 
+        border: 2px solid #000; 
+    }
+    th, td { 
+        border: 1px solid #000; 
+        padding: 8px 10px; 
+        text-align: center; 
+    }
+    th { 
+        background: #f0f0f0 !important; 
+        font-weight: 900; 
+    }
+    .text-right { text-align: right; }
+    .chart-placeholder {
+        width: 100%;
+        height: 300px;
+        border: 1px dashed #ccc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 20px 0;
+        background: #fafafa;
+    }
+`;
 
 /**
  * FinanceAnalysis.jsx
@@ -211,6 +307,138 @@ const FinanceAnalysis = () => {
         });
     };
 
+    const handlePrint = () => {
+        if (isLoading) return;
+
+        const monthlyImg = monthlyChartRef.current ? monthlyChartRef.current.toDataURL('image/png') : null;
+        const costImg = costChartRef.current ? costChartRef.current.toDataURL('image/png') : null;
+
+        const html = `
+            <style>${financePrintStyles}</style>
+            <div class="print-report-wrapper">
+                <div class="report-card">
+                    <div class="report-header">
+                        <h1>지능형 경영 분석 리포트</h1>
+                        <div class="info">
+                            <span>대상 연도: <strong>${year}년</strong></span>
+                            <span>출력 일시: <strong>${new Date().toLocaleString()}</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="section-title">연간 경영 요약 (Annual Summary)</div>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="label">총 매출액 (Revenue)</div>
+                            <div class="value" style="color: #2563eb;">￦ ${formatCurrency(stats.revenue)}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">총 매출비용 (Total Cost)</div>
+                            <div class="value" style="color: #dc2626;">￦ ${formatCurrency(stats.cost)}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">연간 순이익 (Net Profit)</div>
+                            <div class="value" style="color: #059669;">￦ ${formatCurrency(stats.profit)} (${stats.margin}%)</div>
+                        </div>
+                    </div>
+
+                    <div class="section-title">월별 손익 추세 (Monthly Trend)</div>
+                    ${monthlyImg ? `<img src="${monthlyImg}" style="width: 100%; height: auto; max-height: 300px; display: block; margin-bottom: 20px;" />` : '<div class="chart-placeholder">차트 로드 실패</div>'}
+
+                    <div class="section-title">월별 손익 상세 내역</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>월별</th>
+                                <th>매출액(A)</th>
+                                <th>발생비용(B)</th>
+                                <th>순수익(A-B)</th>
+                                <th>이익률(%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${monthlyData.map(d => `
+                                <tr>
+                                    <td>${parseInt(d.month.split('-')[1])}월</td>
+                                    <td class="text-right">${formatCurrency(d.revenue)}원</td>
+                                    <td class="text-right">${formatCurrency(d.cost)}원</td>
+                                    <td class="text-right" style="font-weight: bold;">${formatCurrency(d.profit)}원</td>
+                                    <td>${d.revenue > 0 ? ((d.profit / d.revenue) * 100).toFixed(1) : 0}%</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background: #fafafa; font-weight: 900;">
+                                <td>연간 합계</td>
+                                <td class="text-right">${formatCurrency(stats.revenue)}원</td>
+                                <td class="text-right">${formatCurrency(stats.cost)}원</td>
+                                <td class="text-right">${formatCurrency(stats.profit)}원</td>
+                                <td>${stats.margin}%</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <div style="page-break-before: always;"></div>
+
+                    <div class="section-title">지출 항목별 비중 분석</div>
+                    <div style="display: flex; gap: 40px; align-items: flex-start;">
+                        <div style="flex: 1;">
+                            ${costImg ? `<img src="${costImg}" style="width: 100%; max-width: 300px; display: block; margin: 0 auto;" />` : '<div class="chart-placeholder">차트 로드 실패</div>'}
+                        </div>
+                        <div style="flex: 1.5;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>지출 카테고리</th>
+                                        <th>금액</th>
+                                        <th>비중(%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${costBreakdown.map(c => `
+                                        <tr>
+                                            <td style="text-align: left;">${c.category}</td>
+                                            <td class="text-right">${formatCurrency(c.amount)}원</td>
+                                            <td class="font-bold">${c.percentage}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="section-title">주요 협력업체 매입 순위 (TOP 5)</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">순위</th>
+                                <th style="text-align: left;">거래처명</th>
+                                <th style="width: 150px;">매입금액</th>
+                                <th style="width: 80px;">거래횟수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${topVendors.map((v, idx) => `
+                                <tr>
+                                    <td>${idx + 1}</td>
+                                    <td style="text-align: left; font-weight: bold;">${v.vendor_name}</td>
+                                    <td class="text-right">${formatCurrency(v.total_amount)}원</td>
+                                    <td>${v.purchase_count}회</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div style="margin-top: 50px; text-align: center; border-top: 1px solid #eee; pt-20px; font-size: 11px; color: #666;">
+                        <p>본 보고서는 Mycelium Enterprise Intelligence 시스템에 의해 자동 분석 및 생성되었습니다.</p>
+                        <p>© Mycelium ERP - All Rights Reserved.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        handlePrintRaw(html);
+    };
+
     // Helper for cost breakdown legend
     const costColors = [
         'bg-blue-500', 'bg-red-500', 'bg-amber-500', 'bg-emerald-500', 'bg-violet-500',
@@ -250,6 +478,10 @@ const FinanceAnalysis = () => {
                                 </select>
                                 <button onClick={loadData} className="w-11 h-11 rounded-xl bg-violet-600 text-white flex items-center justify-center hover:bg-violet-700 shadow-lg shadow-violet-200 transition-all">
                                     <span className="material-symbols-rounded">refresh</span>
+                                </button>
+                                <button onClick={() => handlePrint()} className="h-11 px-5 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm">
+                                    <span className="material-symbols-rounded text-violet-500 filled">print</span>
+                                    리포트 인쇄
                                 </button>
                             </div>
                         </div>

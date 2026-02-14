@@ -28,6 +28,12 @@ import FinancePurchase from './features/finance/FinancePurchase';
 import FinanceExpense from './features/finance/FinanceExpense';
 import FinanceTaxReport from './features/finance/FinanceTaxReport';
 import FinanceVendor from './features/finance/FinanceVendor';
+import FinanceAnalysis from './features/finance/FinanceAnalysis';
+import SalesIntelligence from './features/intel/SalesIntelligence';
+import CustomerIntelligence from './features/intel/CustomerIntelligence';
+import ProductAssociation from './features/intel/ProductAssociation';
+import RegionAnalysis from './features/intel/RegionAnalysis';
+import OnlineReputation from './features/marketing/OnlineReputation';
 import SettingsProduct from './features/settings/SettingsProduct';
 import SettingsUser from './features/settings/SettingsUser';
 import SettingsCompany from './features/settings/SettingsCompany';
@@ -157,6 +163,12 @@ function AppContent() {
             <Route path="finance/expense" element={<FinanceExpense />} />
             <Route path="finance/tax-report" element={<FinanceTaxReport />} />
             <Route path="finance/vendor" element={<FinanceVendor />} />
+            <Route path="finance/analysis" element={<FinanceAnalysis />} />
+            <Route path="intel/sales" element={<SalesIntelligence />} />
+            <Route path="intel/customer" element={<CustomerIntelligence />} />
+            <Route path="marketing/association" element={<ProductAssociation />} />
+            <Route path="marketing/orm" element={<OnlineReputation />} />
+            <Route path="intel/region-analysis" element={<RegionAnalysis />} />
             <Route path="product/sales" element={<ProductSales />} />
             <Route path="customer/sms" element={<CustomerSms />} />
             <Route path="exp/reservation-entry" element={<ExperienceReservation />} />

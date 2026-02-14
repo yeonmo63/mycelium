@@ -1,7 +1,81 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as echarts from 'echarts';
-import { formatCurrency, copyToClipboard } from '../../utils/common';
+import { formatCurrency, copyToClipboard, formatPhoneNumber } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { handlePrintRaw } from '../../utils/printUtils';
+
+const personalPrintStyles = `
+    @media print {
+        @page { size: A4 landscape; margin: 0; }
+        html, body { 
+            background: white !important; 
+            color: black !important;
+            color-scheme: light !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        #printable-personal-history {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 10mm !important;
+            visibility: visible !important;
+            background: white !important;
+        }
+        #printable-personal-history * {
+            visibility: visible !important;
+            border-color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+    .print-report-wrapper { 
+        font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+        color: #000; 
+        width: 100%;
+    }
+    .report-card {
+        border: 2px solid #000 !important;
+        padding: 30px;
+        background: white !important;
+    }
+    .report-header h1 { 
+        margin: 0; 
+        font-size: 32px; 
+        font-weight: 900; 
+        letter-spacing: 0.3em; 
+        border-bottom: 5px double #000 !important;
+        display: inline-block;
+        padding: 0 50px 10px 50px;
+    }
+    table { 
+        width: 100%; 
+        border-collapse: collapse !important; 
+        font-size: 10px; 
+        border: 2px solid #000 !important; 
+        table-layout: fixed;
+    }
+    th, td { 
+        border: 1px solid #000 !important; 
+        padding: 6px 4px; 
+        text-align: center; 
+    }
+    th { 
+        background: #f0f0f0 !important; 
+        font-weight: 900; 
+        border-bottom: 2px solid #000 !important;
+    }
+    .bg-row { background: #fafafa !important; }
+    .summary-table {
+        width: 400px;
+        border: 2px solid #000 !important;
+    }
+    .summary-table th, .summary-table td { border: 1px solid #000 !important; }
+`;
 
 const SalesPersonalHistory = () => {
     const { showAlert, showConfirm } = useModal();
@@ -16,6 +90,7 @@ const SalesPersonalHistory = () => {
 
     // Modal State for Graph
     const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
     const [graphYear, setGraphYear] = useState(null); // null for yearly overview, 'YYYY' for monthly
 
     // Refs
@@ -222,11 +297,20 @@ const SalesPersonalHistory = () => {
     };
 
     const handlePrint = () => {
-        if (!sales || sales.length === 0) {
-            showAlert("알림", "인쇄할 데이터가 없습니다. 먼저 검색을 수행해 주세요.");
-            return;
-        }
-        window.print();
+        const el = document.getElementById('printable-personal-content');
+        if (!el) return;
+
+        const html = `
+            <style>
+                ${personalPrintStyles}
+                @page { size: A4 landscape; margin: 10mm; }
+                body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 10mm; }
+                table { border-collapse: collapse !important; width: 100%; }
+                th, td { border: 1px solid #000 !important; }
+            </style>
+            ${el.outerHTML}
+        `;
+        handlePrintRaw(html);
     };
 
     const handleExportCsv = async () => {
@@ -478,7 +562,7 @@ const SalesPersonalHistory = () => {
                                 <span className="material-symbols-rounded">bar_chart</span> 그래프 보기
                             </button>
                         )}
-                        <button onClick={handlePrint} className="h-9 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all">
+                        <button onClick={() => setPrintModalOpen(true)} className="h-9 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all">
                             <span className="material-symbols-rounded">print</span> 리스트 인쇄
                         </button>
                         <button onClick={handleExportCsv} className="h-9 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-200 flex items-center gap-1.5 transition-all active:scale-95">
@@ -488,38 +572,100 @@ const SalesPersonalHistory = () => {
                 </div>
             </div>
 
-            {/* Graph Modal */}
-            {isGraphModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsGraphModalOpen(false)}></div>
-                    <div className="bg-white rounded-2xl w-full max-w-4xl h-[600px] shadow-2xl relative flex flex-col animate-in zoom-in-95 duration-200">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                {graphYear && (
-                                    <button onClick={() => setGraphYear(null)} className="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold flex items-center gap-1 transition-colors">
-                                        <span className="material-symbols-rounded text-sm">arrow_back</span> 이전 (년도별)
-                                    </button>
-                                )}
-                                <h3 className="text-lg font-bold text-slate-800">
-                                    {graphYear ? `${graphYear}년 월별 구매 통계` : '년도별 구매 통계'}
-                                </h3>
+            {/* Print Preview Modal - Directly Visible Version */}
+            {printModalOpen && (
+                <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="fixed top-8 right-8 flex flex-col gap-4 z-[310]">
+                        <button
+                            onClick={() => setPrintModalOpen(false)}
+                            className="w-14 h-14 bg-white text-slate-400 rounded-2xl shadow-2xl hover:text-rose-500 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+                            title="닫기"
+                        >
+                            <span className="material-symbols-rounded text-3xl group-hover:rotate-90 transition-transform duration-300">close</span>
+                        </button>
+                        <div className="h-px bg-white/20 w-full" />
+                        <button
+                            onClick={handlePrint}
+                            className="h-14 px-8 rounded-2xl font-black text-sm bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-1 active:translate-y-0 transition-all flex items-center gap-3"
+                        >
+                            <span className="material-symbols-rounded text-xl">print</span> 인쇄하기
+                        </button>
+                    </div>
+
+                    <div className="w-full max-w-[297mm] h-[210mm] max-h-[90vh] bg-white rounded-[1rem] shadow-2xl overflow-y-auto overflow-x-hidden relative custom-scrollbar">
+                        <div id="printable-personal-content" className="p-[10mm]">
+                            <div style={{ fontFamily: '"Malgun Gothic", sans-serif', color: '#000', width: '100%' }}>
+                                <div style={{ border: '2px solid #000', padding: '30px', backgroundColor: '#fff' }}>
+                                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                                        <h1 style={{ margin: '0', fontSize: '32px', fontWeight: '900', letterSpacing: '0.3em', borderBottom: '5px double #000', display: 'inline-block', padding: '0 50px 10px 50px' }}>
+                                            개인별 판매 고객 이력 보고서
+                                        </h1>
+                                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold' }}>
+                                            <span>대상 고객: <strong>{keyword}</strong></span>
+                                            <span>발급 일시: {new Date().toLocaleString()}</span>
+                                        </div>
+                                    </div>
+
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', border: '2px solid #000', tableLayout: 'fixed' }}>
+                                        <thead>
+                                            <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '35px', fontWeight: '900' }}>No</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '60px', fontWeight: '900' }}>상태</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>주문일자</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>고객명</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '100px', fontWeight: '900' }}>연락처</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>수령인</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>상품명 / 규격</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '40px', fontWeight: '900' }}>수량</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>결제금액</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>관리 메모</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {sales.map((s, idx) => (
+                                                <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff' }}>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.status || '접수'}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{s.order_date.substring(0, 10)}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.customer_name || '-'}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{formatPhoneNumber(s.customer_mobile || s.shipping_mobile_number || '')}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{s.shipping_name || '-'}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left' }}>
+                                                        <div style={{ fontWeight: '900' }}>{s.product_name}</div>
+                                                        <div style={{ fontSize: '8px', color: '#555' }}>{s.specification || ''}</div>
+                                                    </td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.quantity.toLocaleString()}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'right', fontWeight: '900' }}>{formatCurrency(s.total_amount)}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', fontSize: '9px', color: '#666' }}>{s.memo || ''}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
+                                    <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <table style={{ width: '400px', border: '2px solid #000', borderCollapse: 'collapse' }}>
+                                            <tbody>
+                                                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                                    <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', width: '45%', fontSize: '11px' }}>총 구매 횟수 (Total Orders)</th>
+                                                    <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900' }}>{sales.length} 회</td>
+                                                </tr>
+                                                <tr>
+                                                    <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', fontSize: '11px' }}>누적 총 결제 금액</th>
+                                                    <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900', color: '#d32f2f' }}>￦ {formatCurrency(sales.reduce((acc, cur) => acc + cur.total_amount, 0))}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+                                        위와 같이 해당 고객의 정밀 판매 이력을 보고합니다.
+                                    </div>
+
+                                    <div style={{ marginTop: '50px', textAlign: 'center', fontSize: '10px', color: '#999', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                                        © Mycelium Smart Farm Integration System - All Rights Reserved.
+                                    </div>
+                                </div>
                             </div>
-                            <button onClick={() => setIsGraphModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors">
-                                <span className="material-symbols-rounded">close</span>
-                            </button>
-                        </div>
-
-                        {/* Chart Area */}
-                        <div className="flex-1 p-6">
-                            <div ref={chartRef} className="w-full h-full"></div>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end">
-                            <button onClick={() => setIsGraphModalOpen(false)} className="px-5 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-sm hover:bg-slate-700 transition-colors shadow-lg shadow-slate-200">
-                                닫기
-                            </button>
                         </div>
                     </div>
                 </div>

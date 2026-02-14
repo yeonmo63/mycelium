@@ -91,7 +91,9 @@ pub async fn get_daily_receipts(
     let sql = r#"
         SELECT 
             s.*, 
-            COALESCE(c.customer_name, e.event_name, '비회원') as customer_name
+            COALESCE(c.customer_name, e.event_name, '비회원') as customer_name,
+            c.mobile_number as customer_mobile,
+            c.address_primary as customer_address
         FROM sales s
         LEFT JOIN customers c ON s.customer_id = c.customer_id
         LEFT JOIN event e ON s.customer_id = e.event_id

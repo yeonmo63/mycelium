@@ -399,16 +399,20 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
             <style>
                 {`
                 @media print {
-                    @page { 
-                        size: A4;
-                        margin: 0; 
-                    }
-                    body {
-                        background: white !important;
+                    @page { size: A4; margin: 0; }
+                    html, body { 
+                        background: white !important; 
+                        color: black !important;
+                        color-scheme: light !important;
+                        height: auto !important;
+                        overflow: visible !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                     }
-                    div:not(#printable-report):not(#printable-report *) {
+                    #root, nav, .tauri-drag-region { display: none !important; }
+                    div:not(#printable-report):not(#printable-report *):not(style):not(script) {
                         display: none !important;
                     }
                     #printable-report {
@@ -420,6 +424,7 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
                         margin: 0 !important;
                         padding: 15mm !important;
                         visibility: visible !important;
+                        background: white !important;
                     }
                     #printable-report * {
                         visibility: visible !important;

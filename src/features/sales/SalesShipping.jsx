@@ -1,6 +1,80 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatCurrency, formatPhoneNumber } from '../../utils/common';
+import { handlePrintRaw } from '../../utils/printUtils';
 import { useModal } from '../../contexts/ModalContext';
+
+const shippingPrintStyles = `
+    @media print {
+        @page { size: A4 landscape; margin: 0; }
+        html, body { 
+            background: white !important; 
+            color: black !important;
+            color-scheme: light !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        #printable-shipping-report {
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 10mm !important;
+            visibility: visible !important;
+            background: white !important;
+        }
+        #printable-shipping-report * {
+            visibility: visible !important;
+            border-color: black !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+    .print-report-wrapper { 
+        font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+        color: #000; 
+        width: 100%;
+    }
+    .report-card {
+        border: 2px solid #000 !important;
+        padding: 30px;
+        background: white !important;
+    }
+    .report-header h1 { 
+        margin: 0; 
+        font-size: 32px; 
+        font-weight: 900; 
+        letter-spacing: 0.3em; 
+        border-bottom: 5px double #000 !important;
+        display: inline-block;
+        padding: 0 50px 10px 50px;
+    }
+    table { 
+        width: 100%; 
+        border-collapse: collapse !important; 
+        font-size: 10px; 
+        border: 2px solid #000 !important; 
+        table-layout: fixed;
+    }
+    th, td { 
+        border: 1px solid #000 !important; 
+        padding: 6px 4px; 
+        text-align: center; 
+    }
+    th { 
+        background: #f0f0f0 !important; 
+        font-weight: 900; 
+        border-bottom: 2px solid #000 !important;
+    }
+    .bg-row { background: #fafafa !important; }
+    .summary-table {
+        width: 400px;
+        border: 2px solid #000 !important;
+    }
+    .summary-table th, .summary-table td { border: 1px solid #000 !important; }
+`;
 
 /**
  * SalesShipping.jsx
@@ -22,6 +96,7 @@ const SalesShipping = () => {
     // UI Interaction State
     const [isLoading, setIsLoading] = useState(false);
     const [showShippingModal, setShowShippingModal] = useState(false);
+    const [printModalOpen, setPrintModalOpen] = useState(false);
     const [shippingItems, setShippingItems] = useState([]);
     const [shippingForm, setShippingForm] = useState({
         date: new Date().toISOString().split('T')[0],
@@ -243,7 +318,18 @@ const SalesShipping = () => {
     };
 
     const handlePrint = () => {
-        window.print();
+        const el = document.getElementById('printable-shipping-content');
+        if (!el) return;
+
+        const html = `
+            <style>
+                ${shippingPrintStyles}
+                @page { size: A4 landscape; margin: 10mm; }
+                body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 10mm; }
+            </style>
+            ${el.outerHTML}
+        `;
+        handlePrintRaw(html);
     };
 
     const handleTrackingClick = async (e, row) => {
@@ -295,46 +381,7 @@ const SalesShipping = () => {
 
     return (
         <div id="print-root" className="flex flex-col h-full bg-[#f8fafc] overflow-hidden animate-in fade-in duration-700 relative">
-            <style>{`
-                @media print {
-                    @page { size: A4 landscape; margin: 15mm; }
-                    html, body { height: auto !important; overflow: visible !important; visibility: hidden; }
-                    
-                    /* Collapse Sidebar Space */
-                    nav { display: none !important; }
-                    main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-
-                    #print-root, #print-root * { visibility: visible; }
-                    #print-root { 
-                        position: absolute; left: 0; top: 0; width: 100%; height: auto !important;
-                        background: white; padding: 0; margin: 0; z-index: 9999;
-                        overflow: visible !important;
-                        font-family: 'Pretendard', sans-serif;
-                    }
-                    .no-print { display: none !important; }
-                    .print-only { display: block !important; }
-                    
-                    /* Report Style Table */
-                    table { font-size: 11px; width: 100%; border-collapse: collapse; margin-top: 10px; }
-                    thead { display: table-header-group; border-bottom: 2px solid #333; }
-                    tr { break-inside: avoid; page-break-inside: avoid; }
-                    th { padding: 8px 4px; text-align: center; font-weight: bold; color: #000 !important; background: none !important; }
-                    td { padding: 8px 4px; text-align: center; border-bottom: 1px solid #ddd; color: #000 !important; }
-                    
-                    /* Specific column adjustments */
-                    th:first-child, td:first-child { display: none; } /* Hide Checkbox */
-                    
-                    /* Remove badges/colors for cleaner print, or keep them minimal */
-                    /* Optional: simplified status text if needed, but badges are okay if printed in color. 
-                       If B/W, borders might be enough. */
-                }
-            `}</style>
-
-            {/* Print Only Header */}
-            <div className="print-only hidden mb-6 text-center pt-8 pb-4 border-b-2 border-black max-w-[90%] mx-auto">
-                <h1 className="text-3xl font-black mb-2 tracking-tight text-black">배송 현황 보고서</h1>
-                <p className="text-sm text-black font-bold">출력일자: {new Date().toLocaleDateString()} | Mycelium Logistics Manager</p>
-            </div>
+            {/* Print Only Header removed - handled by handlePrintRaw template */}
 
             {/* Header Area (Screen Only) */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-1 no-print">
@@ -577,54 +624,96 @@ const SalesShipping = () => {
                 </div>
             </div>
 
-            {/* Print Only Simple Table */}
-            <div className="print-only hidden p-0">
-                <table className="w-full text-[10px] border-collapse" style={{ tableLayout: 'fixed' }}>
-                    <thead>
-                        <tr className="bg-slate-100 border-b-2 border-black">
-                            <th className="border border-slate-400 p-1 w-8">No</th>
-                            <th className="border border-slate-400 p-1 w-20">주문일자</th>
-                            <th className="border border-slate-400 p-1 w-16">상태</th>
-                            <th className="border border-slate-400 p-1 w-24">고객명</th>
-                            <th className="border border-slate-400 p-1">상품명/규격</th>
-                            <th className="border border-slate-400 p-1 w-10">수량</th>
-                            <th className="border border-slate-400 p-1 w-20 text-right">금액</th>
-                            <th className="border border-slate-400 p-1 w-32">주소/운송장</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredData.map((row, idx) => (
-                            <tr key={row.sales_id} className="border-b border-slate-300">
-                                <td className="border border-slate-300 p-1 text-center text-slate-600">{idx + 1}</td>
-                                <td className="border border-slate-300 p-1 text-center">{row.order_date.substring(0, 10)}</td>
-                                <td className="border border-slate-300 p-1 text-center">{row.current_status}</td>
-                                <td className="border border-slate-300 p-1 text-center">
-                                    <div className="font-bold">{row.customer_name}</div>
-                                    <div className="text-[9px]">{formatPhoneNumber(row.mobile_number)}</div>
-                                </td>
-                                <td className="border border-slate-300 p-1">
-                                    <div className="truncate">{row.product_name}</div>
-                                    <div className="text-[9px] text-slate-500 truncate">{row.specification}</div>
-                                </td>
-                                <td className="border border-slate-300 p-1 text-center">{row.quantity}</td>
-                                <td className="border border-slate-300 p-1 text-right">{formatCurrency(row.total_amount)}</td>
-                                <td className="border border-slate-300 p-1">
-                                    <div className="truncate text-[9px] leading-tight mb-0.5">{row.shipping_address_primary}</div>
-                                    {row.tracking_number && (
-                                        <div className="font-bold text-[9px]">{row.courier_name}: {row.tracking_number}</div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            {/* Hidden Printable Area for Robust Printing */}
+            <div id="printable-shipping-report" style={{ display: 'none' }}>
+                <div style={{ fontFamily: '"Malgun Gothic", sans-serif', padding: '0', color: '#000', width: '100%' }}>
+                    <div style={{ border: '2px solid #000', padding: '30px', backgroundColor: '#fff' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                            <h1 style={{ margin: '0', fontSize: '32px', fontWeight: '900', letterSpacing: '0.3em', borderBottom: '5px double #000', display: 'inline-block', padding: '0 50px 10px 50px' }}>
+                                배송 및 물류 관리 보고서
+                            </h1>
+                            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold' }}>
+                                <span>조회 기간: <strong>{dateRange.start} ~ {dateRange.end}</strong></span>
+                                <span>발급 일시: {new Date().toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', border: '2px solid #000', tableLayout: 'fixed' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '35px', fontWeight: '900' }}>No</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>주문일자</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '60px', fontWeight: '900' }}>상태</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>고객명</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>주문 상품 / 규격</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '40px', fontWeight: '900' }}>수량</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>주문금액</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>배송 주소 / 수령인</th>
+                                    <th style={{ border: '1px solid #000', padding: '6px 4px', width: '120px', fontWeight: '900' }}>송장 정보</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredData.map((row, idx) => (
+                                    <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff' }}>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{idx + 1}</td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{row.order_date.substring(0, 10)}</td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{row.current_status}</td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>
+                                            {row.customer_name}
+                                            <div style={{ fontSize: '8px', fontWeight: 'normal' }}>{formatPhoneNumber(row.mobile_number)}</div>
+                                        </td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left' }}>
+                                            <div style={{ fontWeight: '900' }}>{row.product_name}</div>
+                                            <div style={{ fontSize: '9px', color: '#555' }}>{row.specification || '-'}</div>
+                                        </td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{row.quantity}</td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'right' }}>{row.total_amount.toLocaleString()}</td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', fontSize: '9px' }}>
+                                            <div>{row.shipping_address_primary} {row.shipping_address_detail || ''}</div>
+                                            {row.shipping_name !== row.customer_name && <div style={{ fontWeight: '900', borderTop: '1px dashed #ccc', marginTop: '2px' }}>수령인: {row.shipping_name}</div>}
+                                        </td>
+                                        <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontSize: '9px' }}>
+                                            {row.courier_name && <div style={{ color: '#666' }}>{row.courier_name}</div>}
+                                            <div style={{ fontWeight: '900' }}>{row.tracking_number || '-'}</div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <table style={{ width: '400px', border: '2px solid #000', borderCollapse: 'collapse' }}>
+                                <tbody>
+                                    <tr>
+                                        <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', backgroundColor: '#f0f0f0', width: '50%', fontSize: '11px' }}>총 배송(검색) 건수</th>
+                                        <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900' }}>{filteredData.length} 건</td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                        <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', fontSize: '11px' }}>총 주문 합계 금액</th>
+                                        <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900', color: '#d32f2f' }}>￦ {formatCurrency(filteredData.reduce((acc, cur) => acc + cur.total_amount, 0))}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#444' }}>
+                            위와 같이 배송 및 물류 현황을 정확히 보고합니다.
+                        </div>
+
+                        <div style={{ marginTop: '50px', textAlign: 'center', fontSize: '10px', color: '#999', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                            © Mycelium Smart Farm Integration System - All Rights Reserved.
+                        </div>
+                    </div>
+                </div>
             </div>
+
+
 
             {/* Footer Actions */}
             <div className="px-6 lg:px-8 min-[2000px]:px-12 pb-6 lg:pb-8 min-[2000px]:pb-12 flex justify-end gap-2 animate-in slide-in-from-bottom-2 duration-500 delay-100 no-print">
-                <button onClick={handlePrint} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all">
+                <button onClick={() => setPrintModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all">
                     <span className="material-symbols-rounded text-lg">print</span>
-                    인쇄
+                    인쇄 미리보기
                 </button>
                 <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs hover:bg-teal-700 shadow-sm shadow-teal-200 transition-all">
                     <span className="material-symbols-rounded text-lg">download</span>
@@ -696,6 +785,104 @@ const SalesShipping = () => {
                     </div>
                 )
             }
+            {/* Print Preview Modal - Directly Visible Version */}
+            {printModalOpen && (
+                <div className="fixed inset-0 z-[300] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="fixed top-8 right-8 flex flex-col gap-4 z-[310]">
+                        <button
+                            onClick={() => setPrintModalOpen(false)}
+                            className="w-14 h-14 bg-white text-slate-400 rounded-2xl shadow-2xl hover:text-rose-500 hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+                            title="닫기"
+                        >
+                            <span className="material-symbols-rounded text-3xl group-hover:rotate-90 transition-transform duration-300">close</span>
+                        </button>
+                        <div className="h-px bg-white/20 w-full" />
+                        <button
+                            onClick={handlePrint}
+                            className="h-14 px-8 rounded-2xl font-black text-sm bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-1 active:translate-y-0 transition-all flex items-center gap-3"
+                        >
+                            <span className="material-symbols-rounded text-xl">print</span> 인쇄하기
+                        </button>
+                    </div>
+
+                    <div className="w-full max-w-[297mm] h-[210mm] max-h-[90vh] bg-white rounded-[1rem] shadow-2xl overflow-y-auto overflow-x-hidden relative custom-scrollbar">
+                        <div id="printable-shipping-content" className="p-[10mm]">
+                            <div style={{ fontFamily: '"Malgun Gothic", sans-serif', color: '#000', width: '100%' }}>
+                                <div style={{ border: '2px solid #000', padding: '30px', backgroundColor: '#fff' }}>
+                                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                                        <h1 style={{ margin: '0', fontSize: '32px', fontWeight: '900', letterSpacing: '0.3em', borderBottom: '5px double #000', display: 'inline-block', padding: '0 50px 10px 50px' }}>
+                                            배송 관리 현황 보고서
+                                        </h1>
+                                        <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'bold' }}>
+                                            <span>조회 기간: <strong>{dateRange.start} ~ {dateRange.end}</strong></span>
+                                            <span>발급 일시: {new Date().toLocaleString()}</span>
+                                        </div>
+                                    </div>
+
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', border: '2px solid #000', tableLayout: 'fixed' }}>
+                                        <thead>
+                                            <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '35px', fontWeight: '900' }}>No</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '60px', fontWeight: '900' }}>상태</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '70px', fontWeight: '900' }}>주문일자</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '70px', fontWeight: '900' }}>수령인</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '90px', fontWeight: '900' }}>연락처</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>배송지 주소</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', paddingLeft: '10px', fontWeight: '900' }}>상품명/규격</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '35px', fontWeight: '900' }}>수량</th>
+                                                <th style={{ border: '1px solid #000', padding: '6px 4px', width: '80px', fontWeight: '900' }}>송장번호</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredData.map((s, idx) => (
+                                                <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? '#fafafa' : '#fff' }}>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{idx + 1}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.current_status}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{s.order_date.substring(0, 10)}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.shipping_name}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center' }}>{s.shipping_mobile_number ? formatPhoneNumber(s.shipping_mobile_number) : '-'}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left', fontSize: '9px', lineHeight: '1.2' }}>{s.shipping_address_primary}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'left' }}>
+                                                        <div style={{ fontWeight: '900' }}>{s.product_name}</div>
+                                                        <div style={{ fontSize: '8px', color: '#555' }}>{s.specification || ''}</div>
+                                                    </td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontWeight: '900' }}>{s.quantity}</td>
+                                                    <td style={{ border: '1px solid #000', padding: '6px 4px', textAlign: 'center', fontSize: '9px' }}>{s.tracking_number || '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
+                                    <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <table style={{ width: '300px', border: '2px solid #000', borderCollapse: 'collapse' }}>
+                                            <tbody>
+                                                <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                                    <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', width: '50%', fontSize: '11px' }}>총 배송 건수</th>
+                                                    <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900' }}>{filteredData.length} 건</td>
+                                                </tr>
+                                                <tr>
+                                                    <th style={{ border: '1px solid #000', padding: '8px 5px', textAlign: 'center', fontSize: '11px' }}>총 배송 수량</th>
+                                                    <td style={{ border: '1px solid #000', padding: '8px 15px', textAlign: 'right', fontSize: '14px', fontWeight: '900', color: '#d32f2f' }}>
+                                                        {filteredData.reduce((acc, cur) => acc + (cur.quantity || 0), 0).toLocaleString()} 개
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div style={{ marginTop: '40px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}>
+                                        위와 같이 배송 현황을 보고합니다.
+                                    </div>
+
+                                    <div style={{ marginTop: '50px', textAlign: 'center', fontSize: '10px', color: '#999', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                                        © Mycelium Smart Farm Integration System - All Rights Reserved.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };

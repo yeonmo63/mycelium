@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { useModal } from '../../contexts/ModalContext';
 import { formatCurrency } from '../../utils/common';
+import { handlePrintRaw } from '../../utils/printUtils';
 
 /**
  * ProductSales.jsx
@@ -353,7 +354,61 @@ const ProductSales = () => {
                     <div className="lg:w-2/3 flex flex-col min-h-0">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                             <h3 className="font-bold text-slate-700 text-sm">상세 판매 내역</h3>
-                            <button className="text-xs text-slate-500 hover:text-indigo-600 underline" onClick={() => window.print()}>보고서 인쇄</button>
+                            <button className="text-xs text-slate-500 hover:text-indigo-600 underline" onClick={() => {
+                                if (salesData.length === 0) {
+                                    showAlert('알림', '인쇄할 데이터가 없습니다.');
+                                    return;
+                                }
+
+                                const title = `상품별 판매 현황 (${selectedYear})`;
+                                const html = `
+                                    <style>
+                                        @page { size: A4; margin: 20mm; }
+                                        .report-print-wrapper { font-family: 'Pretendard', sans-serif; padding: 20px; color: #000; }
+                                        .report-print-wrapper .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+                                        .report-print-wrapper .header h1 { margin: 0; font-size: 24px; font-weight: 900; }
+                                        .report-print-wrapper .header p { margin: 5px 0 0; font-weight: bold; font-size: 12px; }
+                                        .report-print-wrapper table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                                        .report-print-wrapper th, .report-print-wrapper td { border: 1px solid #333; padding: 10px; text-align: center; }
+                                        .report-print-wrapper th { background: #f0f0f0; font-weight: bold; }
+                                        .report-print-wrapper .text-left { text-align: left; }
+                                        .report-print-wrapper .text-right { text-align: right; }
+                                    </style>
+                                        <div class="report-print-wrapper">
+                                            <div class="header">
+                                                <h1>상품별 판매 현황</h1>
+                                                <p>조회 연도: ${selectedYear} | 출력일시: ${new Date().toLocaleString()}</p>
+                                            </div>
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width: 40px;">No</th>
+                                                        <th>상품명</th>
+                                                        <th style="width: 100px;">거래수</th>
+                                                        <th style="width: 100px;">판매량</th>
+                                                        <th style="width: 150px;">판매액</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${salesData.map((row, idx) => `
+                                                        <tr>
+                                                            <td>${idx + 1}</td>
+                                                            <td class="text-left" style="font-weight:bold;">${row.product_name}</td>
+                                                            <td class="text-right">${formatCurrency(row.record_count)}</td>
+                                                            <td class="text-right">${formatCurrency(row.total_quantity)}</td>
+                                                            <td class="text-right" style="font-weight:bold;">${formatCurrency(row.total_amount)}</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                </tbody>
+                                            </table>
+                                            <div style="margin-top:20px; text-align:right; font-size:14px; font-weight:bold;">
+                                                총 품목: ${salesData.length} | 총 거래: ${formatCurrency(getTotalSummary(salesData).count)} | 총 판매합계: ${formatCurrency(getTotalSummary(salesData).amt)}
+                                            </div>
+                                        </div>
+                                `;
+
+                                handlePrintRaw(html);
+                            }}>보고서 인쇄</button>
                         </div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar">
                             <table className="w-full text-sm text-left whitespace-nowrap">
@@ -435,100 +490,104 @@ const ProductSales = () => {
             </div>
 
             {/* Drilldown Modal (10 Yr Trend) */}
-            {drilldownProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                            <div>
-                                <h3 className="text-lg font-black text-slate-800">{drilldownProduct}</h3>
-                                <p className="text-sm text-slate-500">최근 10년간 판매 추이 분석</p>
-                            </div>
-                            <button onClick={() => setDrilldownProduct(null)} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
-                                <span className="material-symbols-rounded">close</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-6 min-h-0 custom-scrollbar relative">
-                            {isTrendLoading && (
-                                <div className="absolute inset-0 z-10 bg-white/80 flex items-center justify-center">
-                                    <span className="material-symbols-rounded animate-spin text-4xl text-emerald-500">sync</span>
+            {
+                drilldownProduct && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-800">{drilldownProduct}</h3>
+                                    <p className="text-sm text-slate-500">최근 10년간 판매 추이 분석</p>
                                 </div>
-                            )}
-
-                            {/* Trend Chart */}
-                            <div className="h-64 mb-6 relative">
-                                <canvas ref={trendChartRef}></canvas>
+                                <button onClick={() => setDrilldownProduct(null)} className="p-2 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                                    <span className="material-symbols-rounded">close</span>
+                                </button>
                             </div>
 
-                            {/* Trend Table */}
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-y border-slate-200">
-                                    <tr>
-                                        <th className="py-3 px-4">연도</th>
-                                        <th className="py-3 px-4 text-right">거래수</th>
-                                        <th className="py-3 px-4 text-right">판매량</th>
-                                        <th className="py-3 px-4 text-right">판매액</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {trendData.map((row, i) => (
-                                        <tr key={i} onClick={() => loadMonthlyData(drilldownProduct, row.year)} className="hover:bg-slate-50 cursor-pointer transition-colors">
-                                            <td className="py-3 px-4 font-bold text-slate-900">{row.year}년</td>
-                                            <td className="py-3 px-4 text-right text-black">{formatCurrency(row.record_count)}</td>
-                                            <td className="py-3 px-4 text-right text-black">{formatCurrency(row.total_quantity)}</td>
-                                            <td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.total_amount)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                            <div className="flex-1 overflow-y-auto p-6 min-h-0 custom-scrollbar relative">
+                                {isTrendLoading && (
+                                    <div className="absolute inset-0 z-10 bg-white/80 flex items-center justify-center">
+                                        <span className="material-symbols-rounded animate-spin text-4xl text-emerald-500">sync</span>
+                                    </div>
+                                )}
 
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-                            <button onClick={() => setDrilldownProduct(null)} className="px-5 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100">닫기</button>
+                                {/* Trend Chart */}
+                                <div className="h-64 mb-6 relative">
+                                    <canvas ref={trendChartRef}></canvas>
+                                </div>
+
+                                {/* Trend Table */}
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 font-bold border-y border-slate-200">
+                                        <tr>
+                                            <th className="py-3 px-4">연도</th>
+                                            <th className="py-3 px-4 text-right">거래수</th>
+                                            <th className="py-3 px-4 text-right">판매량</th>
+                                            <th className="py-3 px-4 text-right">판매액</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {trendData.map((row, i) => (
+                                            <tr key={i} onClick={() => loadMonthlyData(drilldownProduct, row.year)} className="hover:bg-slate-50 cursor-pointer transition-colors">
+                                                <td className="py-3 px-4 font-bold text-slate-900">{row.year}년</td>
+                                                <td className="py-3 px-4 text-right text-black">{formatCurrency(row.record_count)}</td>
+                                                <td className="py-3 px-4 text-right text-black">{formatCurrency(row.total_quantity)}</td>
+                                                <td className="py-3 px-4 text-right font-bold text-slate-900">{formatCurrency(row.total_amount)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                                <button onClick={() => setDrilldownProduct(null)} className="px-5 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100">닫기</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Monthly Modal (Nested) */}
-            {monthlyData && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[1px] animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200">
-                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-violet-50">
-                            <h4 className="font-bold text-violet-900">{monthlyYear}년 월별 상세</h4>
-                            <button onClick={() => setMonthlyData(null)} className="text-violet-400 hover:text-violet-700"><span className="material-symbols-rounded">close</span></button>
-                        </div>
-                        <div className="max-h-[60vh] overflow-y-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-white sticky top-0 border-b border-slate-200 text-xs font-bold text-slate-500">
-                                    <tr>
-                                        <th className="py-2 px-4">월</th>
-                                        <th className="py-2 px-4 text-right">판매량</th>
-                                        <th className="py-2 px-4 text-right">판매액</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {monthlyData.map((row, i) => (
-                                        <tr key={i}>
-                                            <td className="py-2 px-4 font-bold text-slate-900">{row.month}월</td>
-                                            <td className="py-2 px-4 text-right text-black">{formatCurrency(row.total_quantity)}</td>
-                                            <td className="py-2 px-4 text-right font-bold text-indigo-700">{formatCurrency(row.total_amount)}</td>
+            {
+                monthlyData && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[1px] animate-in fade-in duration-200">
+                        <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200">
+                            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-violet-50">
+                                <h4 className="font-bold text-violet-900">{monthlyYear}년 월별 상세</h4>
+                                <button onClick={() => setMonthlyData(null)} className="text-violet-400 hover:text-violet-700"><span className="material-symbols-rounded">close</span></button>
+                            </div>
+                            <div className="max-h-[60vh] overflow-y-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-white sticky top-0 border-b border-slate-200 text-xs font-bold text-slate-500">
+                                        <tr>
+                                            <th className="py-2 px-4">월</th>
+                                            <th className="py-2 px-4 text-right">판매량</th>
+                                            <th className="py-2 px-4 text-right">판매액</th>
                                         </tr>
-                                    ))}
-                                    {/* Total Row */}
-                                    <tr className="bg-slate-50 font-bold border-t border-slate-200">
-                                        <td className="py-2 px-4 text-slate-700">합계</td>
-                                        <td className="py-2 px-4 text-right">{formatCurrency(monthlyData.reduce((a, c) => a + c.total_quantity, 0))}</td>
-                                        <td className="py-2 px-4 text-right">{formatCurrency(monthlyData.reduce((a, c) => a + c.total_amount, 0))}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {monthlyData.map((row, i) => (
+                                            <tr key={i}>
+                                                <td className="py-2 px-4 font-bold text-slate-900">{row.month}월</td>
+                                                <td className="py-2 px-4 text-right text-black">{formatCurrency(row.total_quantity)}</td>
+                                                <td className="py-2 px-4 text-right font-bold text-indigo-700">{formatCurrency(row.total_amount)}</td>
+                                            </tr>
+                                        ))}
+                                        {/* Total Row */}
+                                        <tr className="bg-slate-50 font-bold border-t border-slate-200">
+                                            <td className="py-2 px-4 text-slate-700">합계</td>
+                                            <td className="py-2 px-4 text-right">{formatCurrency(monthlyData.reduce((a, c) => a + c.total_quantity, 0))}</td>
+                                            <td className="py-2 px-4 text-right">{formatCurrency(monthlyData.reduce((a, c) => a + c.total_amount, 0))}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-        </div>
+        </div >
     );
 };
 

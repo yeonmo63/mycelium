@@ -2,7 +2,89 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { handlePrintRaw } from '../../utils/printUtils';
 import { invokeAI } from '../../utils/aiErrorHandler';
+
+const intelligencePrintStyles = `
+    @media print {
+        @page { size: A4 portrait; margin: 15mm; }
+        html, body { 
+            background: white !important; 
+            color: black !important;
+            color-scheme: light !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+    .print-report-wrapper { 
+        font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; 
+        padding: 0; 
+        color: #000; 
+        width: 100%;
+    }
+    .report-card {
+        border: 1px solid #000;
+        padding: 30px;
+        position: relative;
+    }
+    .report-header { text-align: center; margin-bottom: 40px; }
+    .report-header h1 { 
+        margin: 0; 
+        font-size: 28px; 
+        font-weight: 900; 
+        letter-spacing: 0.1em; 
+        text-decoration: underline; 
+        text-underline-offset: 8px;
+    }
+    .report-header .meta {
+        margin-top: 15px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .section-title {
+        font-size: 18px;
+        font-weight: 900;
+        margin: 30px 0 15px 0;
+        padding-left: 10px;
+        border-left: 5px solid #000;
+    }
+    .summary-box {
+        border: 2px solid #000;
+        padding: 20px;
+        background: #fdfdfd !important;
+        margin-bottom: 20px;
+    }
+    .summary-grid {
+        display: grid;
+        grid-template-cols: 1fr 1fr;
+        gap: 15px;
+    }
+    .summary-item {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px dashed #ccc;
+        padding-bottom: 5px;
+    }
+    .summary-item .label { font-weight: bold; color: #555; }
+    .summary-item .value { font-weight: 900; }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 12px; border: 2px solid #000; }
+    th, td { border: 1px solid #000; padding: 8px; text-align: center; }
+    th { background: #f0f0f0 !important; font-weight: 900; }
+    .text-right { text-align: right; }
+    .advice-content {
+        padding: 15px;
+        border: 1px solid #eee;
+        background: #fafafa;
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+`;
 
 Chart.register(...registerables);
 
@@ -124,7 +206,109 @@ const SalesIntelligence = () => {
                         <button onClick={() => window.location.reload()} className="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all flex items-center gap-2 text-sm shadow-sm">
                             <span className="material-symbols-rounded text-lg">refresh</span> 새로고침
                         </button>
-                        <button onClick={() => window.print()} className="h-10 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all flex items-center gap-2 text-sm shadow-lg shadow-indigo-200">
+                        <button
+                            onClick={() => {
+                                const currentYearData = sharedData.trend?.[sharedData.trend.length - 1] || {};
+                                const prevYearData = sharedData.trend?.[sharedData.trend.length - 2] || {};
+                                const growth = prevYearData.total_amount > 0
+                                    ? ((currentYearData.total_amount - prevYearData.total_amount) / prevYearData.total_amount * 100).toFixed(1)
+                                    : '0';
+
+                                const html = `
+                                    <style>${intelligencePrintStyles}</style>
+                                    <div class="print-report-wrapper">
+                                        <div class="report-card">
+                                            <div class="report-header">
+                                                <h1>지능형 경영 분석 리포트</h1>
+                                                <div class="meta">
+                                                    <span>분석 대상 기간: <strong>최근 10개년</strong></span>
+                                                    <span>출력일시: <strong>${new Date().toLocaleString()}</strong></span>
+                                                </div>
+                                            </div>
+
+                                            <div class="section-title">주요 도표 및 경영 지표 (Key Metrics)</div>
+                                            <div class="summary-box">
+                                                <div class="summary-grid">
+                                                    <div class="summary-item">
+                                                        <span class="label">올해(FY ${new Date().getFullYear()}) 총 매출액</span>
+                                                        <span class="value">${formatCurrency(currentYearData.total_amount || 0)}원</span>
+                                                    </div>
+                                                    <div class="summary-item">
+                                                        <span class="label">전년 대비 성장률</span>
+                                                        <span class="value" style="color: ${Number(growth) >= 0 ? '#d32f2f' : '#1976d2'}">${growth}%</span>
+                                                    </div>
+                                                    <div class="summary-item">
+                                                        <span class="label">총 판매 수량</span>
+                                                        <span class="value">${(currentYearData.total_quantity || 0).toLocaleString()}개</span>
+                                                    </div>
+                                                    <div class="summary-item">
+                                                        <span class="label">객단가(추정)</span>
+                                                        <span class="value">${formatCurrency(Math.round((currentYearData.total_amount || 0) / (currentYearData.record_count || 1)))}원</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="section-title">장기 매출 변동 추이 (10-Year Trend)</div>
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th>연도</th>
+                                                        <th>거래건수</th>
+                                                        <th>판매량</th>
+                                                        <th>총 실적(매출액)</th>
+                                                        <th>성장률</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${[...sharedData.trend].reverse().map((d, i, arr) => {
+                                    const prev = arr[i + 1];
+                                    let g = '-';
+                                    if (prev && prev.total_amount > 0) {
+                                        g = (((d.total_amount - prev.total_amount) / prev.total_amount) * 100).toFixed(1) + '%';
+                                    }
+                                    return `
+                                                            <tr>
+                                                                <td>${d.year}년</td>
+                                                                <td>${d.record_count.toLocaleString()}건</td>
+                                                                <td>${d.total_quantity.toLocaleString()}개</td>
+                                                                <td class="text-right" style="font-weight: bold;">${formatCurrency(d.total_amount)}원</td>
+                                                                <td style="color: ${g.startsWith('-') ? '#1976d2' : '#d32f2f'}; font-weight: bold;">${g}</td>
+                                                            </tr>
+                                                        `;
+                                }).join('')}
+                                                </tbody>
+                                            </table>
+
+                                            <div class="section-title">인기 품목 분석 (Top Products)</div>
+                                            <table>
+                                                <thead>
+                                                    <tr>
+                                                        <th style="width: 80px;">순위</th>
+                                                        <th style="text-align: left;">상품명</th>
+                                                        <th>누적 판매량</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${sharedData.topProducts.map((p, idx) => `
+                                                        <tr>
+                                                            <td>제 ${idx + 1}위</td>
+                                                            <td style="text-align: left; font-weight: bold;">${p.product_name}</td>
+                                                            <td class="text-right">${p.total_quantity.toLocaleString()}개</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                </tbody>
+                                            </table>
+
+                                            <div style="margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px; font-size: 11px; color: #999;">
+                                                본 리포트는 Mycelium ERP Intelligence 엔진에 의해 실시간 집계된 데이터를 바탕으로 생성되었습니다.
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                handlePrintRaw(html);
+                            }}
+                            className="h-10 px-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all flex items-center gap-2 text-sm shadow-lg shadow-indigo-200"
+                        >
                             <span className="material-symbols-rounded text-lg">print</span> 리포트 인쇄
                         </button>
                     </div>

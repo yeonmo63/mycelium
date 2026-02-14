@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { handlePrintRaw } from '../../../utils/printUtils';
 
 // Configuration
 const EVENT_NAME = 'mycelium-trigger-print';
@@ -52,75 +53,45 @@ const LabelPrinter = () => {
         const qrSvg = qrContainerRef.current?.innerHTML || '';
 
         console.log("[Jenny-Printer] 🛠️ Building Isolated Print Sandbox...");
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'fixed';
-        iframe.style.right = '200vw'; // Completely out of view
-        iframe.style.bottom = '200vh';
-        iframe.style.width = '0px';
-        iframe.style.height = '0px';
-        iframe.style.border = 'none';
-        document.body.appendChild(iframe);
 
-        const doc = iframe.contentWindow.document;
-        doc.open();
-        doc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
+        const html = `
                 <style>
-                    @page { 
-                        size: 80mm 40mm; 
-                        margin: 0; 
+                    @page {
+                        size: 40mm 30mm;
+                        margin: 0;
                     }
-                    body { 
-                        margin: 0; 
-                        padding: 0; 
-                        background: #ffffff !important; 
-                        color: #000000 !important; 
-                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                    }
-                    .label-wrapper {
+                    .label-print-wrapper {
+                        margin: 0;
+                        padding: 0;
+                        width: 40mm;
+                        height: 30mm;
                         display: flex;
-                        flex-direction: row;
-                        width: 80mm;
-                        height: 40mm;
-                        padding: 4mm 6mm;
-                        box-sizing: border-box;
                         align-items: center;
-                        background: #ffffff !important;
+                        justify-content: center;
+                        overflow: hidden;
+                        font-family: 'Inter', system-ui, sans-serif;
+                    }
+                    .label-container {
+                        width: 38mm;
+                        height: 28mm;
+                        display: flex;
+                        align-items: center;
+                        gap: 2mm;
+                        padding: 1mm;
+                        box-sizing: border-box;
                     }
                     .qr-section {
-                        flex-shrink: 0;
-                        margin-right: 6mm;
-                        text-align: center;
+                        width: 16mm;
+                        height: 16mm;
                         display: flex;
-                        flex-direction: column;
                         align-items: center;
                         justify-content: center;
                     }
-                    .qr-box {
-                        border: 2px solid black;
-                        padding: 1.5mm;
-                        background: white !important;
-                        display: inline-block;
-                        line-height: 0;
+                    .qr-section svg {
+                        width: 100% !important;
+                        height: 100% !important;
                     }
-                    .qr-box svg {
-                        width: 22mm !important;
-                        height: 22mm !important;
-                    }
-                    .gap-mark {
-                        font-size: 8px;
-                        font-weight: 900;
-                        margin-top: 4px;
-                        line-height: 1;
-                        border: 1px solid black;
-                        padding: 2px 4px;
-                        white-space: nowrap;
-                    }
-                    .info-section {
+                    .data-section {
                         flex: 1;
                         display: flex;
                         flex-direction: column;
@@ -132,100 +103,80 @@ const LabelPrinter = () => {
                         display: flex;
                         align-items: center;
                         padding: 3px 0;
-                        font-size: 11px; /* Moved from .data-label to .data-row for general row text */
-                        line-height: 1;
+                        font-size: 11px;
+                        font-weight: 800;
+                        color: #000;
+                        line-height: 1.1;
                     }
                     .data-label {
-                        color: #000000 !important;
-                        font-weight: 900;
-                        width: 12mm; /* Reduced from 15mm */
-                        flex-shrink: 0;
+                        white-space: nowrap;
+                        margin-right: 4px;
+                        color: #000;
                     }
                     .data-value {
-                        font-weight: 900;
-                        flex: 1;
-                        color: #000 !important;
-                    }
-                    .label-code {
-                        margin-top: 6px;
-                        border-top: 2px solid black;
-                        padding-top: 4px;
-                        font-size: 11px;
-                        font-weight: 900;
-                        letter-spacing: -0.2px;
-                        color: #000 !important;
-                    }
-                    .footer {
-                        text-align: right;
-                        font-size: 7px;
-                        margin-top: 3px;
-                        font-weight: bold;
-                        opacity: 0.6;
-                        color: #666 !important;
+                        word-break: break-all;
+                        overflow: hidden;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        color: #000;
                     }
                 </style>
-            </head>
-            <body>
-                <div class="label-wrapper">
-                    <div class="qr-section">
-                        <div class="qr-box">${qrSvg}</div>
-                        ${jobData.type === 'harvest' ? '<div class="gap-mark">GAP 인증 농산물</div>' : ''}
-                    </div>
-                    <div class="info-section">
-                        <div class="data-row" style="border-top: 2px solid black; padding-top: 4px;">
-                            <span class="data-label">품&nbsp;&nbsp;&nbsp;명:</span>
-                            <span class="data-value">${jobData.data.title || '-'}</span>
+                <div class="label-print-wrapper">
+                    <div class="label-container">
+                        <div class="qr-section">
+                            ${qrSvg}
                         </div>
-                        <div class="data-row">
-                            <span class="data-label">생산일:</span>
-                            <span class="data-value">${jobData.data.date || '-'}</span>
+                        <div class="data-section">
+                            <div class="data-row">
+                                <span class="data-label">품&nbsp;&nbsp;&nbsp;명:</span>
+                                <span class="data-value">${jobData.data.title || '-'}</span>
+                            </div>
+                            ${jobData.type === 'product' ? `
+                            <div class="data-row">
+                                <span class="data-label">규&nbsp;&nbsp;&nbsp;격:</span>
+                                <span class="data-value">${jobData.data.spec || '-'}</span>
+                            </div>
+                            <div class="data-row">
+                                <span class="data-label">단&nbsp;&nbsp;&nbsp;가:</span>
+                                <span class="data-value">￦${(jobData.data.price || 0).toLocaleString()}</span>
+                            </div>
+                            ` : `
+                            <div class="data-row">
+                                <span class="data-label">일&nbsp;&nbsp;&nbsp;자:</span>
+                                <span class="data-value">${jobData.data.date || '-'}</span>
+                            </div>
+                            <div class="data-row">
+                                <span class="data-label">중&nbsp;&nbsp;&nbsp;량:</span>
+                                <span class="data-value">${jobData.data.weight || '-'}kg</span>
+                            </div>
+                            `}
                         </div>
-                        <div class="data-row">
-                            <span class="data-label">생산자:</span>
-                            <span class="data-value">${jobData.data.producer || '-'}</span>
-                        </div>
-                        <div class="label-code">${jobData.data.code || '-'}</div>
-                        <div class="footer">Smart Mycelium Logic v3</div>
                     </div>
                 </div>
-                <script>
-                    window.onload = function() {
-                        window.focus();
-                        setTimeout(function() {
-                            window.print();
-                        }, 500);
-                    };
-                </script>
-            </body>
-            </html>
-        `);
-        doc.close();
+        `;
 
-        console.log("[Jenny-Printer] ⚡ Sandbox Iframe Print Triggered");
-
-        // Cleanup iframe after a generous delay
-        setTimeout(() => {
-            if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-            }
-        }, 3000);
+        handlePrintRaw(html);
     };
 
     return (
-        <div id="jenny-printer-hidden-factory" style={{
-            position: 'absolute',
-            top: -9999,
-            left: -9999,
-            opacity: 0,
-            pointerEvents: 'none',
-            visibility: 'hidden'
-        }}>
+        <div
+            id="isolated-qr-factory"
+            style={{
+                position: 'fixed',
+                left: '-9999px',
+                top: '-9999px',
+                visibility: 'hidden',
+                pointerEvents: 'none'
+            }}
+        >
             <div ref={qrContainerRef}>
                 {job && (
                     <QRCodeSVG
-                        value={job.data.qrValue || 'ERROR'}
-                        size={120}
-                        level="M"
+                        value={job.data.qrValue || 'N/A'}
+                        size={128}
+                        level="H"
+                        includeMargin={false}
                     />
                 )}
             </div>
