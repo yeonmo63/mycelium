@@ -60,17 +60,17 @@ const ProductionManager = ({ initialTab = 'dashboard' }) => {
 
     const loadDashboardData = async () => {
         try {
-            const [batches, logs, harvests, spacesData] = await Promise.all([
-                invoke('get_production_batches'),
-                invoke('get_farming_logs', {
-                    batchId: null,
-                    spaceId: null,
-                    startDate: null,
-                    endDate: null
-                }),
-                invoke('get_harvest_records', { batchId: null }),
-                invoke('get_production_spaces')
+            const [resBatches, resLogs, resHarvests, resSpaces] = await Promise.all([
+                fetch('/api/production/batches'),
+                fetch('/api/production/logs?limit=100'), // Fetch recent logs
+                fetch('/api/production/harvest?limit=50'),
+                fetch('/api/production/spaces')
             ]);
+
+            const batches = await resBatches.json();
+            const logs = await resLogs.json();
+            const harvests = await resHarvests.json();
+            const spacesData = await resSpaces.json();
 
             setSpaces(spacesData);
             setRecentLogs(logs.slice(0, 5));

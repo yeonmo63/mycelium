@@ -18,22 +18,39 @@ const SystemSetup = ({ onComplete }) => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            const result = await invoke('setup_system', {
-                dbUser,
-                dbPass,
-                dbHost,
-                dbPort,
-                dbName,
-                geminiKey: geminiKey || null
+            const response = await fetch('/api/setup/system', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    dbUser,
+                    dbPass,
+                    dbHost,
+                    dbPort,
+                    dbName,
+                    geminiKey: geminiKey || null
+                }),
             });
-            await showAlert("설정 완료", "시스템 설정이 완료되었습니다. 로그인 화면으로 이동합니다.");
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || errorData.message || 'Setup failed');
+            }
+
+            await showAlert("설정 완료", "시스템 설정이 완료되었습니다. 변경 사항을 적용하기 위해 프로그램을 재시작해주세요.");
+
+            // In web context, we can try to reload, but backend restart is needed usually.
+            // If the backend didn't exit, maybe it updated state? 
+            // Our backend handler updates state to Configured, so reload might work for login screen.
             if (onComplete) {
                 onComplete();
             } else {
                 window.location.reload();
             }
         } catch (err) {
-            await showAlert("설정 오류", err);
+            console.error(err);
+            await showAlert("설정 오류", err.message || "알 수 없는 오류가 발생했습니다.");
         } finally {
             setIsLoading(false);
         }

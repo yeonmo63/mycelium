@@ -20,6 +20,7 @@ mod stubs;
 #[macro_use]
 mod stubs_macros;
 mod bridge;
+mod embedded_db;
 
 use state::{AppState, SessionState, SetupStatus};
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
@@ -44,29 +45,41 @@ async fn main() {
     tracing::info!("Starting Celium Backend...");
 
     // Initialize Database
+    // Initialize Database (Lazy connect)
+    // We try to connect. If it fails (e.g. wrong port/credentials), we still start the server
+    // but in "NotConfigured" mode so the user can see the Setup Wizard.
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
         tracing::warn!("DATABASE_URL not found in env, using default local postgres");
         "postgresql://postgres:ryu134^11@@localhost:5432/mycelium".to_string()
     });
 
     let pool = match db::init_pool(&database_url).await {
-        Ok(pool) => {
-            tracing::info!("Database connection established");
-            if let Err(e) = db::init_database(&pool).await {
-                tracing::error!("Failed to run migrations: {}", e);
-            }
-            pool
-        }
+        Ok(pool) => pool,
         Err(e) => {
-            tracing::error!("Failed to connect to database: {}", e);
+            // This should rarely happen with lazy connect unless URL syntax is invalid
+            tracing::error!("Failed to create pool: {}", e);
             return;
         }
+    };
+
+    // Check connection validity
+    let setup_status = if let Ok(_) = pool.acquire().await {
+        tracing::info!("Database connection established");
+        if let Err(e) = db::init_database(&pool).await {
+            tracing::error!("Failed to run migrations: {}", e);
+            // Non-critical migration failure? Or maybe just warn?
+            // If migrations fail, we might want to let user re-setup or check logs.
+        }
+        SetupStatus::Configured
+    } else {
+        tracing::warn!("Failed to connect to database. Starting in Setup Mode.");
+        SetupStatus::NotConfigured
     };
 
     // Initialize Global App State
     let app_state = AppState {
         pool: pool.clone(),
-        setup_status: Arc::new(Mutex::new(SetupStatus::Configured)),
+        setup_status: Arc::new(Mutex::new(setup_status)),
         session: Arc::new(Mutex::new(SessionState::default())),
     };
 
@@ -90,6 +103,7 @@ async fn main() {
             "/api/auth/status",
             get(commands::config::check_setup_status),
         )
+        .route("/api/setup/system", post(commands::config::setup_system))
         .route("/api/auth/login", post(commands::config::login))
         .route("/api/auth/logout", post(commands::config::logout))
         .route("/api/auth/check", get(commands::config::check_auth_status))
@@ -209,6 +223,22 @@ async fn main() {
         .route(
             "/api/product/bom/save",
             post(commands::product::save_product_bom_axum),
+        )
+        .route(
+            "/api/product/freshness",
+            get(commands::product::get_product_freshness_axum),
+        )
+        .route(
+            "/api/product/logs",
+            get(commands::product::get_inventory_logs_axum),
+        )
+        .route(
+            "/api/product/stock/adjust",
+            post(commands::product::adjust_product_stock_axum),
+        )
+        .route(
+            "/api/product/stock/convert",
+            post(commands::product::batch_convert_stock_axum),
         )
         // Experience Routes
         .route(
@@ -504,6 +534,59 @@ async fn main() {
         .route(
             "/api/production/spaces",
             get(commands::production::space::get_production_spaces_axum),
+        )
+        .route(
+            "/api/production/spaces/save",
+            post(commands::production::space::save_production_space_axum),
+        )
+        .route(
+            "/api/production/spaces/delete/:id",
+            post(commands::production::space::delete_production_space_axum),
+        )
+        .route(
+            "/api/production/batches",
+            get(commands::production::batch::get_production_batches_axum),
+        )
+        .route(
+            "/api/production/batches/save",
+            post(commands::production::batch::save_production_batch_axum),
+        )
+        .route(
+            "/api/production/batches/delete/:id",
+            post(commands::production::batch::delete_production_batch_axum),
+        )
+        .route(
+            "/api/production/logs",
+            get(commands::production::log::get_farming_logs_axum),
+        )
+        .route(
+            "/api/production/logs/save",
+            post(commands::production::log::save_farming_log_axum),
+        )
+        .route(
+            "/api/production/logs/delete/:id",
+            post(commands::production::log::delete_farming_log_axum),
+        )
+        .route(
+            "/api/production/harvest",
+            get(commands::production::harvest::get_harvest_records_axum),
+        )
+        .route(
+            "/api/production/harvest/save",
+            post(commands::production::harvest::save_harvest_record_axum),
+        )
+        .route(
+            "/api/production/harvest/delete/:id",
+            post(commands::production::harvest::delete_harvest_record_axum),
+        )
+        // Production Media
+        .route(
+            "/api/production/media/upload",
+            post(commands::production::media::upload_media_axum),
+        )
+        .route(
+            "/api/production/media/:filename",
+            get(commands::production::media::serve_media_axum),
         )
         // IoT
         .route("/api/iot/sensors", get(commands::iot::get_sensors_axum))

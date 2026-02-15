@@ -1,24 +1,33 @@
 use crate::db::{CompanyInfo, User};
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::{AppState, SessionState, SetupStatus};
+use axum::extract::{Json, State};
 use bcrypt::{hash, verify, DEFAULT_COST};
+use chrono::NaiveDate;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
-use axum::extract::{State, Json};
-use serde::{Deserialize, Serialize};
-use chrono::NaiveDate;
 
 // Helper to replace AppHandle.path().app_config_dir()
 #[allow(dead_code)]
 pub fn get_app_config_dir() -> MyceliumResult<PathBuf> {
-    let mut path = std::env::current_dir()?;
-    path.push("data");
-    path.push("config");
-    if !path.exists() {
-        fs::create_dir_all(&path)?;
+    // Determine the base config directory
+    // Windows: C:\Users\Username\AppData\Roaming\com.mycelium
+    // Linux/macOS: ~/.config/com.mycelium or similar
+    let base_path = dirs::config_dir()
+        .map(|p| p.join("com.mycelium"))
+        .unwrap_or_else(|| {
+            // Fallback to current directory if config_dir cannot be determined (e.g. some restricted envs)
+            // But tries to use a subdirectory to be cleaner
+            PathBuf::from(".").join("data").join("config")
+        });
+
+    if !base_path.exists() {
+        fs::create_dir_all(&base_path)?;
     }
-    Ok(path)
+
+    Ok(base_path)
 }
 
 // For now, simple encryption/decryption stubs or use similar logic to before if needed
@@ -29,7 +38,7 @@ fn get_encryption_key() -> [u8; 32] {
 
 // ... encryption helpers from original file (simplified for now or keep same logic) ...
 // We will skip encryption implementation details for brevity in migration first pass unless critical.
-// Original code used aes_gcm. Let's keep it simple for now and store plain text or base64 if needed, 
+// Original code used aes_gcm. Let's keep it simple for now and store plain text or base64 if needed,
 // or reimplement properly later. The user wants migration to WORK first.
 
 pub async fn check_setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
@@ -41,6 +50,119 @@ pub async fn check_setup_status(State(state): State<AppState>) -> Json<SetupStat
         SetupStatus::NotConfigured => SetupStatus::NotConfigured,
     };
     Json(s)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetupPayload {
+    pub dbUser: String, // camelCase from JSON usually
+    pub dbPass: String,
+    pub dbHost: String,
+    pub dbPort: String,
+    pub dbName: String,
+    pub geminiKey: Option<String>,
+}
+
+pub async fn setup_system(
+    State(state): State<AppState>,
+    Json(payload): Json<SetupPayload>,
+) -> MyceliumResult<Json<String>> {
+    tracing::info!("Received setup request: {:?}", payload);
+
+    // 1. Handle Embedded DB request
+    if payload.dbPort == "5433" {
+        tracing::info!("Port 5433 detected. Attempting to start embedded DB...");
+        // Ensure we init and start it
+        if let Err(e) = crate::embedded_db::init_db_if_needed().await {
+            tracing::error!("Embedded DB Init Failed: {}", e);
+            return Err(MyceliumError::Internal(format!(
+                "Embedded DB Init Failed: {}",
+                e
+            )));
+        }
+
+        match crate::embedded_db::start_db().await {
+            Ok(_) => tracing::info!("Embedded DB started successfully."),
+            Err(e) => {
+                tracing::error!("Embedded DB Start Failed: {}", e);
+                return Err(MyceliumError::Internal(format!(
+                    "Embedded DB Start Failed: {}",
+                    e
+                )));
+            }
+        }
+    }
+
+    // 2. Construct Connection String
+    let db_url = format!(
+        "postgres://{}:{}@{}:{}/{}",
+        payload.dbUser, payload.dbPass, payload.dbHost, payload.dbPort, payload.dbName
+    );
+
+    // 3. Verify Connection
+    // Create temporary pool just to test connection
+    let test_pool = crate::db::init_pool(&db_url)
+        .await
+        .map_err(|e| MyceliumError::Internal(format!("Database connection failed: {}", e)))?;
+
+    // Try acquiring a connection
+    if let Err(e) = test_pool.acquire().await {
+        return Err(MyceliumError::Internal(format!(
+            "Failed to acquire connection: {}",
+            e
+        )));
+    }
+
+    // 4. Run Migrations (now that we are connected)
+    if let Err(e) = crate::db::init_database(&test_pool).await {
+        return Err(MyceliumError::Internal(format!("Migration failed: {}", e)));
+    }
+
+    // 5. Persist Configuration to .env
+    // We try to write .env next to the executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let env_path = exe_dir.join(".env");
+            let mut env_content = format!("DATABASE_URL={}\nPORT=3000\n", db_url);
+            if let Some(key) = &payload.geminiKey {
+                env_content.push_str(&format!("GEMINI_API_KEY={}\n", key));
+            }
+            // Add other defaults
+            env_content.push_str("RUST_LOG=info,sqlx=warn\n");
+
+            if let Err(e) = fs::write(&env_path, env_content) {
+                tracing::warn!("Failed to write .env file: {}", e);
+                // Non-fatal, but won't persist restart
+            } else {
+                tracing::info!("Comparison saved to {:?}", env_path);
+            }
+        }
+    }
+
+    // 6. Update Global State
+    // We cannot easily "replace" the global pool in AppState because it's shared.
+    // However, for this session, the user expects to proceed.
+    // A Restart is usually recommended, but we can try to return success
+    // and let the frontend reload?
+    // Actually, since we can't hot-swap the pool in the running server easily without RwLock,
+    // we should tell the client "Setup Complete. Please Restart." or just hope the next run picks it up.
+    // BUT, we want immediate login.
+    // So we should probably update the setup_status to Configured.
+    // The main.rs pool is still the old (failed) one. This is a problem.
+    // To fix this properly, AppState.pool should be Arc<RwLock<DbPool>> or similar,
+    // OR just return success and tell frontend to "Reload" which might not help if backend doesn't restart.
+
+    // For now: Just update status. The current running instance WON'T work until restart
+    // unless we use interior mutability for the pool.
+    // Let's assume the user will restart or we implement a "hot reload" mechanism later.
+    // ACTUALLY: The best way is to panic/exit and let the service manager restart it,
+    // but this is a desktop app.
+
+    // Quick Fix: Allow the handler to return success, and the frontend shows "Please restart application".
+    *state.setup_status.lock().unwrap() = SetupStatus::Configured;
+
+    Ok(Json(
+        "Setup successful. Please restart the application.".to_string(),
+    ))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -159,10 +281,10 @@ pub struct AuthStatusResponse {
 pub async fn check_auth_status(State(state): State<AppState>) -> Json<AuthStatusResponse> {
     let session = state.session.lock().unwrap();
     let logged_in = session.user_id.is_some();
-    
+
     // Check if PIN is required (Mobile Config)
     // For now, hardcode false or implement config read
-    let require_pin = false; 
+    let require_pin = false;
 
     Json(AuthStatusResponse {
         logged_in,
@@ -221,7 +343,7 @@ pub async fn update_user(
         if !password.trim().is_empty() {
             let hashed = hash(password, DEFAULT_COST)
                 .map_err(|e| MyceliumError::Internal(format!("Hash error: {}", e)))?;
-                
+
             sqlx::query("UPDATE users SET username = $1, password_hash = $2, role = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4")
                 .bind(payload.username)
                 .bind(hashed)
@@ -233,12 +355,14 @@ pub async fn update_user(
         }
     }
 
-    sqlx::query("UPDATE users SET username = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3")
-        .bind(payload.username)
-        .bind(payload.role)
-        .bind(payload.id)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET username = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+    )
+    .bind(payload.username)
+    .bind(payload.role)
+    .bind(payload.id)
+    .execute(&state.pool)
+    .await?;
 
     Ok(Json(json!({ "success": true })))
 }
@@ -256,9 +380,11 @@ pub async fn delete_user(
     let user = sqlx::query!("SELECT username FROM users WHERE id = $1", payload.id)
         .fetch_one(&state.pool)
         .await?;
-        
+
     if user.username == "admin" {
-        return Err(MyceliumError::Validation("Cannot delete system admin".to_string()));
+        return Err(MyceliumError::Validation(
+            "Cannot delete system admin".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM users WHERE id = $1")
@@ -287,7 +413,10 @@ pub async fn verify_admin_password(
 
     // 1. Get the current logged-in user from session
     let current_user_id = {
-        let session = state.session.lock().map_err(|_| MyceliumError::Internal("Session lock error".to_string()))?;
+        let session = state
+            .session
+            .lock()
+            .map_err(|_| MyceliumError::Internal("Session lock error".to_string()))?;
         session.user_id
     };
 
@@ -304,7 +433,8 @@ pub async fn verify_admin_password(
     let final_user = match user_to_check {
         Some(u) if u.role == "admin" => Some(u),
         _ => {
-            let admin_username = std::env::var("ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
+            let admin_username =
+                std::env::var("ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
             sqlx::query_as::<_, User>(
                 "SELECT * FROM users WHERE (username = $1 OR role = 'admin') AND username != 'user' LIMIT 1",
             )
@@ -316,7 +446,7 @@ pub async fn verify_admin_password(
 
     if let Some(admin_user) = final_user {
         // --- EMERGENCY BYPASS FOR MIGRATION ---
-        // If input is 'admin' and user is 'admin', allow it 
+        // If input is 'admin' and user is 'admin', allow it
         if admin_user.username == "admin" && input_password == "admin" {
             return Ok(Json(true));
         }
@@ -325,10 +455,13 @@ pub async fn verify_admin_password(
             match verify(input_password, &hash) {
                 Ok(is_valid) => {
                     if !is_valid {
-                        eprintln!("Auth: Password mismatch for admin user '{}'", admin_user.username);
+                        eprintln!(
+                            "Auth: Password mismatch for admin user '{}'",
+                            admin_user.username
+                        );
                     }
                     Ok(Json(is_valid))
-                },
+                }
                 Err(e) => {
                     eprintln!("Auth: Bcrypt verify error: {:?}", e);
                     Ok(Json(false))
@@ -344,7 +477,9 @@ pub async fn verify_admin_password(
     }
 }
 
-pub async fn get_company_info(State(state): State<AppState>) -> MyceliumResult<Json<Option<CompanyInfo>>> {
+pub async fn get_company_info(
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<Option<CompanyInfo>>> {
     let info = sqlx::query_as::<_, CompanyInfo>("SELECT * FROM company_info LIMIT 1")
         .fetch_optional(&state.pool)
         .await?;
@@ -396,7 +531,7 @@ pub async fn save_company_info(
                 item = $9, 
                 memo = $10, 
                 certification_info = $11,
-                updated_at = CURRENT_TIMESTAMP"
+                updated_at = CURRENT_TIMESTAMP",
         )
         .bind(payload.companyName)
         .bind(payload.representativeName)
@@ -417,7 +552,7 @@ pub async fn save_company_info(
                 company_name, representative_name, phone_number, mobile_number, 
                 business_reg_number, registration_date, address, business_type, 
                 item, memo, certification_info
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(payload.companyName)
         .bind(payload.representativeName)
@@ -439,11 +574,16 @@ pub async fn save_company_info(
 
 // Added for compatibility with other modules
 pub fn check_admin(state: &AppState) -> MyceliumResult<()> {
-    let session = state.session.lock().map_err(|_| MyceliumError::Internal("Session lock error".to_string()))?;
+    let session = state
+        .session
+        .lock()
+        .map_err(|_| MyceliumError::Internal("Session lock error".to_string()))?;
     if session.role.as_deref() == Some("admin") {
         Ok(())
     } else {
-        Err(MyceliumError::Validation("Admin authority required".to_string()))
+        Err(MyceliumError::Validation(
+            "Admin authority required".to_string(),
+        ))
     }
 }
 
@@ -459,11 +599,13 @@ pub fn get_naver_keys() -> (String, String) {
     )
 }
 
-pub async fn get_tax_filing_config_for_ui(_app: crate::stubs::AppHandle) -> MyceliumResult<serde_json::Value> {
-     Ok(serde_json::json!({
-         "tax_filing_month": 1,
-         "tax_filing_day": 10
-     }))
+pub async fn get_tax_filing_config_for_ui(
+    _app: crate::stubs::AppHandle,
+) -> MyceliumResult<serde_json::Value> {
+    Ok(serde_json::json!({
+        "tax_filing_month": 1,
+        "tax_filing_day": 10
+    }))
 }
 
 pub fn log_system_action(_pool: &crate::db::DbPool, _action: &str, _details: &str) {
@@ -585,7 +727,9 @@ pub async fn get_all_integrations_config_axum() -> MyceliumResult<Json<Integrati
     Ok(Json(settings))
 }
 
-pub async fn save_gemini_api_key_axum(Json(payload): Json<SaveGeminiPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_gemini_api_key_axum(
+    Json(payload): Json<SaveGeminiPayload>,
+) -> MyceliumResult<Json<()>> {
     let mut settings = load_integration_settings()?;
     settings.gemini_api_key = Some(payload.key);
     save_integration_settings(&settings)?;
@@ -613,14 +757,18 @@ pub async fn save_mall_keys_axum(Json(payload): Json<SaveMallPayload>) -> Myceli
     Ok(Json(()))
 }
 
-pub async fn save_courier_config_axum(Json(payload): Json<SaveCourierPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_courier_config_axum(
+    Json(payload): Json<SaveCourierPayload>,
+) -> MyceliumResult<Json<()>> {
     let mut settings = load_integration_settings()?;
     settings.courier = Some(payload.config);
     save_integration_settings(&settings)?;
     Ok(Json(()))
 }
 
-pub async fn save_tax_filing_config_axum(Json(payload): Json<SaveTaxPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_tax_filing_config_axum(
+    Json(payload): Json<SaveTaxPayload>,
+) -> MyceliumResult<Json<()>> {
     let mut settings = load_integration_settings()?;
     settings.tax = Some(payload.config);
     save_integration_settings(&settings)?;
@@ -633,12 +781,30 @@ pub type MessageTemplates = std::collections::HashMap<String, Vec<String>>;
 
 fn default_message_templates() -> MessageTemplates {
     let mut m = std::collections::HashMap::new();
-    m.insert("default".to_string(), vec!["안녕하세요, ${name}님! Mycelium입니다. ✨".to_string()]);
-    m.insert("repurchase".to_string(), vec!["${name}님, 버섯 떨어질 때 되지 않으셨나요? 😉".to_string()]);
-    m.insert("churn".to_string(), vec!["${name}님, 오랜만이에요! 많이 기다렸답니다. 🍄".to_string()]);
-    m.insert("shipping_receipt".to_string(), vec!["배송 접수가 완료되었습니다. 입금 확인 후 발송해 드릴게요! 🚚".to_string()]);
-    m.insert("shipping_paid".to_string(), vec!["입금 확인되었습니다. 곧 발송해 드리겠습니다. 😊".to_string()]);
-    m.insert("shipping_done".to_string(), vec!["발송 완료되었습니다! 맛있게 드세요. 🍄".to_string()]);
+    m.insert(
+        "default".to_string(),
+        vec!["안녕하세요, ${name}님! Mycelium입니다. ✨".to_string()],
+    );
+    m.insert(
+        "repurchase".to_string(),
+        vec!["${name}님, 버섯 떨어질 때 되지 않으셨나요? 😉".to_string()],
+    );
+    m.insert(
+        "churn".to_string(),
+        vec!["${name}님, 오랜만이에요! 많이 기다렸답니다. 🍄".to_string()],
+    );
+    m.insert(
+        "shipping_receipt".to_string(),
+        vec!["배송 접수가 완료되었습니다. 입금 확인 후 발송해 드릴게요! 🚚".to_string()],
+    );
+    m.insert(
+        "shipping_paid".to_string(),
+        vec!["입금 확인되었습니다. 곧 발송해 드리겠습니다. 😊".to_string()],
+    );
+    m.insert(
+        "shipping_done".to_string(),
+        vec!["발송 완료되었습니다! 맛있게 드세요. 🍄".to_string()],
+    );
     m
 }
 
@@ -646,7 +812,8 @@ fn load_message_templates_from_file() -> MyceliumResult<MessageTemplates> {
     let path = get_app_config_dir()?.join("templates.json");
     if path.exists() {
         let content = std::fs::read_to_string(path)?;
-        let data: MessageTemplates = serde_json::from_str(&content).unwrap_or_else(|_| default_message_templates());
+        let data: MessageTemplates =
+            serde_json::from_str(&content).unwrap_or_else(|_| default_message_templates());
         Ok(data)
     } else {
         Ok(default_message_templates())
@@ -670,7 +837,9 @@ pub async fn get_message_templates_axum() -> MyceliumResult<Json<MessageTemplate
     Ok(Json(templates))
 }
 
-pub async fn save_message_templates_axum(Json(payload): Json<SaveTemplatesPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_message_templates_axum(
+    Json(payload): Json<SaveTemplatesPayload>,
+) -> MyceliumResult<Json<()>> {
     save_message_templates_to_file(&payload.templates)?;
     Ok(Json(()))
 }
@@ -722,7 +891,9 @@ pub async fn get_mobile_config_axum() -> MyceliumResult<Json<MobileConfig>> {
     Ok(Json(config))
 }
 
-pub async fn save_mobile_config_axum(Json(payload): Json<SaveMobileConfigPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_mobile_config_axum(
+    Json(payload): Json<SaveMobileConfigPayload>,
+) -> MyceliumResult<Json<()>> {
     save_mobile_config_to_file(&payload.config)?;
     Ok(Json(()))
 }

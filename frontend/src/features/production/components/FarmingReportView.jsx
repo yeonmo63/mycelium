@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import dayjs from 'dayjs';
 import { X, Printer, Download, Eye, FileText, CheckCircle2 } from 'lucide-react';
 
@@ -41,16 +40,20 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [logsData, companyData] = await Promise.all([
-                invoke('get_farming_logs', {
-                    batchId: null,
-                    spaceId: null,
-                    startDate: startDate,
-                    endDate: endDate,
-                    workType: reportCategoryMap[reportType]?.[0] // Note: Backend needs to support multiple workTypes or we filter here
-                }),
-                invoke('get_company_info')
+            const params = new URLSearchParams();
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+            // Axum handler doesn't support array for workType filtering yet strictly via query params in the same way, 
+            // but we can filter client side as before or update backend. 
+            // For now, fetching all logs in range and filtering client side is safer given the existing logic.
+
+            const [resLogs, resCompany] = await Promise.all([
+                fetch(`/api/production/logs?${params.toString()}&limit=1000`),
+                fetch('/api/auth/company')
             ]);
+
+            const logsData = await resLogs.json();
+            const companyData = await resCompany.json();
 
             let filteredLogs = logsData;
             const allowedCategories = reportCategoryMap[reportType];
@@ -62,26 +65,21 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
             setLogs(reversedLogs);
             setCompanyInfo(companyData);
 
-            // Load photos as base64 for reliable preview (Limit to 10 for performance)
+            // Photos are served directly via URL
             if (includeAttachments) {
                 const photosToLoad = [];
                 reversedLogs.forEach(l => {
                     if (l.photos && Array.isArray(l.photos)) {
                         l.photos.forEach(p => {
-                            if (p.path && photosToLoad.length < 10) photosToLoad.push(p.path);
+                            if (p.path) photosToLoad.push(p.path);
                         });
                     }
                 });
 
                 const loadedPhotos = {};
-                await Promise.all(photosToLoad.map(async (path) => {
-                    try {
-                        const base64 = await invoke('get_media_base64', { fileName: path });
-                        loadedPhotos[path] = base64;
-                    } catch (e) {
-                        console.error("Failed to load photo:", path, e);
-                    }
-                }));
+                photosToLoad.forEach(path => {
+                    loadedPhotos[path] = `/api/production/media/${path}`;
+                });
                 setPhotoData(loadedPhotos);
             }
         } catch (err) {
@@ -96,37 +94,7 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
     }, [startDate, endDate]);
 
     const handlePrint = async () => {
-        if (isSaving) return;
-
-        try {
-            // Step 1: Request save location
-            const savePath = await invoke('plugin:dialog|save', {
-                options: {
-                    filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
-                    defaultPath: `${reportLabels[reportType]}_${startDate}_${endDate}.pdf`
-                }
-            });
-
-            if (!savePath) return;
-
-            setIsSaving(true);
-
-            // Step 2: Trigger backend generation
-            await invoke('generate_production_pdf', {
-                savePath,
-                startDate,
-                endDate,
-                includeAttachments,
-                includeApproval,
-                reportType
-            });
-
-            // Optional: You could add a success toast here
-        } catch (err) {
-            console.error("PDF Save failed:", err);
-        } finally {
-            setIsSaving(false);
-        }
+        window.print();
     };
 
     const { tableLogs, attachmentPhotos } = useMemo(() => {
@@ -199,23 +167,10 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
                 <div className="h-px bg-white/20 w-full" />
 
                 <button
-                    disabled={isSaving}
                     onClick={handlePrint}
-                    className={`h-14 px-8 rounded-2xl font-black text-sm shadow-2xl transition-all flex items-center gap-3 
-                        ${isSaving
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : 'bg-indigo-600 text-white shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-1 active:translate-y-0'}`}
+                    className="h-14 px-8 rounded-2xl font-black text-sm shadow-2xl transition-all flex items-center gap-3 bg-indigo-600 text-white shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-1 active:translate-y-0"
                 >
-                    {isSaving ? (
-                        <>
-                            <div className="w-5 h-5 border-3 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
-                            저장 중...
-                        </>
-                    ) : (
-                        <>
-                            <Download size={20} /> PDF 저장
-                        </>
-                    )}
+                    <Printer size={20} /> 인쇄 / PDF 저장
                 </button>
             </div>
 

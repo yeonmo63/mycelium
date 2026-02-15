@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { QRCodeSVG } from 'qrcode.react';
 import { useModal } from '../../../contexts/ModalContext';
 import {
@@ -63,11 +62,16 @@ const HarvestRecords = () => {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [recordsData, batchesData, productsData] = await Promise.all([
-                invoke('get_harvest_records', { batchId: null }),
-                invoke('get_production_batches'),
-                invoke('get_product_list')
+            const url = '/api/production/harvest' + (window.location.search.includes('batchId') ? window.location.search : '');
+            const [resRecords, resBatches, resProducts] = await Promise.all([
+                fetch(url),
+                fetch('/api/production/batches'),
+                fetch('/api/product/list')
             ]);
+
+            const recordsData = await resRecords.json();
+            const batchesData = await resBatches.json();
+            const productsData = await resProducts.json();
             setRecords(recordsData);
             setBatches(batchesData);
             setProducts(productsData);
@@ -80,7 +84,8 @@ const HarvestRecords = () => {
 
     useEffect(() => {
         loadData();
-        const fetchCompany = () => invoke('get_company_info')
+        const fetchCompany = () => fetch('/api/auth/company')
+            .then(res => res.json())
             .then(info => setCompanyInfo(info))
             .catch(e => console.error("[Harvest] Company fetch failed:", e));
 
@@ -128,18 +133,23 @@ const HarvestRecords = () => {
         }
 
         try {
-            await invoke('save_harvest_record', {
-                record: {
-                    ...formData,
-                    batch_id: parseInt(formData.batch_id),
-                    quantity: parseFloat(formData.quantity) || 0,
-                    defective_quantity: parseFloat(formData.defective_quantity) || 0,
-                    loss_quantity: parseFloat(formData.loss_quantity) || 0,
-                    package_count: parseInt(formData.package_count) || 0,
-                    weight_per_package: parseFloat(formData.weight_per_package) || 0
-                },
-                completeBatch: completeBatch
+            const res = await fetch('/api/production/harvest/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    record: {
+                        ...formData,
+                        batch_id: parseInt(formData.batch_id),
+                        quantity: parseFloat(formData.quantity) || 0,
+                        defective_quantity: parseFloat(formData.defective_quantity) || 0,
+                        loss_quantity: parseFloat(formData.loss_quantity) || 0,
+                        package_count: parseInt(formData.package_count) || 0,
+                        weight_per_package: parseFloat(formData.weight_per_package) || 0
+                    },
+                    completeBatch: completeBatch
+                })
             });
+            if (!res.ok) throw new Error("Failed to save record");
             setIsModalOpen(false);
             loadData();
             showAlert('성공', '수확 기록 및 재고 반영이 완료되었습니다.');
@@ -152,7 +162,8 @@ const HarvestRecords = () => {
         const confirmed = await showConfirm('삭제 확인', '이 수확 기록을 삭제하시겠습니까?');
         if (confirmed) {
             try {
-                await invoke('delete_harvest_record', { harvestId: id });
+                const res = await fetch(`/api/production/harvest/delete/${id}`, { method: 'POST' });
+                if (!res.ok) throw new Error("Failed to delete record");
                 loadData();
             } catch (err) {
                 showAlert('오류', `삭제 실패: ${err}`);
@@ -204,22 +215,27 @@ const HarvestRecords = () => {
             }
 
             try {
-                await invoke('save_harvest_record', {
-                    record: {
-                        harvest_id: 0,
-                        batch_id: targetBatch.batch_id,
-                        harvest_date: dayjs().format('YYYY-MM-DD'),
-                        quantity: parseFloat(scanConfig.weight) || 0,
-                        unit: scanConfig.unit || 'kg',
-                        grade: scanConfig.grade || 'A',
-                        traceability_code: `SCAN-${dayjs().format('HHmmss')}`,
-                        memo: `[연속스캔] ${val} (자동입력)`,
-                        package_count: 1,
-                        weight_per_package: parseFloat(scanConfig.weight) || 0,
-                        package_unit: '바구니'
-                    },
-                    completeBatch: false
+                const res = await fetch('/api/production/harvest/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        record: {
+                            harvest_id: 0,
+                            batch_id: targetBatch.batch_id,
+                            harvest_date: dayjs().format('YYYY-MM-DD'),
+                            quantity: parseFloat(scanConfig.weight) || 0,
+                            unit: scanConfig.unit || 'kg',
+                            grade: scanConfig.grade || 'A',
+                            traceability_code: `SCAN-${dayjs().format('HHmmss')}`,
+                            memo: `[연속스캔] ${val} (자동입력)`,
+                            package_count: 1,
+                            weight_per_package: parseFloat(scanConfig.weight) || 0,
+                            package_unit: '바구니'
+                        },
+                        completeBatch: false
+                    })
                 });
+                if (!res.ok) throw new Error("Failed to save scan");
 
                 setRecentScans(prev => [{
                     id: Date.now(),
@@ -271,7 +287,18 @@ const HarvestRecords = () => {
                 return;
             }
 
-            await invoke('save_harvest_batch', { records: recordsToSave });
+            // Sequential save execution since backend bulk API is not ready
+            for (const record of recordsToSave) {
+                const res = await fetch('/api/production/harvest/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        record: record,
+                        completeBatch: false
+                    })
+                });
+                if (!res.ok) console.error("Failed to save batch item", record);
+            }
             setBatchInput('');
             loadData();
             showAlert('성공', `${recordsToSave.length}건의 기록이 한꺼번에 저장되었습니다.`);

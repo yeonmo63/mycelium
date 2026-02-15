@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useModal } from '../../../contexts/ModalContext';
 import { Plus, Edit2, Trash2, Warehouse, MapPin, Maximize2, FileText, CheckCircle, XCircle } from 'lucide-react';
 
@@ -23,8 +22,11 @@ const ProductionSpaces = () => {
     const loadSpaces = async () => {
         setIsLoading(true);
         try {
-            const data = await invoke('get_production_spaces');
-            setSpaces(data);
+            const res = await fetch('/api/production/spaces');
+            if (res.ok) {
+                const data = await res.json();
+                setSpaces(data);
+            }
         } catch (err) {
             console.error(err);
         } finally {
@@ -71,13 +73,16 @@ const ProductionSpaces = () => {
         }
 
         try {
-            await invoke('save_production_space', {
-                space: {
+            const res = await fetch('/api/production/spaces/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     ...formData,
                     space_id: editingSpace ? editingSpace.space_id : 0,
                     area_size: parseFloat(formData.area_size) || 0
-                }
+                })
             });
+            if (!res.ok) throw new Error("Failed to save space");
             setIsModalOpen(false);
             loadSpaces();
             showAlert('성공', '시설 정보가 저장되었습니다.');
@@ -90,7 +95,8 @@ const ProductionSpaces = () => {
         const confirmed = await showConfirm('삭제 확인', '이 시설을 삭제하시겠습니까? 관련 데이터가 있을 경우 삭제되지 않을 수 있습니다.');
         if (confirmed) {
             try {
-                await invoke('delete_production_space', { spaceId: id });
+                const res = await fetch(`/api/production/spaces/delete/${id}`, { method: 'POST' });
+                if (!res.ok) throw new Error("Failed to delete space");
                 loadSpaces();
             } catch (err) {
                 showAlert('오류', `삭제 실패: ${err}`);

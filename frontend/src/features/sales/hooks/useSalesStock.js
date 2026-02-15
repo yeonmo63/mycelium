@@ -44,27 +44,38 @@ export const useSalesStock = (showAlert, showConfirm) => {
     }, [tab]);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_product_list');
-            setProducts(list || []);
+            // 1. Fetch Products
+            const resProducts = await fetch('/api/product/list');
+            if (resProducts.ok) {
+                const list = await resProducts.json();
+                setProducts(list || []);
+            }
 
-            const freshData = await window.__TAURI__.core.invoke('get_product_freshness');
+            // 2. Fetch Freshness
+            const resFresh = await fetch('/api/product/freshness');
             const fMap = {};
-            if (freshData) {
-                freshData.forEach(item => {
-                    fMap[item.product_id] = item.last_in_date;
-                });
+            if (resFresh.ok) {
+                const freshData = await resFresh.json();
+                if (freshData) {
+                    freshData.forEach(item => {
+                        fMap[item.product_id] = item.last_in_date;
+                    });
+                }
             }
             setFreshnessMap(fMap);
 
-            const logData = await window.__TAURI__.core.invoke('get_inventory_logs', {
-                limit: 100,
-                itemType: tab
-            });
-            setLogs(logData || []);
+            // 3. Fetch Logs
+            const queryParams = new URLSearchParams({ limit: 100 });
+            if (tab) queryParams.append('itemType', tab);
+
+            const resLogs = await fetch(`/api/product/logs?${queryParams.toString()}`);
+            if (resLogs.ok) {
+                const logData = await resLogs.json();
+                setLogs(logData || []);
+            }
         } catch (e) {
-            console.error(e);
+            console.error("Failed to load data:", e);
         }
     };
 
@@ -98,20 +109,24 @@ export const useSalesStock = (showAlert, showConfirm) => {
         if (!product || changeQty === 0) return;
 
         try {
-            if (window.__TAURI__) {
-                const memoText = changeQty > 0 ? '재고 입고(수동)' : '재고 조정(수동)';
-                const fullMemo = memo ? `${memoText} - ${memo}` : (reason ? `${memoText} - ${reason}` : memoText);
+            const memoText = changeQty > 0 ? '재고 입고(수동)' : '재고 조정(수동)';
+            const fullMemo = memo ? `${memoText} - ${memo}` : (reason ? `${memoText} - ${reason}` : memoText);
 
-                await window.__TAURI__.core.invoke('adjust_product_stock', {
+            const res = await fetch('/api/product/stock/adjust', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     productId: product.product_id,
                     changeQty,
                     memo: fullMemo,
                     reasonCategory: reason || null
-                });
+                })
+            });
 
-                setAdjustModal(prev => ({ ...prev, open: false }));
-                await loadData();
-            }
+            if (!res.ok) throw new Error("Failed to adjust stock");
+
+            setAdjustModal(prev => ({ ...prev, open: false }));
+            await loadData();
         } catch (e) {
             showAlert("오류", "저장 실패: " + e);
         }
@@ -143,20 +158,25 @@ export const useSalesStock = (showAlert, showConfirm) => {
         }
 
         try {
-            if (window.__TAURI__) {
-                await Promise.all(validItems.map(item =>
-                    window.__TAURI__.core.invoke('adjust_product_stock', {
+            const responses = await Promise.all(validItems.map(item =>
+                fetch('/api/product/stock/adjust', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
                         productId: Number(item.targetId),
                         changeQty: Number(item.qty),
                         memo: `수확 입고 [${item.grade}등급]${memo ? ' - ' + memo : ''}`,
                         reasonCategory: '수확'
                     })
-                ));
+                })
+            ));
 
-                await showAlert("완료", `${validItems.length}건의 수확 입고 처리가 완료되었습니다.`);
-                setHarvestModal(prev => ({ ...prev, open: false }));
-                loadData();
-            }
+            const failed = responses.filter(r => !r.ok);
+            if (failed.length > 0) throw new Error(`${failed.length}건의 처리가 실패했습니다.`);
+
+            await showAlert("완료", `${validItems.length}건의 수확 입고 처리가 완료되었습니다.`);
+            setHarvestModal(prev => ({ ...prev, open: false }));
+            loadData();
         } catch (e) {
             showAlert("오류", "처리 실패: " + e);
         }
@@ -213,16 +233,21 @@ export const useSalesStock = (showAlert, showConfirm) => {
         }
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('batch_convert_stock', {
+            const res = await fetch('/api/product/stock/convert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     targets: validTargets.map(t => ({ product_id: Number(t.productId), quantity: Number(t.qty) })),
                     deductions: validDeductions.map(d => ({ material_id: d.materialId, quantity: Number(d.rQty) })),
                     memo: memo || '통합 상품화 처리'
-                });
-                await showAlert("완료", "통합 상품화 처리가 완료되었습니다.");
-                setConvertModal(prev => ({ ...prev, open: false }));
-                loadData();
-            }
+                })
+            });
+
+            if (!res.ok) throw new Error("Failed to convert stock");
+
+            await showAlert("완료", "통합 상품화 처리가 완료되었습니다.");
+            setConvertModal(prev => ({ ...prev, open: false }));
+            loadData();
         } catch (e) {
             showAlert("오류", "처리 실패: " + e);
         }

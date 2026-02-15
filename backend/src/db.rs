@@ -11,13 +11,13 @@ use crate::error::{MyceliumError, MyceliumResult};
 pub type DbPool = Pool<Postgres>;
 
 pub async fn init_pool_with_options(opts: PgConnectOptions) -> MyceliumResult<DbPool> {
+    // connect_lazy_with returns the pool immediately. It does not validate connection.
     Ok(PgPoolOptions::new()
         .max_connections(20)
         .acquire_timeout(std::time::Duration::from_secs(30))
         .idle_timeout(std::time::Duration::from_secs(120))
         .max_lifetime(std::time::Duration::from_secs(300))
-        .connect_with(opts)
-        .await?)
+        .connect_lazy_with(opts))
 }
 
 pub async fn init_pool(database_url: &str) -> MyceliumResult<DbPool> {

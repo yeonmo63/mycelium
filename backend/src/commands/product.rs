@@ -62,6 +62,25 @@ pub async fn get_product_freshness(
     Ok(rows)
 }
 
+pub async fn get_product_freshness_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<ProductFreshness>>> {
+    let rows = sqlx::query_as::<_, ProductFreshness>(
+        r#"
+        SELECT p.product_id, p.product_name, p.stock_quantity, MAX(l.created_at) as last_in_date 
+        FROM products p
+        LEFT JOIN inventory_logs l ON p.product_id = l.product_id AND l.change_quantity > 0
+        WHERE p.status != '단종상품'
+        GROUP BY p.product_id
+        HAVING p.stock_quantity > 0
+        "#,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(rows))
+}
+
 
 pub async fn get_discontinued_product_names(
     pool: TauriState<'_, DbPool>,
@@ -786,6 +805,97 @@ pub async fn adjust_product_stock(
     Ok(())
 }
 
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct AdjustStockRequest {
+    pub productId: i32,
+    pub changeQty: i32,
+    pub memo: String,
+    pub reasonCategory: Option<String>,
+}
+
+pub async fn adjust_product_stock_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<AdjustStockRequest>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let product: Product = sqlx::query_as("SELECT product_id, product_name, specification, product_code, stock_quantity, unit_price FROM products WHERE product_id = $1")
+        .bind(payload.productId).fetch_one(&mut *tx).await?;
+
+    let new_qty = product.stock_quantity.unwrap_or(0) + payload.changeQty;
+    sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
+        .bind(new_qty)
+        .bind(payload.productId)
+        .execute(&mut *tx)
+        .await?;
+
+    let log_type = if let Some(ref cat) = payload.reasonCategory {
+        if !cat.is_empty() && cat != "단순오차" {
+            cat.clone()
+        } else if payload.changeQty > 0 {
+            "입고".to_string()
+        } else {
+            "조정".to_string()
+        }
+    } else if payload.changeQty > 0 {
+        "입고".to_string()
+    } else {
+        "조정".to_string()
+    };
+
+    sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'MANUAL')")
+    .bind(payload.productId).bind(&product.product_name).bind(&product.specification).bind(&product.product_code).bind(&log_type).bind(payload.changeQty).bind(new_qty).bind(&payload.memo).execute(&mut *tx).await?;
+
+    // --- GAP/HACCP Integration ---
+    if let Some(ref cat) = payload.reasonCategory {
+        if cat == "수확" && payload.changeQty > 0 {
+            // 1. Try to find the latest active batch for this product to associate with
+            let batch: Option<(i32, Option<i32>)> = sqlx::query_as("SELECT batch_id, space_id FROM production_batches WHERE product_id = $1 AND status != 'completed' ORDER BY start_date DESC LIMIT 1")
+                .bind(payload.productId)
+                .fetch_optional(&mut *tx).await?;
+
+            let (batch_id, space_id) = match batch {
+                Some((bid, sid)) => (Some(bid), sid),
+                None => (None, None),
+            };
+
+            // 2. Insert into harvest_records (5th tab)
+            sqlx::query("INSERT INTO harvest_records (batch_id, harvest_date, quantity, unit, grade, memo) VALUES ($1, CURRENT_DATE, $2, $3, 'A', $4)")
+                .bind(batch_id)
+                .bind(payload.changeQty as f64)
+                .bind(product.specification.as_deref().unwrap_or("kg"))
+                .bind(&payload.memo)
+                .execute(&mut *tx).await?;
+
+            // 3. Get representative name
+            let rep_name = sqlx::query_scalar::<_, String>(
+                "SELECT representative_name FROM company_info LIMIT 1",
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or_else(|| "시스템자동".to_string());
+
+            // 4. Insert into farming_logs (4th tab - GAP/HACCP)
+            sqlx::query("INSERT INTO farming_logs (batch_id, space_id, log_date, work_type, work_content, worker_name) VALUES ($1, $2, CURRENT_DATE, 'harvest', $3, $4)")
+                .bind(batch_id)
+                .bind(space_id)
+                .bind(format!("[자동] 수확 입고: {} (수량: {}{}) - {}", 
+                    &product.product_name, 
+                    payload.changeQty, 
+                    product.specification.as_deref().unwrap_or(""),
+                    if payload.memo.is_empty() { "기록 없음" } else { &payload.memo }))
+                .bind(rep_name)
+                .execute(&mut *tx).await?;
+        }
+    }
+
+    tx.commit().await?;
+
+    Ok(Json(()))
+}
+
 
 pub async fn get_inventory_logs(
     state: TauriState<'_, DbPool>,
@@ -813,6 +923,41 @@ pub async fn get_inventory_logs(
             .fetch_all(&*state)
             .await?;
         Ok(rows)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct GetInventoryLogsRequest {
+    pub limit: Option<i64>,
+    pub itemType: Option<String>,
+}
+
+pub async fn get_inventory_logs_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    axum::extract::Query(payload): axum::extract::Query<GetInventoryLogsRequest>,
+) -> MyceliumResult<Json<Vec<InventoryLog>>> {
+    let limit = payload.limit.unwrap_or(100);
+    let base_sql = r#"
+        SELECT l.* FROM inventory_logs l 
+        LEFT JOIN products p ON l.product_id = p.product_id 
+        WHERE 1=1
+    "#;
+
+    if let Some(t) = payload.itemType {
+        let sql = format!("{} AND (p.item_type = $1 OR ($1 = 'product' AND p.item_type IS NULL)) ORDER BY l.created_at DESC LIMIT $2", base_sql);
+        let rows = sqlx::query_as::<_, InventoryLog>(&sql)
+            .bind(t)
+            .bind(limit)
+            .fetch_all(&state.pool)
+            .await?;
+        Ok(Json(rows))
+    } else {
+        let sql = format!("{} ORDER BY l.created_at DESC LIMIT $1", base_sql);
+        let rows = sqlx::query_as::<_, InventoryLog>(&sql)
+            .bind(limit)
+            .fetch_all(&state.pool)
+            .await?;
+        Ok(Json(rows))
     }
 }
 
@@ -1063,6 +1208,107 @@ pub async fn batch_convert_stock(
 
     tx.commit().await?;
     Ok(())
+}
+
+#[derive(Deserialize)]
+#[allow(non_snake_case)]
+pub struct BatchConvertRequest {
+    pub targets: Vec<BatchTargetInput>,
+    pub deductions: Vec<BomDeductionInput>,
+    pub memo: String,
+}
+
+pub async fn batch_convert_stock_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<BatchConvertRequest>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    // 1. Produce Targets
+    for target in &payload.targets {
+        if target.quantity <= 0 {
+            continue;
+        }
+
+        let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+            .bind(target.product_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        let p_new_qty = product.stock_quantity.unwrap_or(0) + target.quantity;
+        sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
+            .bind(p_new_qty)
+            .bind(target.product_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Log for Product Increase
+        sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, $4, '입고', $5, $6, $7, 'CONVERT_IN')")
+            .bind(target.product_id)
+            .bind(&product.product_name)
+            .bind(&product.specification)
+            .bind(&product.product_code)
+            .bind(target.quantity)
+            .bind(p_new_qty)
+            .bind(format!("배치 생산 완료: {}", payload.memo))
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // 2. Deduct Materials
+    for deduct in &payload.deductions {
+        if deduct.quantity <= 0 {
+            continue;
+        }
+
+        let material: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
+            .bind(deduct.material_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        if material.stock_quantity.unwrap_or(0) < deduct.quantity {
+            return Err(MyceliumError::Validation(format!(
+                "자재 재고 부족: {} (필요: {}, 현재: {})",
+                material.product_name,
+                deduct.quantity,
+                material.stock_quantity.unwrap_or(0)
+            )));
+        }
+
+        let m_new_qty = material.stock_quantity.unwrap_or(0) - deduct.quantity;
+        sqlx::query("UPDATE products SET stock_quantity = $1 WHERE product_id = $2")
+            .bind(m_new_qty)
+            .bind(deduct.material_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Summary of targets for the log
+        let target_names = payload.targets
+            .iter()
+            .map(|t| format!("{} {}개", t.product_id, t.quantity)) 
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, $4, '출고', $5, $6, $7, 'CONVERT_OUT')")
+            .bind(deduct.material_id)
+            .bind(&material.product_name)
+            .bind(&material.specification)
+            .bind(&material.product_code)
+            .bind(-deduct.quantity)
+            .bind(m_new_qty)
+            .bind(format!("배치 가공 소모 (Targets: {})", target_names))
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // 3. GAP/HACCP Integration
+    sqlx::query("INSERT INTO farming_logs (log_date, worker_name, work_type, work_content) VALUES (CURRENT_DATE, '시스템자동', 'process', $1)")
+        .bind(format!("[자동] 통합 상품화/가공 완료 - {}", payload.memo))
+        .execute(&mut *tx).await?;
+
+    tx.commit().await?;
+    Ok(Json(()))
 }
 
 

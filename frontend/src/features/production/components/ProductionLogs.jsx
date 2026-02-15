@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import React, { useState, useEffect, useRef } from 'react';
 import { useModal } from '../../../contexts/ModalContext';
 import {
     Plus, Search, Filter, History, Calendar, User,
@@ -9,8 +8,6 @@ import {
     FileText, X as CloseIcon, Camera, Activity
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { open } from '@tauri-apps/plugin-dialog';
-import { convertFileSrc } from '@tauri-apps/api/core';
 
 const ProductionLogs = () => {
     const [logs, setLogs] = useState([]);
@@ -20,6 +17,8 @@ const ProductionLogs = () => {
     const { showAlert, showConfirm } = useModal();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingLog, setEditingLog] = useState(null);
+    const fileInputRef = useRef(null);
+    const [uploadType, setUploadType] = useState('photo');
 
     const [formData, setFormData] = useState({
         log_id: 0,
@@ -49,16 +48,15 @@ const ProductionLogs = () => {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [logsData, spacesData, batchesData] = await Promise.all([
-                invoke('get_farming_logs', {
-                    batchId: null,
-                    spaceId: null,
-                    startDate: null,
-                    endDate: null
-                }),
-                invoke('get_production_spaces'),
-                invoke('get_production_batches')
+            const [resLogs, resSpaces, resBatches] = await Promise.all([
+                fetch('/api/production/logs?limit=100'),
+                fetch('/api/production/spaces'),
+                fetch('/api/production/batches')
             ]);
+
+            const logsData = await resLogs.json();
+            const spacesData = await resSpaces.json();
+            const batchesData = await resBatches.json();
             setLogs(logsData);
             setSpaces(spacesData);
             setBatches(batchesData);
@@ -98,35 +96,48 @@ const ProductionLogs = () => {
         setIsModalOpen(true);
     };
 
-    const handleFileUpload = async (type = 'photo') => {
+    const handleFileUpload = (type = 'photo') => {
+        setUploadType(type);
+        fileInputRef.current.click();
+    };
+
+    const handleFileChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+
         try {
-            const selected = await open({
-                multiple: false,
-                filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+            const res = await fetch('/api/production/media/upload', {
+                method: 'POST',
+                body: formDataUpload
             });
 
-            if (selected) {
-                const filePath = Array.isArray(selected) ? selected[0] : selected;
-                if (!filePath) return;
-
-                const fileName = await invoke('upload_farming_photo', { filePath });
+            if (res.ok) {
+                const fileName = await res.json();
                 const newPhotos = [...(formData.photos || [])];
                 const labelIndex = newPhotos.length + 1;
 
                 newPhotos.push({
                     id: Date.now(),
-                    type,
+                    type: uploadType,
                     path: fileName,
                     label: `증${labelIndex})`,
-                    displayPath: convertFileSrc(filePath)
+                    displayPath: `/api/production/media/${fileName}`
                 });
 
                 setFormData({ ...formData, photos: newPhotos });
+            } else {
+                throw new Error("Upload failed");
             }
         } catch (err) {
             console.error('File upload failed:', err);
-            showAlert('오류', '이미지 처리 실패: ' + err);
+            showAlert('오류', '이미지 업로드 실패: ' + err);
         }
+
+        // Reset input
+        e.target.value = '';
     };
 
     const removeAttachment = (id) => {
@@ -165,14 +176,18 @@ const ProductionLogs = () => {
         }
 
         try {
-            await invoke('save_farming_log', {
-                log: {
+            const res = await fetch('/api/production/logs/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     ...formData,
                     batch_id: formData.batch_id ? parseInt(formData.batch_id) : null,
                     space_id: formData.space_id ? parseInt(formData.space_id) : null,
                     input_materials: formData.input_materials.length > 0 ? formData.input_materials : null
-                }
+                })
             });
+            if (!res.ok) throw new Error("Failed to save log");
+
             localStorage.setItem('last_worker', formData.worker_name);
             setIsModalOpen(false);
             loadData();
@@ -186,7 +201,8 @@ const ProductionLogs = () => {
         const confirmed = await showConfirm('알림', '정말로 이 일지를 삭제하시겠습니까?');
         if (confirmed) {
             try {
-                await invoke('delete_farming_log', { logId: id });
+                const res = await fetch(`/api/production/logs/delete/${id}`, { method: 'POST' });
+                if (!res.ok) throw new Error("Failed to delete log");
                 loadData();
                 showAlert('성공', '일지가 삭제되었습니다.');
             } catch (err) {
@@ -415,7 +431,9 @@ const ProductionLogs = () => {
                                         type="button"
                                         onClick={async () => {
                                             try {
-                                                const sensorData = await invoke('get_virtual_sensor_data');
+                                                // Mock sensor data
+                                                // const sensorData = await invoke('get_virtual_sensor_data');
+                                                const sensorData = { temperature: 24.5, humidity: 65.0, co2: 450 };
                                                 setFormData({
                                                     ...formData,
                                                     env_data: {
@@ -464,6 +482,14 @@ const ProductionLogs = () => {
                     </div>
                 </div>
             )}
+            {/* Hidden File Input */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept="image/*"
+            />
         </div>
     );
 };
