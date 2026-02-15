@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatCurrency, formatDate } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { callBridge } from '../../utils/apiBridge';
 
 const SalesSpecial = () => {
     const { showAlert, showConfirm } = useModal();
@@ -45,9 +46,8 @@ const SalesSpecial = () => {
     }, []);
 
     const loadProducts = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_product_list');
+            const list = await callBridge('get_product_list');
             setProducts(list.filter(p => (p.item_type || 'product') === 'product') || []);
         } catch (e) {
             console.error(e);
@@ -115,17 +115,17 @@ const SalesSpecial = () => {
 
         if (!window.__TAURI__) {
             // Mock
-            setEventSearchResults([
-                { event_id: 1, event_name: '2023 강릉 커피 축제', organizer: '강릉시', start_date: '2023-10-01', end_date: '2023-10-05' },
-                { event_id: 2, event_name: '서울 식품 박람회', organizer: 'KOTRA', start_date: '2023-11-01', end_date: '2023-11-04' }
-            ]);
-            setIsEventSearchOpen(true);
-            setLastSearchQuery(query);
-            return;
+            // setEventSearchResults([
+            //     { event_id: 1, event_name: '2023 강릉 커피 축제', organizer: '강릉시', start_date: '2023-10-01', end_date: '2023-10-05' },
+            //     { event_id: 2, event_name: '서울 식품 박람회', organizer: 'KOTRA', start_date: '2023-11-01', end_date: '2023-11-04' }
+            // ]);
+            // setIsEventSearchOpen(true);
+            // setLastSearchQuery(query);
+            // return;
         }
 
         try {
-            const results = await window.__TAURI__.core.invoke('search_events_by_name', { name: query });
+            const results = await callBridge('search_events_by_name', { name: query });
             setEventSearchResults(results || []);
             setIsEventSearchOpen(true);
             setLastSearchQuery(query);
@@ -154,9 +154,8 @@ const SalesSpecial = () => {
     };
 
     const loadEventSales = async (eventId, start, end) => {
-        if (!window.__TAURI__) return;
         try {
-            const sales = await window.__TAURI__.core.invoke('get_sales_by_event_id_and_date_range', {
+            const sales = await callBridge('get_sales_by_event_id_and_date_range', {
                 eventId: String(eventId),
                 startDate: start || null,
                 endDate: end || null
@@ -381,19 +380,15 @@ const SalesSpecial = () => {
                     memo: r.memo || null,
                 }));
 
-            if (window.__TAURI__) {
-                const newEventId = await window.__TAURI__.core.invoke('save_special_sales_batch', {
-                    event: eventInput,
-                    sales: salesInput,
-                    deletedSalesIds: deletedSalesIds
-                });
-                setEventData(prev => ({ ...prev, event_id: newEventId }));
-                await showAlert("성공", "저장되었습니다.");
-                clearDraft();
-                loadEventSales(newEventId, eventInput.start_date, eventInput.end_date);
-            } else {
-                await showAlert("성공", "저장 테스트 완료");
-            }
+            const newEventId = await callBridge('save_special_sales_batch', {
+                event: eventInput,
+                sales: salesInput,
+                deletedSalesIds: deletedSalesIds
+            });
+            setEventData(prev => ({ ...prev, event_id: newEventId }));
+            await showAlert("성공", "저장되었습니다.");
+            clearDraft();
+            loadEventSales(newEventId, eventInput.start_date, eventInput.end_date);
         } catch (e) {
             console.error(e);
             await showAlert("오류", "저장 실패: " + e);

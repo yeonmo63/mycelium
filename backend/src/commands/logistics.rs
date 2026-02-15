@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
+use crate::stubs::{check_admin, command, State};
 use chrono::NaiveDate;
-use crate::stubs::{command, State, check_admin};
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct PendingShipment {
@@ -25,9 +25,8 @@ pub struct PendingShipment {
     pub tracking_number: Option<String>,
 }
 
-
-pub async fn get_shipments_by_status(
-    state: State<'_, DbPool>,
+pub async fn get_shipments_by_status_internal(
+    pool: &DbPool,
     status: String,
     search: Option<String>,
     start_date: Option<String>,
@@ -105,9 +104,18 @@ pub async fn get_shipments_by_status(
         }
     }
 
-    Ok(query.fetch_all(&*state).await?)
+    Ok(query.fetch_all(pool).await?)
 }
 
+pub async fn get_shipments_by_status(
+    state: State<'_, DbPool>,
+    status: String,
+    search: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> MyceliumResult<Vec<PendingShipment>> {
+    get_shipments_by_status_internal(&*state, status, search, start_date, end_date).await
+}
 
 pub async fn get_shipping_base_date(state: State<'_, DbPool>) -> MyceliumResult<Option<NaiveDate>> {
     Ok(

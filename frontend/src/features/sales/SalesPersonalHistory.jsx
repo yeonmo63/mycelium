@@ -141,10 +141,10 @@ const SalesPersonalHistory = () => {
         setShowAnalysis(false); // Hide analysis on new search
 
         try {
-            if (window.__TAURI__) {
-                const results = await window.__TAURI__.core.invoke('search_sales_by_any', { query: keyword.trim(), period });
-                setSales(results || []);
-            }
+            const res = await fetch(`/api/sales/search-all?query=${encodeURIComponent(keyword.trim())}&period=${period}`);
+            if (!res.ok) throw new Error('Network response was not ok');
+            const results = await res.json();
+            setSales(results || []);
         } catch (e) {
             console.error(e);
             setSales([]);
@@ -341,15 +341,16 @@ const SalesPersonalHistory = () => {
         const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\n');
 
         try {
-            if (window.__TAURI__) {
-                const savePath = await window.__TAURI__.core.invoke('plugin:dialog|save', {
-                    options: { filters: [{ name: 'CSV', extensions: ['csv'] }], defaultPath: `개인별판매현황.csv` }
-                });
-                if (savePath) {
-                    await window.__TAURI__.core.invoke('plugin:fs|write_text_file', { path: savePath, contents: csvContent });
-                    showAlert("성공", "성공적으로 저장되었습니다.");
-                }
-            }
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `개인별판매현황.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showAlert("성공", "성공적으로 저장되었습니다.");
         } catch (e) {
             console.error(e);
             showAlert("오류", "저장 실패: " + e);

@@ -91,6 +91,25 @@ export async function callBridge(commandName, args = {}) {
             'get_preset_data': '/api/preset/data',
             'reset_database': '/api/preset/reset',
             'save_general_sales_batch': '/api/sales/batch-save',
+            'search_customers_by_name': '/api/customers/search',
+            'get_customer_addresses': '/api/customers/addresses',
+            'get_customer_sales_on_date': '/api/sales/query/date',
+            'create_customer': '/api/customers/create',
+            'get_shipments_by_status': '/api/sales/shipments',
+            'update_sale_status': '/api/sales/update-status',
+            'complete_shipment': '/api/sales/complete-shipment',
+            'batch_sync_courier_statuses': '/api/sales/sync-courier',
+            'get_sales_claims': '/api/sales/claims',
+            'create_sales_claim': '/api/sales/claims/create',
+            'process_sales_claim': '/api/sales/claims/process',
+            'update_sales_claim': '/api/sales/claims/update',
+            'delete_sales_claim': '/api/sales/claims/delete',
+            'get_sale_detail': '/api/sales/detail',
+            'search_sales_by_any': '/api/sales/search',
+            'create_consultation': '/api/crm/consultations/create',
+            'search_events_by_name': '/api/events/search',
+            'get_sales_by_event_id_and_date_range': '/api/sales/special/list',
+            'save_special_sales_batch': '/api/sales/special/batch',
         };
 
         const route = routeMap[commandName];
@@ -133,7 +152,15 @@ export async function callBridge(commandName, args = {}) {
             'run_db_maintenance',
             'cleanup_old_logs',
             'save_external_backup_path',
-            'cancel_backup_restore'
+            'cancel_backup_restore',
+            'update_sale_status',
+            'complete_shipment',
+            'batch_sync_courier_statuses',
+            'create_sales_claim',
+            'process_sales_claim',
+            'update_sales_claim',
+            'delete_sales_claim',
+            'create_consultation'
         ];
         const isPost = postCommands.includes(commandName) || commandName.startsWith('save_');
 
@@ -166,10 +193,18 @@ export async function callBridge(commandName, args = {}) {
                 return null;
             }
 
-            return await response.json();
+            const result = await response.json();
+
+            // Simulate Tauri command error behavior:
+            // If the backend returns { success: false, error: "..." }, throw an error.
+            if (result && typeof result === 'object' && result.success === false) {
+                throw new Error(result.error || 'Unknown backend error');
+            }
+
+            return result;
         } catch (err) {
             console.error(`Bridge: Failed to fetch ${route}:`, err);
-            return null;
+            throw err; // Rethrow so the caller component can handle it
         }
     }
 }

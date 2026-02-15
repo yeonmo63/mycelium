@@ -12,16 +12,19 @@ const CustomerSpecialCare = () => {
     }, []);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            const data = await window.__TAURI__.core.invoke('get_special_care_customers');
+            const res = await fetch('/api/crm/special-care');
+            if (!res.ok) {
+                throw new Error(await res.text());
+            }
+            const data = await res.json();
             const sorted = (data || []).sort((a, b) => b.claim_ratio - a.claim_ratio); // Sort by risk
             setCustomers(sorted);
             calculateStats(sorted);
         } catch (e) {
             console.error(e);
-            showAlert("오류", "데이터 조회 실패: " + e);
+            showAlert("오류", "데이터 조회 실패: " + e.message);
         } finally {
             setIsLoading(false);
         }

@@ -7,7 +7,17 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 // Using global stubs
-use crate::stubs::{AppHandle, State, command, check_admin};
+// Using global stubs
+use crate::stubs::{check_admin, command, AppHandle, State};
+
+use axum::{extract::State as AxumState, Json};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BusinessCardInput {
+    pub image_base64: String,
+    pub mime_type: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NaverSearchResult {
@@ -89,7 +99,11 @@ pub async fn call_gemini_ai(_app: AppHandle, prompt: String) -> MyceliumResult<S
     call_gemini_ai_internal(None, &api_key, &prompt).await
 }
 
-pub async fn call_gemini_ai_internal(pool: Option<&DbPool>, api_key: &str, prompt: &str) -> MyceliumResult<String> {
+pub async fn call_gemini_ai_internal(
+    pool: Option<&DbPool>,
+    api_key: &str,
+    prompt: &str,
+) -> MyceliumResult<String> {
     // 1. Check Cache
     if let Some(pool) = pool {
         let mut hasher = Sha256::new();
@@ -221,7 +235,7 @@ pub async fn call_gemini_ai_internal(pool: Option<&DbPool>, api_key: &str, promp
                     .execute(pool)
                     .await;
                 }
-                
+
                 return Ok(result);
             } else {
                 errors.push(format!("Empty response from {}", model));
@@ -428,7 +442,10 @@ pub async fn parse_business_card_ai(
     Ok(result)
 }
 
-pub async fn test_gemini_connection(_app: AppHandle, key: Option<String>) -> MyceliumResult<String> {
+pub async fn test_gemini_connection(
+    _app: AppHandle,
+    key: Option<String>,
+) -> MyceliumResult<String> {
     let api_key = if let Some(k) = key {
         if k.trim().is_empty() {
             get_gemini_api_key().ok_or_else(|| {
@@ -443,7 +460,12 @@ pub async fn test_gemini_connection(_app: AppHandle, key: Option<String>) -> Myc
         })?
     };
 
-    match call_gemini_ai_internal(Some(&*state), &api_key, "Hello, are you there? Response with 'OK' only.").await
+    match call_gemini_ai_internal(
+        None,
+        &api_key,
+        "Hello, are you there? Response with 'OK' only.",
+    )
+    .await
     {
         Ok(res) => {
             if res.contains("OK") || res.len() < 100 {
@@ -658,11 +680,9 @@ pub async fn get_morning_briefing(
     call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
-
 pub async fn get_ai_repurchase_analysis(_state: State<'_, DbPool>) -> MyceliumResult<String> {
     Ok("Repurchase Analysis Stub".to_string())
 }
-
 
 pub async fn get_weather_marketing_advice(
     _state: State<'_, DbPool>,
@@ -770,11 +790,9 @@ pub async fn get_pending_consultations_summary(
     call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
-
 pub async fn get_ai_marketing_proposal(_state: State<'_, DbPool>) -> MyceliumResult<String> {
     Ok("AI Marketing Proposal Stub".to_string())
 }
-
 
 pub async fn get_ai_detailed_plan(
     _state: State<'_, DbPool>,
@@ -783,7 +801,6 @@ pub async fn get_ai_detailed_plan(
     Ok("AI Detailed Plan Stub".to_string())
 }
 
-
 pub async fn get_consultation_ai_advisor(
     _state: State<'_, DbPool>,
     _consultation_id: i32,
@@ -791,6 +808,31 @@ pub async fn get_consultation_ai_advisor(
     Ok("Consultation Advisor Stub".to_string())
 }
 
+// Axum Handlers
+
+pub async fn parse_business_card_ai_axum(
+    AxumState(_state): AxumState<crate::state::AppState>,
+    Json(input): Json<BusinessCardInput>,
+) -> MyceliumResult<Json<ParsedBusinessCard>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let prompt = "
+    Analyze this business card image.
+    Extract: name, mobile (010-xxxx-xxxx format), phone, email, company, job_title, address.
+    Put everything else useful in 'memo'.
+    Return JSON only with keys: name, mobile, phone, email, company, job_title, address, memo.
+    Use null for missing fields.
+    ";
+
+    let json_str =
+        call_gemini_vision_ai(&api_key, prompt, &input.image_base64, &input.mime_type).await?;
+
+    let result: ParsedBusinessCard = serde_json::from_str(&json_str)?;
+
+    Ok(Json(result))
+}
 
 pub async fn get_ai_consultation_advice(
     _state: State<'_, DbPool>,
@@ -799,7 +841,184 @@ pub async fn get_ai_consultation_advice(
     Ok("Consultation Advice Stub".to_string())
 }
 
-
 pub async fn get_ai_demand_forecast(_state: State<'_, DbPool>) -> MyceliumResult<String> {
     Ok("Demand Forecast Stub".to_string())
+}
+
+// --- AI CRM Axum Handlers ---
+
+use axum::extract::Query as AxumQuery;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsultBriefingQuery {
+    #[serde(alias = "customerId", alias = "customer_id")]
+    pub customer_id: String,
+}
+
+pub async fn get_consultation_briefing_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    AxumQuery(params): AxumQuery<ConsultBriefingQuery>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key()
+        .ok_or_else(|| MyceliumError::Internal("Gemini API 키가 필요합니다.".to_string()))?;
+
+    let customer: Option<Customer> =
+        sqlx::query_as("SELECT * FROM customers WHERE customer_id = $1")
+            .bind(&params.customer_id)
+            .fetch_optional(&state.pool)
+            .await?;
+
+    let c = customer
+        .ok_or_else(|| MyceliumError::Validation("고객 정보를 찾을 수 없습니다.".to_string()))?;
+
+    let history: Vec<crate::db::Consultation> = sqlx::query_as(
+        "SELECT * FROM consultations WHERE customer_id = $1 ORDER BY consult_date DESC LIMIT 30",
+    )
+    .bind(&params.customer_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    if history.is_empty() {
+        return Ok(Json(
+            serde_json::json!({ "briefing": "이전 상담 내역이 없는 신규 고객입니다." }),
+        ));
+    }
+
+    let mut context_str = format!(
+        "고객명: {} ({})\n상담 내역:\n",
+        c.customer_name,
+        c.membership_level.unwrap_or_default()
+    );
+    for h in history {
+        context_str.push_str(&format!(
+            "- [{} / {}] 제목: {} | 내용: {} | 답변: {}\n",
+            h.consult_date,
+            h.category,
+            h.title,
+            h.content,
+            h.answer.unwrap_or_default()
+        ));
+    }
+
+    let prompt = format!(
+        "당신은 스마트 농장의 전문 상담 관리자입니다. 아래의 고객 상담 이력을 바탕으로, 상담원이 전화를 걸기 전 읽어야 할 '핵심 브리핑'을 3줄 내외로 요약해 주세요. 이 고객의 성향, 과거 주요 문의, 주의사항을 포함해야 합니다. 한국어로 정중하게 작성하세요.\n\n\
+        {}\n\n\
+        **브리핑:**",
+        context_str
+    );
+
+    let result = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+    Ok(Json(serde_json::json!({ "briefing": result })))
+}
+
+pub async fn get_pending_consultations_summary_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let pending: Vec<crate::db::Consultation> = sqlx::query_as(
+        "SELECT * FROM consultations WHERE status != '완료' ORDER BY consult_date DESC LIMIT 50",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    if pending.is_empty() {
+        return Ok(Json(
+            serde_json::json!({ "summary": "현재 처리 대기 중인 상담이 없습니다. 평화로운 하루입니다! 😊" }),
+        ));
+    }
+
+    let mut context = String::new();
+    for p in pending {
+        context.push_str(&format!(
+            "- [{} / {}] 우선순위: {} | 제목: {} | 내용: {}\n",
+            p.consult_date, p.category, p.priority, p.title, p.content
+        ));
+    }
+
+    let prompt = format!(
+        "당신은 스마트 농장의 고객 관리 전략가입니다. 아래의 '처리 대기 중인 상담 리스트'를 보고 사장님을 위한 1분 요약 브리핑을 작성해 주세요.\n\n\
+        [대기 리스트]\n\
+        {}\n\n\
+        [작성 지침]\n\
+        1. 현재 가장 시급한 상담 테마가 무엇인지(예: 배송 지연, 상품 불만 등) 파악하여 상단에 명시하세요.\n\
+        2. 전체적인 상담 감정 상태가 어떤지 요약하세요.\n\
+        3. 사장님이 오늘 가장 먼저 챙겨야 할 핵심 액션 플랜을 1~2개 제안하세요.\n\
+        4. HTML 형식으로 깔끔하게 작성하세요 (div, p, ul, li, span 등 사용, 💡 이모지 활용).\n\
+        5. 정중하고 활기찬 한국어를 사용하세요.",
+        context
+    );
+
+    let result = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+    Ok(Json(serde_json::json!({ "summary": result })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsultAdvisorInput {
+    pub customer_id: Option<String>,
+    pub category: String,
+    pub title: String,
+    pub content: String,
+}
+
+pub async fn get_consultation_ai_advisor_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(input): Json<ConsultAdvisorInput>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    // Optionally fetch customer context
+    let mut customer_context = String::new();
+    if let Some(cid) = &input.customer_id {
+        if !cid.is_empty() {
+            if let Ok(Some(c)) =
+                sqlx::query_as::<_, Customer>("SELECT * FROM customers WHERE customer_id = $1")
+                    .bind(cid)
+                    .fetch_optional(&state.pool)
+                    .await
+            {
+                customer_context = format!(
+                    "\n[고객 정보]\n이름: {}, 등급: {}, 가입일: {}\n",
+                    c.customer_name,
+                    c.membership_level.unwrap_or_default(),
+                    c.join_date.map(|d| d.to_string()).unwrap_or_default()
+                );
+            }
+        }
+    }
+
+    let prompt = format!(
+        "당신은 스마트 농장 고객 상담 전문가입니다. 다음 상담 내용을 분석하고, JSON 형식으로 응답해 주세요.\n\n\
+        [상담 정보]\n유형: {}\n제목: {}\n내용: {}\n{}\n\n\
+        [응답 형식 (JSON)]\n\
+        {{\n\
+          \"analysis\": \"상담 내용 핵심 분석 (1-2줄)\",\n\
+          \"strategy\": \"추천 대응 전략 (1-2줄)\",\n\
+          \"recommended_answer\": \"실제 상담에서 사용할 수 있는 답변 예시 (정중한 한국어)\",\n\
+          \"caution_points\": \"주의해야 할 사항 (1줄)\"\n\
+        }}",
+        input.category,
+        input.title,
+        input.content,
+        customer_context
+    );
+
+    let result_json = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+
+    // Try to parse as JSON, fallback to raw string
+    match serde_json::from_str::<serde_json::Value>(&result_json) {
+        Ok(parsed) => Ok(Json(parsed)),
+        Err(_) => Ok(Json(serde_json::json!({
+            "analysis": result_json,
+            "strategy": "",
+            "recommended_answer": "",
+            "caution_points": ""
+        }))),
+    }
 }

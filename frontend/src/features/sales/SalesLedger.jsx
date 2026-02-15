@@ -30,10 +30,12 @@ const SalesLedger = () => {
     }, []);
 
     const loadDefaultDebtList = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_customers_with_debt');
-            setCustomers(list || []);
+            const res = await fetch('/api/sales/ledger/debtors');
+            if (res.ok) {
+                const list = await res.json();
+                setCustomers(list || []);
+            }
         } catch (e) {
             console.error(e);
         }
@@ -43,29 +45,33 @@ const SalesLedger = () => {
     const handleSelectCustomer = async (customer) => {
         setSelectedCustomer(customer);
         setIsLoadingLedger(true);
-        if (window.__TAURI__) {
-            try {
-                const data = await window.__TAURI__.core.invoke('get_customer_ledger', { customerId: customer.customer_id });
+        try {
+            const res = await fetch(`/api/sales/ledger?customer_id=${customer.customer_id}`);
+            if (res.ok) {
+                const data = await res.json();
                 setLedger(data || []);
-            } catch (e) {
-                console.error(e);
+            } else {
                 setLedger([]);
-            } finally {
-                setIsLoadingLedger(false);
             }
+        } catch (e) {
+            console.error(e);
+            setLedger([]);
+        } finally {
+            setIsLoadingLedger(false);
         }
     };
 
     // --- Customer Search (Modal) ---
     const searchCustomer = async () => {
         if (!customerSearchQuery) return;
-        if (window.__TAURI__) {
-            try {
-                const res = await window.__TAURI__.core.invoke('search_customers_by_name', { name: customerSearchQuery });
-                setCustomerSearchResults(res || []);
-            } catch (e) {
-                console.error(e);
+        try {
+            const res = await fetch(`/api/customer/search/name?query=${encodeURIComponent(customerSearchQuery)}`);
+            if (res.ok) {
+                const list = await res.json();
+                setCustomerSearchResults(list || []);
             }
+        } catch (e) {
+            console.error(e);
         }
     };
 
@@ -102,40 +108,46 @@ const SalesLedger = () => {
         if (!selectedCustomer) return;
 
         try {
-            if (window.__TAURI__) {
-                const invoke = window.__TAURI__.core.invoke;
-                if (id) {
-                    await invoke('update_ledger_entry', {
+            if (id) {
+                await fetch('/api/sales/ledger/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
                         ledgerId: id,
                         transactionDate: date,
                         transactionType: type,
                         amount: amountVal,
                         description: desc
-                    });
-                    await showAlert("성공", "수정되었습니다.");
-                } else {
-                    await invoke('create_ledger_entry', {
+                    })
+                });
+                await showAlert("성공", "수정되었습니다.");
+            } else {
+                await fetch('/api/sales/ledger/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
                         customerId: selectedCustomer.customer_id,
                         transactionDate: date,
                         transactionType: type,
                         amount: amountVal,
                         description: desc
-                    });
-                    await showAlert("성공", "등록되었습니다.");
-                }
+                    })
+                });
+                await showAlert("성공", "등록되었습니다.");
+            }
 
-                setIsEntryModalOpen(false);
-                await loadDefaultDebtList(); // Refresh list balances
+            setIsEntryModalOpen(false);
+            await loadDefaultDebtList(); // Refresh list balances
 
-                // Refresh the selected customer object to get fresh current_balance
-                const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: selectedCustomer.customer_id });
-                if (fresh) {
-                    handleSelectCustomer(fresh);
-                } else {
-                    // If balance became 0 and filtered out (though get_customer should still work), 
-                    // we still want to show the current one until they switch
-                    handleSelectCustomer(selectedCustomer);
-                }
+            // Refresh the selected customer object to get fresh current_balance
+            const freshRes = await fetch(`/api/customer/get?customer_id=${selectedCustomer.customer_id}`);
+            if (freshRes.ok) {
+                const fresh = await freshRes.json();
+                handleSelectCustomer(fresh);
+            } else {
+                // If balance became 0 and filtered out (though get_customer should still work), 
+                // we still want to show the current one until they switch
+                handleSelectCustomer(selectedCustomer);
             }
         } catch (e) {
             showAlert("오류", "저장 실패: " + e);
@@ -145,12 +157,14 @@ const SalesLedger = () => {
     const handleDeleteEntry = async (id) => {
         if (!await showConfirm("삭제 확인", "정말 이 내역을 삭제하시겠습니까?\n삭제 후 잔액은 자동으로 조정됩니다.")) return;
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_ledger_entry', { ledgerId: id });
-                await showAlert("성공", "삭제되었습니다.");
-                handleSelectCustomer(selectedCustomer);
-                loadDefaultDebtList();
-            }
+            await fetch('/api/sales/ledger/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ledgerId: id })
+            });
+            await showAlert("성공", "삭제되었습니다.");
+            handleSelectCustomer(selectedCustomer);
+            loadDefaultDebtList();
         } catch (e) {
             showAlert("오류", "삭제 실패: " + e);
         }

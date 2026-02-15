@@ -1196,7 +1196,7 @@ pub struct CreateProductRequest {
 pub async fn create_product_axum(
     AxumState(state): AxumState<crate::state::AppState>,
     Json(payload): Json<CreateProductRequest>,
-) -> MyceliumResult<Json<i32>> {
+) -> MyceliumResult<axum::response::Json<serde_json::Value>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
 
@@ -1242,7 +1242,7 @@ pub async fn create_product_axum(
     }
 
     tx.commit().await?;
-    Ok(Json(product_id))
+    Ok(Json(json!({ "success": true, "productId": product_id })))
 }
 
 #[derive(Deserialize)]

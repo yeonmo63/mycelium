@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../../contexts/ModalContext';
-import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerBatch = () => {
     const { showAlert, showConfirm } = useModal();
@@ -42,8 +41,6 @@ const CustomerBatch = () => {
     }, []);
 
     const handleSearch = async (isAll = false) => {
-        if (!window.__TAURI__) return;
-
         let start, end;
         let keyword = '';
         let level = null;
@@ -65,21 +62,27 @@ const CustomerBatch = () => {
         }
 
         try {
-            const results = await window.__TAURI__.core.invoke('search_customers_by_date', {
-                start, end, keyword: keyword || null, membershipLevel: level
-            });
-            setCustomerList(results || []);
-            setCurrentPage(1);
-            setSelectedIds(new Set());
+            const params = new URLSearchParams({ start, end });
+            if (keyword) params.append('keyword', keyword);
+            if (level) params.append('membershipLevel', level);
+
+            const res = await fetch(`/api/customer/batch/search?${params.toString()}`);
+            if (res.ok) {
+                const results = await res.json();
+                setCustomerList(results || []);
+                setCurrentPage(1);
+                setSelectedIds(new Set());
+            } else {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
         } catch (e) {
             console.error(e);
-            showAlert('오류', '조회 중 오류가 발생했습니다: ' + e);
+            showAlert('오류', '조회 중 오류가 발생했습니다: ' + e.message);
         }
     };
 
     const handleDormantSearch = async () => {
-        if (!window.__TAURI__) return;
-
         // Reset non-dormant params visually
         setSearchParams(prev => ({ ...prev, keyword: '', level: '', dateStart: '', dateEnd: '', isDormantMode: true }));
 
@@ -87,13 +90,19 @@ const CustomerBatch = () => {
         const days = Math.round(years * 365);
 
         try {
-            const results = await window.__TAURI__.core.invoke('search_dormant_customers', { daysThreshold: days });
-            setCustomerList(results || []);
-            setCurrentPage(1);
-            setSelectedIds(new Set());
+            const res = await fetch(`/api/customer/batch/dormant?daysThreshold=${days}`);
+            if (res.ok) {
+                const results = await res.json();
+                setCustomerList(results || []);
+                setCurrentPage(1);
+                setSelectedIds(new Set());
+            } else {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
         } catch (e) {
             console.error(e);
-            showAlert('오류', '휴먼 고객 조회 실패: ' + e);
+            showAlert('오류', '휴먼 고객 조회 실패: ' + e.message);
         }
     };
 
@@ -116,11 +125,21 @@ const CustomerBatch = () => {
         if (!await showConfirm(isPermanentDelete ? '영구 삭제 확인' : '휴면 전환 확인', msg)) return;
 
         try {
-            await window.__TAURI__.core.invoke('delete_customers_batch', {
-                ids: Array.from(selectedIds),
-                permanent: isPermanentDelete,
-                alsoDeleteSales: isPermanentDelete ? deleteSalesChecked : false
+            const res = await fetch('/api/customer/batch/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ids: Array.from(selectedIds),
+                    permanent: isPermanentDelete,
+                    alsoDeleteSales: isPermanentDelete ? deleteSalesChecked : false
+                })
             });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+
             await showAlert('성공', isPermanentDelete
                 ? `${selectedIds.size}명의 고객 정보가 영구 삭제되었습니다.`
                 : `${selectedIds.size}명의 고객이 휴면 고객으로 전환되었습니다.`);
@@ -129,13 +148,10 @@ const CustomerBatch = () => {
             if (searchParams.isDormantMode) {
                 handleDormantSearch();
             } else {
-                handleSearch(false); // Re-run last search params logic effectively?
-                // Actually handleSearch(false) uses current state, which is good.
-                // But we need to handle the case where we just looked at dormant.
-                // searchParams.isDormantMode tracks this.
+                handleSearch(false);
             }
         } catch (e) {
-            showAlert('오류', '삭제 실패: ' + e);
+            showAlert('오류', '삭제 실패: ' + e.message);
         }
     };
 
@@ -148,9 +164,17 @@ const CustomerBatch = () => {
         if (!await showConfirm('정상 복구 확인', `선택한 ${selectedIds.size}명의 휴면 고객을 '정상' 상태로 복구하시겠습니까?`)) return;
 
         try {
-            await window.__TAURI__.core.invoke('reactivate_customers_batch', {
-                ids: Array.from(selectedIds)
+            const res = await fetch('/api/customer/batch/reactivate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: Array.from(selectedIds) })
             });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+
             await showAlert('성공', `${selectedIds.size}명의 고객이 정상 고객으로 복구되었습니다.`);
 
             // Refresh
@@ -160,7 +184,7 @@ const CustomerBatch = () => {
                 handleSearch(false);
             }
         } catch (e) {
-            showAlert('오류', '복구 실패: ' + e);
+            showAlert('오류', '복구 실패: ' + e.message);
         }
     };
 
@@ -189,48 +213,69 @@ const CustomerBatch = () => {
             csvContent += row.map(e => `"${String(e).replace(/"/g, '""')}"`).join(",") + "\n";
         });
 
+        // Web: Use browser download instead of Tauri dialog
         try {
-            const filePath = await window.__TAURI__.dialog.save({
-                defaultPath: `고객일괄조회_${new Date().toISOString().slice(0, 10)}.csv`,
-                filters: [{ name: 'CSV Files', extensions: ['csv'] }]
-            });
-
-            if (filePath) {
-                await window.__TAURI__.fs.writeTextFile(filePath, csvContent);
-                showAlert('성공', '파일이 성공적으로 저장되었습니다.');
-            }
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `고객일괄조회_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showAlert('성공', '파일이 성공적으로 다운로드되었습니다.');
         } catch (e) {
-            showAlert('오류', '파일 저장 실패: ' + e);
+            showAlert('오류', '파일 저장 실패: ' + e.message);
         }
     };
 
     const handleAiInsight = async (customerId) => {
-        if (!customerId || !window.__TAURI__) return;
+        if (!customerId) return;
         setIsLoadingAi(true);
         setAiModalOpen(true);
         setAiInsight(null);
 
         try {
-            const insight = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId });
+            const res = await fetch(`/api/customer/ai-insight?customer_id=${customerId}`);
+
+            if (res.status === 429 || res.status === 403) {
+                throw new Error('AI_QUOTA_EXCEEDED');
+            }
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`AI 분석 실패: ${errText}`);
+            }
+
+            const insight = await res.json();
             setAiInsight(insight);
         } catch (e) {
             console.error(e);
-            // invokeAI handles the quota error alert, but we might want to show a message in the modal too
-            setAiInsight({ error: String(e) });
+            if (e.message === 'AI_QUOTA_EXCEEDED') {
+                setAiInsight({ error: '🚫 일일 무료 사용량을 초과했습니다.' });
+            } else {
+                setAiInsight({ error: String(e.message) });
+            }
         } finally {
             setIsLoadingAi(false);
         }
     };
 
     const viewLogs = async (c) => {
-        if (!window.__TAURI__) return;
         setSelectedCustomerForLogs(c);
         try {
-            const logs = await window.__TAURI__.core.invoke('get_customer_logs', { customerId: c.customer_id });
-            setCustomerLogs(logs || []);
-            setIsLogsModalOpen(true);
+            const res = await fetch(`/api/customer/logs?customer_id=${c.customer_id}`);
+            if (res.ok) {
+                const logs = await res.json();
+                setCustomerLogs(logs || []);
+                setIsLogsModalOpen(true);
+            } else {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
         } catch (e) {
-            showAlert('오류', '이력 조회 실패: ' + e);
+            showAlert('오류', '이력 조회 실패: ' + e.message);
         }
     };
 
@@ -249,10 +294,6 @@ const CustomerBatch = () => {
         if (checked) {
             const newSet = new Set(currentItems.map(c => c.customer_id));
             setSelectedIds(prev => new Set([...prev, ...newSet]));
-            // Note: This logic only selects current page items. If "Select All" means ALL pages, logic differs.
-            // MushroomFarm batch.js implies selecting currently rendered rows usually, but let's stick to current page for simplicity or full list?
-            // "batch.js" logic: document.querySelectorAll('.batch-row-checkbox').forEach... -> implies visible rows only.
-            // So we select current page items.
         } else {
             const currentIds = new Set(currentItems.map(c => c.customer_id));
             setSelectedIds(prev => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { callBridge } from '../../utils/apiBridge';
 
 const SalesClaims = () => {
     const { showAlert, showConfirm } = useModal();
@@ -33,17 +34,21 @@ const SalesClaims = () => {
     }, [dateRange]);
 
     const loadClaims = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const data = await window.__TAURI__.core.invoke('get_sales_claims', {
+            const data = await callBridge('get_sales_claims', {
                 startDate: dateRange.start || null,
                 endDate: dateRange.end || null
             });
             // Sort by created_at desc
-            data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            setClaims(data);
+            if (Array.isArray(data)) {
+                data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                setClaims(data);
+            } else {
+                setClaims([]);
+            }
         } catch (e) {
             console.error(e);
+            setClaims([]);
         }
     };
 
@@ -56,9 +61,7 @@ const SalesClaims = () => {
 
     const executeDelete = async (claimId) => {
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_sales_claim', { claimId });
-            }
+            await callBridge('delete_sales_claim', { claimId });
             showAlert("성공", "삭제되었습니다.");
             loadClaims();
         } catch (e) {
@@ -87,50 +90,46 @@ const SalesClaims = () => {
         const { claim, refundAmount, recoverInventory, memo } = processModal;
         try {
             const amt = Number(String(refundAmount).replace(/[^0-9]/g, ''));
-            if (window.__TAURI__) {
-                const invoke = window.__TAURI__.core.invoke;
-                await invoke('process_sales_claim', {
-                    claimId: claim.claim_id,
-                    claimStatus: status,
-                    isInventoryRecovered: recoverInventory,
-                    refundAmount: amt
-                });
+            await callBridge('process_sales_claim', {
+                claimId: claim.claim_id,
+                claimStatus: status,
+                isInventoryRecovered: recoverInventory,
+                refundAmount: amt
+            });
 
-                // CRM Log
-                let crmLogSuccess = false;
-                if (status === '완료' && claim.customer_id) {
-                    const title = `[시스템 자동] ${claim.claim_type} 클레임 처리 완료`;
-                    const content = `주문번호: ${claim.sales_id}\n유형: ${claim.claim_type}\n사유: ${claim.reason_category}\n메모: ${claim.memo || '-'}\n\n[처리 결과]\n환불금액: ${formatCurrency(amt)}원\n처리메모: ${memo || '-'}`;
-                    try {
-                        await invoke('create_consultation', {
-                            customerId: claim.customer_id,
-                            guestName: claim.customer_name || '회원',
-                            contact: '',
-                            channel: '시스템',
-                            counselorName: '자동',
-                            category: '클레임',
-                            priority: '보통',
-                            title, content
-                        });
-                        crmLogSuccess = true;
-                        console.log("CRM Log created successfully");
-                    } catch (e) {
-                        console.error("CRM Log failed:", e);
-                        showAlert("경고", "클레임 처리는 완료되었으나, CRM 상담 내역 등록에 실패했습니다: " + e);
-                    }
+            // CRM Log
+            let crmLogSuccess = false;
+            if (status === '완료' && claim.customer_id) {
+                const title = `[시스템 자동] ${claim.claim_type} 클레임 처리 완료`;
+                const content = `주문번호: ${claim.sales_id}\n유형: ${claim.claim_type}\n사유: ${claim.reason_category}\n메모: ${claim.memo || '-'}\n\n[처리 결과]\n환불금액: ${formatCurrency(amt)}원\n처리메모: ${memo || '-'}`;
+                try {
+                    await callBridge('create_consultation', {
+                        customerId: claim.customer_id,
+                        guestName: claim.customer_name || '회원',
+                        contact: '',
+                        channel: '시스템',
+                        counselorName: '자동',
+                        category: '클레임',
+                        priority: '보통',
+                        title, content
+                    });
+                    crmLogSuccess = true;
+                    console.log("CRM Log created successfully");
+                } catch (e) {
+                    console.error("CRM Log failed:", e);
+                    showAlert("경고", "클레임 처리는 완료되었으나, CRM 상담 내역 등록에 실패했습니다: " + e);
                 }
-
-                setProcessModal({ ...processModal, open: false });
-
-                let successMsg = `클레임 처리가 ${status}되었습니다.`;
-                if (crmLogSuccess) {
-                    successMsg += "\n(CRM 상담 내역에 자동 등록되었습니다)";
-                }
-                showAlert("성공", successMsg);
-
-                loadClaims();
-                return; // Exit here as we handled alerts
             }
+
+            setProcessModal({ ...processModal, open: false });
+
+            let successMsg = `클레임 처리가 ${status}되었습니다.`;
+            if (crmLogSuccess) {
+                successMsg += "\n(CRM 상담 내역에 자동 등록되었습니다)";
+            }
+            showAlert("성공", successMsg);
+
+            loadClaims();
         } catch (e) {
             showAlert("오류", "처리 실패: " + e);
         }
@@ -149,14 +148,12 @@ const SalesClaims = () => {
 
     const handleEditSubmit = async () => {
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('update_sales_claim', {
-                    claimId: editModal.claim.claim_id,
-                    reasonCategory: editModal.category,
-                    quantity: Number(editModal.qty),
-                    memo: editModal.memo
-                });
-            }
+            await callBridge('update_sales_claim', {
+                claimId: editModal.claim.claim_id,
+                reasonCategory: editModal.category,
+                quantity: Number(editModal.qty),
+                memo: editModal.memo
+            });
             setEditModal({ ...editModal, open: false });
             showAlert("성공", "수정되었습니다.");
             loadClaims();
@@ -173,17 +170,15 @@ const SalesClaims = () => {
         }
         setDetailModal({ open: true, saleId: salesId, data: null }); // Open with loading state
 
-        if (window.__TAURI__) {
-            try {
-                const data = await window.__TAURI__.core.invoke('get_sale_detail', { salesId });
-                setDetailModal(prev => ({ ...prev, data }));
-            } catch (e) {
-                console.error("Failed to fetch sale detail:", e);
-                setDetailModal(prev => ({ ...prev, error: e }));
-                // Optional: Close modal if failed immediately?
-                // setDetailModal({ open: false, saleId: null, data: null });
-                // showAlert("오류", "상세 정보를 불러오지 못했습니다: " + e);
-            }
+        try {
+            const data = await callBridge('get_sale_detail', { salesId });
+            setDetailModal(prev => ({ ...prev, data }));
+        } catch (e) {
+            console.error("Failed to fetch sale detail:", e);
+            setDetailModal(prev => ({ ...prev, error: e }));
+            // Optional: Close modal if failed immediately?
+            // setDetailModal({ open: false, saleId: null, data: null });
+            // showAlert("오류", "상세 정보를 불러오지 못했습니다: " + e);
         }
     };
 
@@ -192,10 +187,8 @@ const SalesClaims = () => {
         if (!searchModal.query) return;
         setSearchModal(prev => ({ ...prev, loading: true, results: [] }));
         try {
-            if (window.__TAURI__) {
-                const sales = await window.__TAURI__.core.invoke('search_sales_by_any', { query: searchModal.query, period: 'all' });
-                setSearchModal(prev => ({ ...prev, results: sales, loading: false }));
-            }
+            const sales = await callBridge('search_sales_by_any', { query: searchModal.query, period: 'all' });
+            setSearchModal(prev => ({ ...prev, results: Array.isArray(sales) ? sales : [], loading: false }));
         } catch (e) {
             console.error(e);
             setSearchModal(prev => ({ ...prev, loading: false }));
@@ -221,16 +214,14 @@ const SalesClaims = () => {
 
     const handleCreateSubmit = async () => {
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('create_sales_claim', {
-                    salesId: createModal.sale.sales_id,
-                    customerId: createModal.sale.customer_id || null,
-                    claimType: createModal.type,
-                    reasonCategory: createModal.category,
-                    quantity: Number(createModal.qty),
-                    memo: createModal.memo
-                });
-            }
+            await callBridge('create_sales_claim', {
+                salesId: createModal.sale.sales_id,
+                customerId: createModal.sale.customer_id || null,
+                claimType: createModal.type,
+                reasonCategory: createModal.category,
+                quantity: Number(createModal.qty),
+                memo: createModal.memo
+            });
             setCreateModal({ ...createModal, open: false });
             showAlert("성공", "클레임이 접수되었습니다.");
             loadClaims();

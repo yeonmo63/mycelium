@@ -1,12 +1,11 @@
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{check_admin, command, State};
 use crate::DB_MODIFIED;
 use chrono::Local;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, State, check_admin};
 
 use super::utils::{calculate_bom_tax_distribution, parse_date_safe};
-
 
 pub async fn create_sale(
     state: State<'_, DbPool>,
@@ -20,6 +19,49 @@ pub async fn create_sale(
     memo: Option<String>,
     status: Option<String>,
 ) -> MyceliumResult<String> {
+    create_sale_internal(
+        &*state,
+        customer_id,
+        product_name,
+        specification,
+        quantity,
+        unit_price,
+        total_amount,
+        order_date,
+        memo,
+        status,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None, // Missing shipping info in original signature
+    )
+    .await
+}
+
+// Internal implementation that takes &DbPool
+pub async fn create_sale_internal(
+    pool: &DbPool,
+    customer_id: Option<String>,
+    product_name: String,
+    specification: Option<String>,
+    quantity: i32,
+    unit_price: i32,
+    total_amount: i32,
+    order_date: String,
+    memo: Option<String>,
+    status: Option<String>,
+    // Add shipping params that were missing in original tauri command but present in Axum/Usage
+    shipping_name: Option<String>,
+    shipping_zip_code: Option<String>,
+    shipping_address_primary: Option<String>,
+    shipping_address_detail: Option<String>,
+    shipping_mobile_number: Option<String>,
+    shipping_date: Option<String>,
+    paid_amount: Option<i32>,
+) -> MyceliumResult<String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
 
     let sale_id = format!("S-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
@@ -32,7 +74,7 @@ pub async fn create_sale(
     )
     .bind(&product_name)
     .bind(&specification)
-    .fetch_optional(&*state)
+    .fetch_optional(pool)
     .await?;
 
     let product_id = p_info.as_ref().map(|r| r.0);
@@ -47,7 +89,7 @@ pub async fn create_sale(
     let mut actual_tax_type = tax_type.clone();
 
     if let Some(pid) = product_id {
-        if let Some((s, v, e)) = calculate_bom_tax_distribution(&*state, pid, total_amount).await? {
+        if let Some((s, v, e)) = calculate_bom_tax_distribution(pool, pid, total_amount).await? {
             supply_value = s;
             vat_amount = v;
             tax_exempt_value = e;
@@ -73,9 +115,20 @@ pub async fn create_sale(
         tax_exempt_value = 0;
     }
 
+    // Insert sale
+    // Note: The original query didn't include shipping info, but we should add it if we want full feature parity with what frontend is sending
+    // Frontend sends: shipping info.
+    // The query below needs to be updated to include shipping columns if the table has them.
+    // Checking `update_sale` below, the table HAS shipping_* columns.
+
     sqlx::query(
-        "INSERT INTO sales (sales_id, customer_id, product_name, specification, quantity, unit_price, total_amount, order_date, memo, status, product_id, supply_value, vat_amount, tax_type, tax_exempt_value)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)"
+        "INSERT INTO sales (
+            sales_id, customer_id, product_name, specification, quantity, unit_price, total_amount, 
+            order_date, memo, status, product_id, supply_value, vat_amount, tax_type, tax_exempt_value,
+            shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number,
+            paid_amount
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)"
     )
     .bind(&sale_id)
     .bind(customer_id)
@@ -92,12 +145,74 @@ pub async fn create_sale(
     .bind(vat_amount)
     .bind(actual_tax_type)
     .bind(tax_exempt_value)
-    .execute(&*state)
+    .bind(shipping_name)
+    .bind(shipping_zip_code)
+    .bind(shipping_address_primary)
+    .bind(shipping_address_detail)
+    .bind(shipping_mobile_number)
+    .bind(paid_amount)
+    .execute(pool)
     .await?;
 
     Ok(sale_id)
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSaleRequest {
+    pub customer_id: Option<serde_json::Value>, // Allow string or number
+    pub product_name: String,
+    pub specification: Option<String>,
+    pub unit_price: i32,
+    pub quantity: i32,
+    pub total_amount: i32,
+    pub status: Option<String>,
+    pub memo: Option<String>,
+    pub order_date_str: String,
+    pub shipping_name: Option<String>,
+    pub shipping_zip_code: Option<String>,
+    pub shipping_address_primary: Option<String>,
+    pub shipping_address_detail: Option<String>,
+    pub shipping_mobile_number: Option<String>,
+    pub shipping_date: Option<String>,
+    pub paid_amount: Option<i32>,
+}
+
+pub async fn create_sale_axum(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+    axum::Json(payload): axum::Json<CreateSaleRequest>,
+) -> impl axum::response::IntoResponse {
+    let customer_id_str = match payload.customer_id {
+        Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+        Some(serde_json::Value::String(s)) => Some(s),
+        _ => None,
+    };
+
+    match create_sale_internal(
+        &state.pool,
+        customer_id_str,
+        payload.product_name,
+        payload.specification,
+        payload.quantity,
+        payload.unit_price,
+        payload.total_amount,
+        payload.order_date_str,
+        payload.memo,
+        payload.status,
+        payload.shipping_name,
+        payload.shipping_zip_code,
+        payload.shipping_address_primary,
+        payload.shipping_address_detail,
+        payload.shipping_mobile_number,
+        payload.shipping_date,
+        payload.paid_amount,
+    )
+    .await
+    {
+        Ok(id) => axum::Json(serde_json::json!({ "success": true, "saleId": id })),
+        Err(e) => axum::Json(serde_json::json!({ "success": false, "error": e.to_string() })),
+    }
+}
 
 pub async fn update_sale_status(
     state: State<'_, DbPool>,
@@ -113,7 +228,6 @@ pub async fn update_sale_status(
     Ok(())
 }
 
-
 pub async fn cancel_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("UPDATE sales SET status = '취소' WHERE sales_id = $1")
@@ -123,7 +237,6 @@ pub async fn cancel_sale(state: State<'_, DbPool>, sales_id: String) -> Mycelium
     Ok(())
 }
 
-
 pub async fn delete_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM sales WHERE sales_id = $1")
@@ -132,7 +245,6 @@ pub async fn delete_sale(state: State<'_, DbPool>, sales_id: String) -> Mycelium
         .await?;
     Ok(())
 }
-
 
 pub async fn update_sale(
     state: State<'_, DbPool>,
@@ -260,7 +372,6 @@ pub async fn update_sale(
     tx.commit().await?;
     Ok(())
 }
-
 
 pub async fn complete_shipment(
     state: State<'_, DbPool>,

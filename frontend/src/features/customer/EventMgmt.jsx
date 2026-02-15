@@ -27,30 +27,19 @@ const EventMgmt = () => {
     }, []);
 
     const loadEvents = async (query = '') => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            let res;
-            if (query) {
-                res = await window.__TAURI__.core.invoke('search_events_by_name', { name: query });
-            } else {
-                res = await window.__TAURI__.core.invoke('get_all_events'); // Ensure this command exists or use search with empty string
-            }
-            // If get_all_events might not exist, fallback to search_events_by_name with empty string
-            if (!res && !query) {
-                res = await window.__TAURI__.core.invoke('search_events_by_name', { name: '' });
-            }
-            setEvents(res || []);
+            const url = query
+                ? `/api/event/list?query=${encodeURIComponent(query)}`
+                : '/api/event/list';
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Network response was not ok');
+            const data = await res.json();
+            setEvents(data || []);
         } catch (e) {
             console.error(e);
-            // Fallback
-            try {
-                const res = await window.__TAURI__.core.invoke('search_events_by_name', { name: query || '' });
-                setEvents(res || []);
-            } catch (e2) {
-                console.error(e2);
-                setEvents([]);
-            }
+            showAlert("오류", "데이터 로드 실패: " + e);
+            setEvents([]);
         } finally {
             setIsLoading(false);
         }
@@ -95,31 +84,41 @@ const EventMgmt = () => {
         if (!isConfirm) return;
 
         const payload = {
-            eventName: form.name,
+            event_id: form.id || null,
+            event_name: form.name,
             organizer: form.organizer || null,
-            managerName: form.manager || null,
-            managerContact: null,
-            locationAddress: form.location || null,
-            locationDetail: null,
-            startDate: form.start || null,
-            endDate: form.end || null,
+            manager_name: form.manager || null,
+            manager_contact: null,
+            location_address: form.location || null,
+            location_detail: null,
+            start_date: form.start || null,
+            end_date: form.end || null,
             memo: form.memo || null
         };
 
         try {
-            if (window.__TAURI__) {
-                if (form.id) {
-                    await window.__TAURI__.core.invoke('update_event', { ...payload, eventId: form.id });
-                    setIsModalOpen(false);
-                    await showAlert("성공", "수정되었습니다.");
-                } else {
-                    await window.__TAURI__.core.invoke('create_event', payload);
-                    setIsModalOpen(false);
-                    await showAlert("성공", "등록되었습니다.");
-                }
-                loadEvents(searchQuery);
+            let res;
+            if (form.id) {
+                res = await fetch('/api/event/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                res = await fetch('/api/event/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
             }
+
+            if (!res.ok) throw new Error('Network response was not ok');
+
+            setIsModalOpen(false);
+            await showAlert("성공", form.id ? "수정되었습니다." : "등록되었습니다.");
+            loadEvents(searchQuery);
         } catch (e) {
+            console.error(e);
             showAlert("오류", "저장 실패: " + e);
         }
     };
@@ -129,13 +128,19 @@ const EventMgmt = () => {
         if (!await showConfirm("삭제 확인", "정말로 이 행사를 삭제하시겠습니까?\n(관련 판매 데이터가 있을 경우 삭제되지 않을 수 있습니다)")) return;
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_event', { eventId: form.id });
-                setIsModalOpen(false);
-                await showAlert("성공", "삭제되었습니다.");
-                loadEvents(searchQuery);
-            }
+            const res = await fetch('/api/event/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_id: form.id })
+            });
+
+            if (!res.ok) throw new Error('Network response was not ok');
+
+            setIsModalOpen(false);
+            await showAlert("성공", "삭제되었습니다.");
+            loadEvents(searchQuery);
         } catch (e) {
+            console.error(e);
             showAlert("오류", "삭제 실패: " + e);
         }
     };

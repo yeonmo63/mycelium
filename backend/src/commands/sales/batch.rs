@@ -729,12 +729,12 @@ pub struct GeneralSalesBatchItem {
 }
 
 
-pub async fn save_general_sales_batch(
-    state: State<'_, DbPool>,
+pub async fn save_general_sales_batch_internal(
+    pool: &DbPool,
     items: Vec<GeneralSalesBatchItem>,
     deleted_ids: Vec<String>,
 ) -> MyceliumResult<()> {
-    let mut tx = state.begin().await?;
+    let mut tx = pool.begin().await?;
 
     for del_id in deleted_ids {
         // [AUTO-STOCK] Restore Stock on Delete
@@ -840,7 +840,7 @@ pub async fn save_general_sales_batch(
 
         if let Some(pid) = product_id {
             if let Some((s, v, e)) =
-                calculate_bom_tax_distribution(&*state, pid, item.totalAmount).await?
+                calculate_bom_tax_distribution(pool, pid, item.totalAmount).await?
             {
                 supply_value = s;
                 vat_amount = v;
@@ -931,4 +931,12 @@ pub async fn save_general_sales_batch(
     tx.commit().await?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+pub async fn save_general_sales_batch(
+    state: State<'_, DbPool>,
+    items: Vec<GeneralSalesBatchItem>,
+    deleted_ids: Vec<String>,
+) -> MyceliumResult<()> {
+    save_general_sales_batch_internal(&*state, items, deleted_ids).await
 }

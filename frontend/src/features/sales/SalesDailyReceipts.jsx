@@ -136,10 +136,11 @@ const SalesDailyReceipts = () => {
     }, [date]);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            const data = await window.__TAURI__.core.invoke('get_daily_receipts', { date });
+            const res = await fetch(`/api/sales/daily?date=${date}`);
+            if (!res.ok) throw new Error('Network response was not ok');
+            const data = await res.json();
             setReceipts(data || []);
         } catch (e) {
             console.error(e);
@@ -214,15 +215,16 @@ const SalesDailyReceipts = () => {
         });
 
         try {
-            if (window.__TAURI__) {
-                const filePath = await window.__TAURI__.core.invoke('plugin:dialog|save', {
-                    options: { defaultPath: `일일접수현황_${date.replace(/-/g, '')}.csv`, filters: [{ name: 'CSV File', extensions: ['csv'] }] }
-                });
-                if (filePath) {
-                    await window.__TAURI__.core.invoke('plugin:fs|write_text_file', { path: filePath, contents: csv });
-                    showAlert("성공", "파일이 성공적으로 저장되었습니다.");
-                }
-            }
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `일일접수현황_${date.replace(/-/g, '')}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showAlert("성공", "파일이 다운로드 폴더에 저장되었습니다.");
         } catch (e) {
             console.error('Failed to save CSV:', e);
             showAlert("오류", "파일 저장 중 오류가 발생했습니다: " + e);

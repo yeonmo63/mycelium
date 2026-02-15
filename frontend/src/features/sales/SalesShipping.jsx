@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { formatCurrency, formatPhoneNumber } from '../../utils/common';
 import { handlePrintRaw } from '../../utils/printUtils';
 import { useModal } from '../../contexts/ModalContext';
+import { callBridge } from '../../utils/apiBridge';
 
 const shippingPrintStyles = `
     @media print {
@@ -106,7 +107,6 @@ const SalesShipping = () => {
 
     // --- Data Loading ---
     const loadData = useCallback(async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
             // 조회할 상태 목록
@@ -114,15 +114,16 @@ const SalesShipping = () => {
             let combined = [];
 
             // 모든 상태에 대해 병렬 호출 또는 순차 호출
-            // API가 상태별 조회를 지원한다고 가정 (기존 코드 참조)
             for (const s of statuses) {
-                const data = await window.__TAURI__.core.invoke('get_shipments_by_status', {
+                const data = await callBridge('get_shipments_by_status', {
                     status: s,
                     search: searchTerm,
                     startDate: dateRange.start,
                     endDate: dateRange.end
                 });
-                combined = combined.concat(data.map(item => ({ ...item, current_status: s })));
+
+                const rows = Array.isArray(data) ? data : [];
+                combined = combined.concat(rows.map(item => ({ ...item, current_status: s })));
             }
 
             // 최신순 정렬
@@ -181,7 +182,7 @@ const SalesShipping = () => {
             if (await showConfirm('입금 대기 전환', `선택한 ${targets.length}건을 '입금대기' 상태로 변경하시겠습니까?`)) {
                 try {
                     for (const item of targets) {
-                        await window.__TAURI__.core.invoke('update_sale_status', { salesId: String(item.sales_id), status: '입금대기' });
+                        await callBridge('update_sale_status', { salesId: String(item.sales_id), status: '입금대기' });
                     }
                     showAlert('성공', '처리되었습니다.');
                     loadData();
@@ -192,7 +193,7 @@ const SalesShipping = () => {
             if (await showConfirm('입금 확인', `선택한 ${targets.length}건을 '입금완료' 처리하시겠습니까?`)) {
                 try {
                     for (const item of targets) {
-                        await window.__TAURI__.core.invoke('update_sale_status', { salesId: String(item.sales_id), status: '입금완료' });
+                        await callBridge('update_sale_status', { salesId: String(item.sales_id), status: '입금완료' });
                     }
                     showAlert('성공', '처리되었습니다.');
                     loadData();
@@ -232,7 +233,7 @@ const SalesShipping = () => {
             if (await showConfirm('배송 완료 확정', `선택한 ${targets.length}건을 '배송완료' 처리하시겠습니까?\n고객이 상품을 수령한 경우에만 처리해주세요.`)) {
                 try {
                     for (const item of targets) {
-                        await window.__TAURI__.core.invoke('update_sale_status', { salesId: String(item.sales_id), status: '배송완료' });
+                        await callBridge('update_sale_status', { salesId: String(item.sales_id), status: '배송완료' });
                     }
                     showAlert('성공', '배송 완료 처리되었습니다.');
                     loadData();
@@ -247,7 +248,7 @@ const SalesShipping = () => {
             for (const item of shippingItems) {
                 const tracking = shippingForm.trackingMap[item.sales_id];
                 // carrier가 있으면 택배로 간주
-                await window.__TAURI__.core.invoke('complete_shipment', {
+                await callBridge('complete_shipment', {
                     salesId: String(item.sales_id),
                     carrier: shippingForm.carrier,
                     trackingNumber: tracking || null,
@@ -297,14 +298,18 @@ const SalesShipping = () => {
 
         try {
             // Try Tauri Native Dialog
-            const filePath = await window.__TAURI__.dialog.save({
-                filters: [{ name: 'CSV', extensions: ['csv'] }],
-                defaultPath: `배송목록_${new Date().toISOString().slice(0, 10)}.csv`
-            });
+            if (window.__TAURI__) {
+                const filePath = await window.__TAURI__.dialog.save({
+                    filters: [{ name: 'CSV', extensions: ['csv'] }],
+                    defaultPath: `배송목록_${new Date().toISOString().slice(0, 10)}.csv`
+                });
 
-            if (filePath) {
-                await window.__TAURI__.fs.writeTextFile(filePath, '\uFEFF' + csvContent);
-                showAlert('성공', '파일이 저장되었습니다.');
+                if (filePath) {
+                    await window.__TAURI__.fs.writeTextFile(filePath, '\uFEFF' + csvContent);
+                    showAlert('성공', '파일이 저장되었습니다.');
+                }
+            } else {
+                throw new Error("Web Environment: Using browser download");
             }
         } catch (err) {
             console.warn("Native save failed, using fallback:", err);
@@ -357,7 +362,11 @@ const SalesShipping = () => {
 
         if (url) {
             try {
-                await window.__TAURI__.core.invoke('open_external_url', { url });
+                if (window.__TAURI__) {
+                    await window.__TAURI__.core.invoke('open_external_url', { url });
+                } else {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }
             } catch (err) {
                 console.error("Failed to open URL", err);
             }
@@ -493,7 +502,8 @@ const SalesShipping = () => {
                             onClick={async () => {
                                 setIsLoading(true);
                                 try {
-                                    const count = await window.__TAURI__.core.invoke('batch_sync_courier_statuses');
+                                    const result = await callBridge('batch_sync_courier_statuses');
+                                    const count = (typeof result === 'object' && result?.count !== undefined) ? result.count : result;
                                     showAlert('동기화 완료', `${count}건의 배송 상태가 최신화되었습니다.`);
                                     loadData();
                                 } catch (e) {

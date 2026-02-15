@@ -3,11 +3,23 @@ use crate::db::{
 };
 use crate::error::MyceliumError;
 use crate::error::MyceliumResult;
+use crate::stubs::{check_admin, command, Manager, State};
 use crate::DB_MODIFIED;
+use axum::{extract::State as AxumState, Json};
 use std::fs;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, Manager, State, check_admin};
 
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct SpecialCareCustomer {
+    pub name: String,
+    pub mobile: String,
+    pub is_member: bool,
+    pub total_orders: i64,
+    pub claim_count: i64,
+    pub claim_ratio: f64,
+    pub major_reason: Option<String>,
+    pub last_claim_date: Option<String>,
+}
 
 pub async fn get_ltv_analysis(
     state: State<'_, DbPool>,
@@ -37,7 +49,6 @@ pub async fn get_ltv_analysis(
         .fetch_all(&*state)
         .await?)
 }
-
 
 pub async fn get_churn_risk_customers(
     state: State<'_, DbPool>,
@@ -69,7 +80,6 @@ pub async fn get_churn_risk_customers(
         .fetch_all(&*state)
         .await?)
 }
-
 
 pub async fn get_rfm_analysis(state: State<'_, DbPool>) -> MyceliumResult<Vec<CustomerLifecycle>> {
     let raw_data = sqlx::query_as::<_, RawRfmData>(
@@ -166,7 +176,6 @@ pub async fn get_rfm_analysis(state: State<'_, DbPool>) -> MyceliumResult<Vec<Cu
     Ok(results)
 }
 
-
 pub async fn update_customer_level(
     state: State<'_, DbPool>,
     customer_id: String,
@@ -181,14 +190,12 @@ pub async fn update_customer_level(
     Ok(())
 }
 
-
 pub async fn get_claim_customer_count(state: State<'_, DbPool>) -> MyceliumResult<i64> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT customer_id) FROM sales_claims")
         .fetch_one(&*state)
         .await?;
     Ok(count.0)
 }
-
 
 pub async fn get_claim_targets(state: State<'_, DbPool>) -> MyceliumResult<Vec<serde_json::Value>> {
     let list = sqlx::query_as::<_, (String, String, i64, i32)>(
@@ -206,7 +213,6 @@ pub async fn get_claim_targets(state: State<'_, DbPool>) -> MyceliumResult<Vec<s
         .map(|(n, m, c, r)| serde_json::json!({"name": n, "mobile": m, "count": c, "refund": r}))
         .collect())
 }
-
 
 pub async fn get_special_care_customers(
     state: State<'_, DbPool>,
@@ -226,6 +232,61 @@ pub async fn get_special_care_customers(
         .collect())
 }
 
+pub async fn get_special_care_customers_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<SpecialCareCustomer>>> {
+    let sql = r#"
+        WITH CustomerStats AS (
+            SELECT 
+                c.customer_id,
+                c.customer_name,
+                c.mobile_number,
+                true as is_member,
+                (SELECT COUNT(*) FROM sales s WHERE s.customer_id = c.customer_id) as total_orders
+            FROM customers c
+        ),
+        ClaimStats AS (
+            SELECT 
+                sc.customer_id,
+                COUNT(sc.claim_id) as claim_count,
+                MAX(sc.created_at::text) as last_claim_date,
+                (
+                    SELECT reason_category 
+                    FROM sales_claims sc2 
+                    WHERE sc2.customer_id = sc.customer_id
+                    GROUP BY reason_category 
+                    ORDER BY COUNT(*) DESC 
+                    LIMIT 1
+                ) as major_reason
+            FROM sales_claims sc
+            WHERE sc.customer_id IS NOT NULL
+            GROUP BY sc.customer_id
+        )
+        SELECT 
+            cs.customer_name as name,
+            cs.mobile_number as mobile,
+            cs.is_member,
+            cs.total_orders,
+            COALESCE(cls.claim_count, 0) as claim_count,
+            CASE 
+                WHEN cs.total_orders > 0 THEN (COALESCE(cls.claim_count, 0)::float / cs.total_orders::float) * 100.0
+                ELSE 0.0
+            END as claim_ratio,
+            cls.major_reason,
+            cls.last_claim_date
+        FROM CustomerStats cs
+        JOIN ClaimStats cls ON cs.customer_id = cls.customer_id
+        WHERE COALESCE(cls.claim_count, 0) > 0
+        ORDER BY claim_ratio DESC
+        LIMIT 100
+    "#;
+
+    let customers = sqlx::query_as::<_, SpecialCareCustomer>(sql)
+        .fetch_all(&state.pool)
+        .await?;
+
+    Ok(Json(customers))
+}
 
 pub async fn send_sms_simulation(
     app: crate::stubs::AppHandle,
@@ -314,7 +375,6 @@ pub async fn send_sms_simulation(
     }))
 }
 
-
 pub async fn get_repurchase_candidates(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<crate::db::RepurchaseCandidate>> {
@@ -341,7 +401,6 @@ pub async fn get_repurchase_candidates(
         .fetch_all(&*state)
         .await?)
 }
-
 
 pub async fn get_product_associations(
     state: State<'_, DbPool>,

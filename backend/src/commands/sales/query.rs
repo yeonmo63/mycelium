@@ -1,8 +1,38 @@
 use crate::db::{DbPool, Sales};
 use crate::error::MyceliumResult;
+use crate::stubs::{check_admin, command, Manager, State};
+use axum::{
+    extract::{Query, State as AxumState},
+    Json,
+};
 use chrono::NaiveDate;
-use crate::stubs::{command, Manager, State, check_admin};
 
+#[derive(serde::Deserialize)]
+pub struct DateQuery {
+    pub date: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SearchSalesQuery {
+    pub query: String,
+    pub period: Option<String>,
+}
+
+pub async fn get_daily_receipts_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Query(params): Query<DateQuery>,
+) -> MyceliumResult<Json<Vec<Sales>>> {
+    let sales = get_daily_receipts(&state.pool, params.date).await?;
+    Ok(Json(sales))
+}
+
+pub async fn search_sales_by_any_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Query(params): Query<SearchSalesQuery>,
+) -> MyceliumResult<Json<Vec<Sales>>> {
+    let sales = search_sales_by_any_internal(&state.pool, params.query).await?;
+    Ok(Json(sales))
+}
 
 pub async fn get_daily_sales(
     state: State<'_, DbPool>,
@@ -28,9 +58,15 @@ pub async fn get_daily_sales(
         .await?)
 }
 
-
 pub async fn search_sales_by_any(
     state: State<'_, DbPool>,
+    query: String,
+) -> MyceliumResult<Vec<Sales>> {
+    search_sales_by_any_internal(&state, query).await
+}
+
+pub async fn search_sales_by_any_internal(
+    pool: &DbPool,
     query: String,
 ) -> MyceliumResult<Vec<Sales>> {
     let search_pattern = format!("%{}%", query);
@@ -51,13 +87,12 @@ pub async fn search_sales_by_any(
 
     Ok(sqlx::query_as::<_, Sales>(sql)
         .bind(search_pattern)
-        .fetch_all(&*state)
+        .fetch_all(pool)
         .await?)
 }
 
-
-pub async fn get_sales_by_event_id_and_date_range(
-    state: State<'_, DbPool>,
+pub async fn get_sales_by_event_id_and_date_range_internal(
+    pool: &DbPool,
     event_id: String,
     start_date: String,
     end_date: String,
@@ -77,10 +112,18 @@ pub async fn get_sales_by_event_id_and_date_range(
         .bind(event_id)
         .bind(start)
         .bind(end)
-        .fetch_all(&*state)
+        .fetch_all(pool)
         .await?)
 }
 
+pub async fn get_sales_by_event_id_and_date_range(
+    state: State<'_, DbPool>,
+    event_id: String,
+    start_date: String,
+    end_date: String,
+) -> MyceliumResult<Vec<Sales>> {
+    get_sales_by_event_id_and_date_range_internal(&*state, event_id, start_date, end_date).await
+}
 
 pub async fn get_daily_receipts(
     state: State<'_, DbPool>,
@@ -107,9 +150,15 @@ pub async fn get_daily_receipts(
         .await?)
 }
 
-
 pub async fn get_sale_detail(
     state: State<'_, DbPool>,
+    sales_id: String,
+) -> MyceliumResult<Option<Sales>> {
+    get_sale_detail_internal(&state, sales_id).await
+}
+
+pub async fn get_sale_detail_internal(
+    pool: &DbPool,
     sales_id: String,
 ) -> MyceliumResult<Option<Sales>> {
     Ok(sqlx::query_as::<_, Sales>(
@@ -121,10 +170,9 @@ pub async fn get_sale_detail(
         "#,
     )
     .bind(sales_id)
-    .fetch_optional(&*state)
+    .fetch_optional(pool)
     .await?)
 }
-
 
 pub async fn get_customer_sales_on_date(
     state: State<'_, DbPool>,
@@ -149,7 +197,6 @@ pub async fn get_customer_sales_on_date(
     .fetch_all(&*state)
     .await?)
 }
-
 
 pub async fn get_customer_sales_history(
     state: State<'_, DbPool>,
@@ -176,7 +223,6 @@ pub struct TaxReportItem {
     pub vat_amount: i64,
     pub tax_exempt_value: i64,
 }
-
 
 pub async fn get_tax_report_v2(
     state: State<'_, DbPool>,
@@ -266,7 +312,6 @@ pub async fn get_tax_report_v2(
     Ok(rows)
 }
 
-
 pub async fn submit_tax_report(
     app: crate::stubs::AppHandle,
     items: Vec<TaxReportItem>,
@@ -295,7 +340,10 @@ pub async fn submit_tax_report(
     }
 
     // 3. Simulated Transmission
-    let provider = config.get("provider").and_then(|v| v.as_str()).unwrap_or("");
+    let provider = config
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let provider_name = match provider {
         "sim_hometax" => "국세청 홈택스(모의)",
         "popbill" => "팝빌(연동)",
@@ -313,7 +361,9 @@ pub async fn submit_tax_report(
     // 4. Log Action
     tracing::info!(
         "Submitted tax report via {}: {} ~ {}",
-        provider_name, start_date, end_date
+        provider_name,
+        start_date,
+        end_date
     );
 
     // 5. Success Message

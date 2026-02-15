@@ -29,10 +29,12 @@ const SalesOnlineSync = () => {
     }, []);
 
     const loadBaseData = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_product_list');
-            setProductList(list.filter(p => (p.item_type || 'product') === 'product') || []);
+            const res = await fetch('/api/product/list');
+            if (res.ok) {
+                const list = await res.json();
+                setProductList(list.filter(p => (p.item_type || 'product') === 'product') || []);
+            }
         } catch (e) {
             console.error(e);
         }
@@ -58,6 +60,21 @@ const SalesOnlineSync = () => {
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0]);
+        }
+    };
+
+    const searchCustomerByMobile = async (mobile) => {
+        try {
+            const res = await fetch(`/api/customers/search?name=${encodeURIComponent(mobile)}`);
+            if (res.ok) {
+                const list = await res.json();
+                // Client-side filtering for exact match if needed, but search returns LIKE match
+                return list;
+            }
+            return [];
+        } catch (e) {
+            console.warn(e);
+            return [];
         }
     };
 
@@ -97,21 +114,18 @@ const SalesOnlineSync = () => {
                 }
 
                 // Identify Customers
-                if (window.__TAURI__) {
-                    const invoke = window.__TAURI__.core.invoke;
-                    for (const order of orders) {
-                        try {
-                            if (!order.mobile) { order.isNewCustomer = true; continue; }
-                            const dups = await invoke('search_customers_by_mobile', { mobile: order.mobile });
-                            if (dups && dups.length > 0) {
-                                order.isNewCustomer = false;
-                                order.existingCustomerId = dups[0].customer_id;
-                                order.existingCustomerName = dups[0].customer_name;
-                            } else {
-                                order.isNewCustomer = true;
-                            }
-                        } catch (e) { console.warn(e); order.isNewCustomer = true; }
-                    }
+                for (const order of orders) {
+                    try {
+                        if (!order.mobile) { order.isNewCustomer = true; continue; }
+                        const dups = await searchCustomerByMobile(order.mobile);
+                        if (dups && dups.length > 0) {
+                            order.isNewCustomer = false;
+                            order.existingCustomerId = dups[0].customer_id;
+                            order.existingCustomerName = dups[0].customer_name;
+                        } else {
+                            order.isNewCustomer = true;
+                        }
+                    } catch (e) { console.warn(e); order.isNewCustomer = true; }
                 }
 
                 setParsedOrders(orders);
@@ -277,21 +291,18 @@ const SalesOnlineSync = () => {
         }));
 
         // Identify Customers
-        if (window.__TAURI__) {
-            const invoke = window.__TAURI__.core.invoke;
-            for (const order of orders) {
-                try {
-                    if (!order.mobile) { order.isNewCustomer = true; continue; }
-                    const dups = await invoke('search_customers_by_mobile', { mobile: order.mobile });
-                    if (dups && dups.length > 0) {
-                        order.isNewCustomer = false;
-                        order.existingCustomerId = dups[0].customer_id;
-                        order.existingCustomerName = dups[0].customer_name;
-                    } else {
-                        order.isNewCustomer = true;
-                    }
-                } catch (e) { console.warn(e); order.isNewCustomer = true; }
-            }
+        for (const order of orders) {
+            try {
+                if (!order.mobile) { order.isNewCustomer = true; continue; }
+                const dups = await searchCustomerByMobile(order.mobile);
+                if (dups && dups.length > 0) {
+                    order.isNewCustomer = false;
+                    order.existingCustomerId = dups[0].customer_id;
+                    order.existingCustomerName = dups[0].customer_name;
+                } else {
+                    order.isNewCustomer = true;
+                }
+            } catch (e) { console.warn(e); order.isNewCustomer = true; }
         }
 
         setParsedOrders(orders);
@@ -349,32 +360,34 @@ const SalesOnlineSync = () => {
         if (quickRegData.tag) finalName = `[${quickRegData.tag}] ${quickRegData.name}`;
 
         try {
-            if (window.__TAURI__) {
-                const newId = await window.__TAURI__.core.invoke('create_product', {
+            const res = await fetch('/api/product/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     productName: finalName,
                     specification: quickRegData.spec,
                     unitPrice: price,
                     stockQuantity: 100,
                     safetyStock: 10,
                     costPrice: 0
-                });
+                })
+            });
+            let data = await res.json();
+            if (!data.success) throw new Error(data.error);
+            const newId = data.productId; // Note: API returns productId
 
-                await loadBaseData(); // Refresh list to get new product
+            await loadBaseData(); // Refresh list to get new product
 
-                // Update Order & Mapping
-                // Note: since loadBaseData is async and state update is batched, we might not see new product in 'productList' immediately for rendering.
-                // But we know ID.
+            // Update Order & Mapping
+            const newMap = { ...mappings, [pendingOrderForQuickReg.mallProductName]: { id: newId, price } };
+            saveLocalMappings(newMap);
 
-                // Update mapping immediately
-                const newMap = { ...mappings, [pendingOrderForQuickReg.mallProductName]: { id: newId, price } };
-                saveLocalMappings(newMap);
+            // Update row
+            handleMatchChange(pendingOrderForQuickReg.index, newId);
 
-                // Update row
-                handleMatchChange(pendingOrderForQuickReg.index, newId);
+            await showAlert("완료", "신규 상품이 등록되었습니다.");
+            setIsQuickRegOpen(false);
 
-                await showAlert("완료", "신규 상품이 등록되었습니다.");
-                setIsQuickRegOpen(false);
-            }
         } catch (e) {
             await showAlert("오류", "상품 등록 실패: " + e);
         }
@@ -390,8 +403,10 @@ const SalesOnlineSync = () => {
         }
         setIsApiLoading(true);
         try {
-            const invoke = window.__TAURI__.core.invoke;
-            const orders = await invoke('fetch_external_mall_orders', { mallType });
+            const res = await fetch(`/api/sales/external/fetch?mallType=${mallType}`);
+            const orders = await res.json();
+
+            if (!res.ok || (orders && orders.success === false)) throw new Error(orders.error || 'Server Error');
 
             if (!orders || orders.length === 0) {
                 await showAlert("결과", "가져올 새로운 주문 데이터가 없습니다.");
@@ -402,7 +417,7 @@ const SalesOnlineSync = () => {
             for (const order of orders) {
                 try {
                     if (!order.mobile) { order.isNewCustomer = true; continue; }
-                    const dups = await invoke('search_customers_by_mobile', { mobile: order.mobile });
+                    const dups = await searchCustomerByMobile(order.mobile);
                     if (dups && dups.length > 0) {
                         order.isNewCustomer = false;
                         order.existingCustomerId = dups[0].customer_id;
@@ -417,7 +432,7 @@ const SalesOnlineSync = () => {
             setParsedOrders(orders);
             setStep('review');
         } catch (e) {
-            await showAlert("연동 오류", e);
+            await showAlert("연동 오류", e.toString());
         } finally {
             setIsApiLoading(false);
         }
@@ -435,28 +450,39 @@ const SalesOnlineSync = () => {
         let success = 0;
         let fail = 0;
 
-        if (window.__TAURI__) {
-            const invoke = window.__TAURI__.core.invoke;
-            for (const order of parsedOrders) {
-                try {
-                    let cid = order.existingCustomerId;
-                    if (!cid) {
-                        // Create Customer
-                        cid = await invoke('create_customer', {
+        for (const order of parsedOrders) {
+            try {
+                let cid = order.existingCustomerId;
+                if (!cid) {
+                    // Create Customer
+                    const res = await fetch('/api/customers/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
                             name: order.customerName,
                             mobile: order.mobile,
                             zip: order.zip,
                             addr1: order.address,
                             level: '일반',
                             memo: `[쇼핑몰] ${order.mallProductName}`
-                        });
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        cid = data.customerId;
+                    } else {
+                        throw new Error(data.error);
                     }
+                }
 
-                    // Create Sale
-                    const internalP = productList.find(p => p.product_id == order.internalProductId) || { product_name: 'Unknown', unit_price: order.unitPrice };
+                // Create Sale
+                const internalP = productList.find(p => p.product_id == order.internalProductId) || { product_name: 'Unknown', unit_price: order.unitPrice };
 
-                    await invoke('create_sale', {
-                        customerId: Number(cid),
+                const salesRes = await fetch('/api/sales/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: cid, // Send as string or whatever structure it is
                         productName: internalP.product_name,
                         specification: internalP.specification || null,
                         unitPrice: Number(order.unitPrice),
@@ -472,18 +498,24 @@ const SalesOnlineSync = () => {
                         shippingMobileNumber: order.mobile || null,
                         shippingDate: null,
                         paidAmount: Number(order.unitPrice * order.qty)
-                    });
-                    success++;
-                } catch (e) {
-                    console.error(e);
+                    })
+                });
+                const salesData = await salesRes.json();
+                if (salesData.success) success++;
+                else {
+                    console.error(salesData.error);
                     fail++;
                 }
+
+            } catch (e) {
+                console.error(e);
+                fail++;
             }
-            await showAlert("완료", `성공: ${success}, 실패: ${fail}`);
-            setStep('upload');
-            setFile(null);
-            setParsedOrders([]);
         }
+        await showAlert("완료", `성공: ${success}, 실패: ${fail}`);
+        setStep('upload');
+        setFile(null);
+        setParsedOrders([]);
     };
 
     return (
@@ -496,7 +528,7 @@ const SalesOnlineSync = () => {
                             <span className="w-6 h-1 bg-teal-500 rounded-full"></span>
                             <span className="text-[9px] font-black tracking-[0.2em] text-teal-600 uppercase">Multi-Channel Sync Engine</span>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>통합 주문 수집 <span className="text-slate-300 font-light ml-1 text-xl">Omni-Channel Sync</span></h1>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>쇼핑몰 주문 연동 <span className="text-slate-300 font-light ml-1 text-xl">Omni-Channel Sync</span></h1>
                     </div>
                 </div>
             </div>

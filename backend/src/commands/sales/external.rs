@@ -1,6 +1,15 @@
+use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{check_admin, command, AppHandle, Manager};
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    Json,
+};
+use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
-use crate::stubs::{command, AppHandle, Manager, check_admin};
+use std::path::PathBuf;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,7 +24,6 @@ pub struct MallOrderItem {
     pub qty: i32,
     pub unit_price: i32,
 }
-
 
 pub async fn fetch_external_mall_orders(
     app: AppHandle,
@@ -165,5 +173,79 @@ async fn fetch_playauto_orders(
             "플레이오토 연결 실패: {}",
             e
         ))),
+    }
+}
+
+pub async fn fetch_external_mall_orders_axum(
+    State((_, config_dir)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let mall_type = params.get("mallType").cloned().unwrap_or_default();
+
+    // Config Load Logic duplication (refactor if needed, but keeping simple for now)
+    let config_path = config_dir.join("config.json");
+    if !config_path.exists() {
+        return Json(json!({ "success": false, "error": "설정 파일이 없습니다." })).into_response();
+    }
+
+    let content = match fs::read_to_string(&config_path) {
+        Ok(c) => c,
+        Err(e) => return Json(json!({ "success": false, "error": e.to_string() })).into_response(),
+    };
+
+    let json: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+
+    let result = match mall_type.as_str() {
+        "sabangnet" => {
+            let api_key = json
+                .get("sabangnet_api_key")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let company_id = json
+                .get("sabangnet_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if api_key.is_empty() || company_id.is_empty() {
+                Err(MyceliumError::Internal(
+                    "사방넷 연동 설정이 필요합니다.".into(),
+                ))
+            } else {
+                fetch_sabangnet_orders(api_key, company_id).await
+            }
+        }
+        "playauto" => {
+            let api_key = json
+                .get("playauto_api_key")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let member_id = json
+                .get("playauto_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if api_key.is_empty() || member_id.is_empty() {
+                Err(MyceliumError::Internal(
+                    "플레이오토 연동 설정이 필요합니다.".into(),
+                ))
+            } else {
+                fetch_playauto_orders(api_key, member_id).await
+            }
+        }
+        "naver" => {
+            // Placeholder
+            Ok(vec![])
+        }
+        "coupang" => {
+            // Placeholder
+            Ok(vec![])
+        }
+        _ => Err(MyceliumError::Internal(format!(
+            "지원되지 않는 몰 타입입니다: {}",
+            mall_type
+        ))),
+    };
+
+    match result {
+        Ok(items) => Json(json!(items)).into_response(),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })).into_response(),
     }
 }

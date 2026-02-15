@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { formatCurrency, copyToClipboard } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import dayjs from 'dayjs';
-import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerBest = () => {
     const { showAlert, showConfirm } = useModal();
@@ -35,20 +34,25 @@ const CustomerBest = () => {
 
     // --- Search ---
     const handleSearch = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         setPage(1);
         setSelectedIds(new Set());
         try {
-            const res = await window.__TAURI__.core.invoke('search_best_customers', {
-                minQty: Number(searchParams.minQty),
-                minAmt: Number(searchParams.minAmt),
+            const params = new URLSearchParams({
+                minQty: searchParams.minQty,
+                minAmt: searchParams.minAmt,
                 logic: searchParams.logic
             });
-            setCustomers(res || []);
+            const res = await fetch(`/api/customer/best?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                setCustomers(data || []);
+            } else {
+                throw new Error(await res.text());
+            }
         } catch (e) {
             console.error(e);
-            showAlert("오류", "조회 중 오류가 발생했습니다: " + e);
+            showAlert("오류", "조회 중 오류가 발생했습니다: " + e.message);
             setCustomers([]);
         } finally {
             setIsLoading(false);
@@ -88,16 +92,23 @@ const CustomerBest = () => {
         if (!await showConfirm("등급 변경", `선택한 ${selectedIds.size}명의 고객 등급을 '${batchLevel}'(으)로 변경하시겠습니까?`)) return;
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('update_customer_membership_batch', {
+            const res = await fetch('/api/customer/batch/membership', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     customerIds: Array.from(selectedIds),
                     newLevel: batchLevel
-                });
+                })
+            });
+
+            if (res.ok) {
                 await showAlert("완료", "등급이 변경되었습니다.");
                 handleSearch();
+            } else {
+                throw new Error(await res.text());
             }
         } catch (e) {
-            showAlert("오류", "등급 변경 실패: " + e);
+            showAlert("오류", "등급 변경 실패: " + e.message);
         }
     };
 
@@ -119,40 +130,39 @@ const CustomerBest = () => {
             csv += row + '\n';
         });
 
-        try {
-            if (window.__TAURI__) {
-                const filePath = await window.__TAURI__.dialog.save({
-                    filters: [{
-                        name: 'Excel CSV',
-                        extensions: ['csv']
-                    }],
-                    defaultPath: `우수고객목록_${dayjs().format('YYYYMMDD')}.csv`
-                });
-
-                if (filePath) {
-                    await window.__TAURI__.fs.writeTextFile(filePath, csv);
-                    showAlert("성공", "파일이 저장되었습니다.");
-                }
-            }
-        } catch (e) {
-            console.error(e);
-        }
+        // Browser Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `우수고객목록_${dayjs().format('YYYYMMDD')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showAlert("성공", "파일이 다운로드되었습니다.");
     };
 
     const handleAiInsight = async (cid) => {
-        if (!window.__TAURI__) return;
         setAiData(null);
         setAiModalOpen(true);
         setIsAiLoading(true);
         try {
-            const data = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId: cid });
+            const res = await fetch(`/api/customer/ai-insight?customerId=${cid}`);
+            if (res.status === 429 || res.status === 403) {
+                throw new Error('AI_QUOTA_EXCEEDED');
+            }
+            if (!res.ok) {
+                throw new Error(await res.text());
+            }
+            const data = await res.json();
             setAiData(data);
         } catch (e) {
             console.error(e);
-            if (e.message !== 'AI_QUOTA_EXCEEDED') {
-                showAlert("오류", "AI 분석 실패: " + e);
+            if (e.message === 'AI_QUOTA_EXCEEDED') {
+                showAlert("오류", "🚫 일일 무료 사용량을 초과했습니다.");
+            } else {
+                showAlert("오류", "AI 분석 실패: " + e.message);
             }
-            setAiModalOpen(false);
         } finally {
             setIsAiLoading(false);
         }
@@ -210,7 +220,7 @@ const CustomerBest = () => {
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2 bg-slate-50 p-1.5 px-3 rounded-xl border border-slate-200">
                             <span className="text-[10px] font-black text-slate-400 uppercase">일괄 변경</span>
-                            <select value={batchLevel} onChange={e => setBatchLevel(e.target.value)} className="h-8 rounded-lg border-none bg-white text-xs font-bold w-28 focus:ring-0">
+                            <select value={batchLevel} onChange={e => setBatchLevel(e.target.value)} className="h-8 py-0 pl-2 rounded-lg border-none bg-white text-xs font-bold w-28 focus:ring-0">
                                 <option value="">--등급--</option>
                                 <option value="Normal">일반</option>
                                 <option value="VIP">VIP</option>

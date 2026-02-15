@@ -1,10 +1,10 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
+use crate::stubs::{check_admin, command, Manager, State};
 use crate::DB_MODIFIED;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, Manager, State, check_admin};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CourierStatus {
@@ -15,10 +15,9 @@ pub struct CourierStatus {
     pub updated_at: String,
 }
 
-
-pub async fn sync_courier_status(
-    state: State<'_, DbPool>,
-    state_app: crate::stubs::AppHandle,
+pub async fn sync_courier_status_internal(
+    pool: &DbPool,
+    config_dir: &std::path::PathBuf,
     sales_id: String,
 ) -> MyceliumResult<CourierStatus> {
     // 1. Fetch sale and customer info
@@ -29,7 +28,7 @@ pub async fn sync_courier_status(
          WHERE s.sales_id = $1"
     )
     .bind(&sales_id)
-    .fetch_optional(&*state)
+    .fetch_optional(pool)
     .await?;
 
     if let Some((
@@ -55,7 +54,6 @@ pub async fn sync_courier_status(
         let tracking_number = tracking.unwrap();
 
         // 2. Load Config for API Key
-        let config_dir = state_app.path().app_config_dir().unwrap();
         let config_path = config_dir.join("config.json");
         let api_key = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path).unwrap_or_default();
@@ -108,7 +106,7 @@ pub async fn sync_courier_status(
                         sqlx::query("UPDATE sales SET status = $1 WHERE sales_id = $2")
                             .bind(new_status)
                             .bind(&sales_id)
-                            .execute(&*state)
+                            .execute(pool)
                             .await?;
 
                         // SMS logic... (skipped for brevity but same as simulation)
@@ -147,7 +145,7 @@ pub async fn sync_courier_status(
             sqlx::query("UPDATE sales SET status = $1 WHERE sales_id = $2")
                 .bind(new_status)
                 .bind(&sales_id)
-                .execute(&*state)
+                .execute(pool)
                 .await?;
         }
 
@@ -165,26 +163,42 @@ pub async fn sync_courier_status(
     ))
 }
 
-
-pub async fn batch_sync_courier_statuses(
+pub async fn sync_courier_status(
     state: State<'_, DbPool>,
-    state_app: crate::stubs::AppHandle,
+    app_handle: crate::stubs::AppHandle,
+    sales_id: String,
+) -> MyceliumResult<CourierStatus> {
+    let config_dir = app_handle.path().app_config_dir().unwrap();
+    sync_courier_status_internal(&*state, &config_dir, sales_id).await
+}
+
+pub async fn batch_sync_courier_statuses_internal(
+    pool: &DbPool,
+    config_dir: &std::path::PathBuf,
 ) -> MyceliumResult<usize> {
     // Fetch all sales that are currently '배송중'
     let active_shipments: Vec<String> = sqlx::query_scalar(
         "SELECT sales_id FROM sales WHERE status = '배송중' AND tracking_number IS NOT NULL",
     )
-    .fetch_all(&*state)
+    .fetch_all(pool)
     .await?;
 
     let mut updated_count = 0;
     for sid in active_shipments {
         // Reuse simulation logic
-        let res = sync_courier_status(&state, state_app.clone(), sid).await;
+        let res = sync_courier_status_internal(pool, config_dir, sid).await;
         if res.is_ok() {
             updated_count += 1;
         }
     }
 
     Ok(updated_count)
+}
+
+pub async fn batch_sync_courier_statuses(
+    state: State<'_, DbPool>,
+    app_handle: crate::stubs::AppHandle,
+) -> MyceliumResult<usize> {
+    let config_dir = app_handle.path().app_config_dir().unwrap();
+    batch_sync_courier_statuses_internal(&*state, &config_dir).await
 }

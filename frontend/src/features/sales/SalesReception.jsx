@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useModal } from '../../contexts/ModalContext';
 import { formatPhoneNumber } from '../../utils/common';
 import { useSalesReception } from './hooks/useSalesReception';
+import { callBridge } from '../../utils/apiBridge';
 
 import ReceptionHeader from './components/reception/ReceptionHeader';
 import CustomerInfoBar from './components/reception/CustomerInfoBar';
@@ -82,7 +83,7 @@ const SalesReception = () => {
         if (!query) return showAlert('알림', '조회할 고객명을 입력해주세요.');
 
         try {
-            const results = await window.__TAURI__.core.invoke('search_customers_by_name', { name: query });
+            const results = await callBridge('search_customers_by_name', { name: query });
             if (!results || results.length === 0) {
                 if (await showConfirm('신규 고객', '검색 결과가 없습니다. 새로운 고객으로 등록하시겠습니까?')) {
                     setQuickRegisterName(query);
@@ -92,18 +93,21 @@ const SalesReception = () => {
             }
             if (results.length === 1) selectCustomer(results[0]);
             else { setSearchResults(results); setShowSelectionModal(true); }
-        } catch (e) { showAlert('오류', '고객 검색 중 오류가 발생했습니다.'); }
+        } catch (e) {
+            console.error("Search Error:", e);
+            showAlert('오류', `고객 검색 중 오류가 발생했습니다: ${e.message}`);
+        }
     };
 
     const handleQuickRegister = async (data) => {
         try {
-            await window.__TAURI__.core.invoke('create_customer', {
+            await callBridge('create_customer', {
                 ...data,
                 joinDate: new Date().toISOString().split('T')[0],
                 mobile: formatPhoneNumber(data.mobile),
                 phone: formatPhoneNumber(data.phone)
             });
-            const results = await window.__TAURI__.core.invoke('search_customers_by_name', { name: data.name });
+            const results = await callBridge('search_customers_by_name', { name: data.name });
             const created = results.find(r => r.mobile_number === data.mobile) || results[0];
             if (created) {
                 selectCustomer(created);

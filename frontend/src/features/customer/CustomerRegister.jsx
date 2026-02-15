@@ -66,10 +66,13 @@ const CustomerRegister = () => {
     // Debounced Search for Suggestions (Name)
     useEffect(() => {
         const timer = setTimeout(async () => {
-            if (isNameDirty && formData.name.trim().length >= 2 && window.__TAURI__) {
+            if (isNameDirty && formData.name.trim().length >= 2) {
                 try {
-                    const results = await window.__TAURI__.core.invoke('search_customers_by_name', { name: formData.name });
-                    setNameSuggestions(results.slice(0, 5));
+                    const res = await fetch(`/api/customer/search/name?query=${encodeURIComponent(formData.name)}`);
+                    if (res.ok) {
+                        const results = await res.json();
+                        setNameSuggestions(results.slice(0, 5));
+                    }
                 } catch (e) {
                     console.error("Name search failed:", e);
                 }
@@ -84,10 +87,13 @@ const CustomerRegister = () => {
     useEffect(() => {
         const timer = setTimeout(async () => {
             const cleanMobile = formData.mobile.replace(/[^0-9]/g, '');
-            if (isMobileDirty && cleanMobile.length >= 4 && window.__TAURI__) {
+            if (isMobileDirty && cleanMobile.length >= 4) {
                 try {
-                    const results = await window.__TAURI__.core.invoke('search_customers_by_mobile', { mobile: formData.mobile });
-                    setMobileSuggestions(results.slice(0, 5));
+                    const res = await fetch(`/api/customer/search/mobile?query=${encodeURIComponent(formData.mobile)}`);
+                    if (res.ok) {
+                        const results = await res.json();
+                        setMobileSuggestions(results.slice(0, 5));
+                    }
                 } catch (e) {
                     console.error("Mobile search failed:", e);
                 }
@@ -199,21 +205,24 @@ const CustomerRegister = () => {
         const { name, mobile } = formData;
         if (!name && !mobile) return [];
 
-        if (!window.__TAURI__) return [];
-
         try {
             let duplicates = [];
-            const invoke = window.__TAURI__.core.invoke;
 
             if (name) {
-                const nameDups = await invoke('search_customers_by_name', { name });
-                duplicates = duplicates.concat(nameDups);
+                const res = await fetch(`/api/customer/search/name?query=${encodeURIComponent(name)}`);
+                if (res.ok) {
+                    const nameDups = await res.json();
+                    duplicates = duplicates.concat(nameDups);
+                }
             }
             if (mobile && mobile.length > 5) {
-                const mobileDups = await invoke('search_customers_by_mobile', { mobile });
-                const nameIds = new Set(duplicates.map(d => d.customer_id));
-                const uniqueMobileDups = mobileDups.filter(d => !nameIds.has(d.customer_id));
-                duplicates = duplicates.concat(uniqueMobileDups);
+                const res = await fetch(`/api/customer/search/mobile?query=${encodeURIComponent(mobile)}`);
+                if (res.ok) {
+                    const mobileDups = await res.json();
+                    const nameIds = new Set(duplicates.map(d => d.customer_id));
+                    const uniqueMobileDups = mobileDups.filter(d => !nameIds.has(d.customer_id));
+                    duplicates = duplicates.concat(uniqueMobileDups);
+                }
             }
 
             return duplicates;
@@ -282,16 +291,22 @@ const CustomerRegister = () => {
                 status: '정상' // Always set to normal on save/reactivate
             };
 
-            if (window.__TAURI__) {
-                if (selectedCustomerId) {
-                    await window.__TAURI__.core.invoke('update_customer', payload);
-                    await showAlert('성공', '고객 정보가 성공적으로 수정(복원)되었습니다.');
-                } else {
-                    await window.__TAURI__.core.invoke('create_customer', payload);
-                    await showAlert('성공', '고객이 성공적으로 등록되었습니다.');
-                }
-                handleReset();
+
+            const url = selectedCustomerId ? '/api/customer/update' : '/api/customer/create';
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Network response was not ok');
+
+            if (selectedCustomerId) {
+                await showAlert('성공', '고객 정보가 성공적으로 수정(복원)되었습니다.');
+            } else {
+                await showAlert('성공', '고객이 성공적으로 등록되었습니다.');
             }
+            handleReset();
         } catch (error) {
             console.error('Failed to register customer:', error);
             await showAlert('오류', '처리에 실패했습니다: ' + error);
@@ -324,10 +339,17 @@ const CustomerRegister = () => {
     const processBusinessCard = async (base64, mimeType) => {
         setIsProcessing(true);
         try {
-            const result = await window.__TAURI__.core.invoke('parse_business_card_ai', {
-                imageBase64: base64,
-                mimeType: mimeType
+            const res = await fetch('/api/ai/business-card', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    imageBase64: base64,
+                    mimeType: mimeType
+                })
             });
+
+            if (!res.ok) throw new Error('AI processing failed');
+            const result = await res.json();
 
             setFormData(prev => ({
                 ...prev,

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useModal } from '../../contexts/ModalContext';
-import { invokeAI } from '../../utils/aiErrorHandler';
 
 const CustomerConsultation = () => {
     const { showAlert, showConfirm } = useModal();
@@ -35,27 +34,38 @@ const CustomerConsultation = () => {
     }, []);
 
     const handleSearch = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const results = await window.__TAURI__.core.invoke('get_consultations', {
-                startDate: searchParams.startDate || null,
-                endDate: searchParams.endDate || null
-            });
-            setConsultList(results || []);
+            const params = new URLSearchParams();
+            if (searchParams.startDate) params.append('startDate', searchParams.startDate);
+            if (searchParams.endDate) params.append('endDate', searchParams.endDate);
+
+            const res = await fetch(`/api/crm/consultations?${params.toString()}`);
+            if (res.ok) {
+                const results = await res.json();
+                setConsultList(results || []);
+            } else {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
         } catch (e) {
             console.error(e);
-            showAlert('오류', '상담 내역 조회 실패: ' + e);
+            showAlert('오류', '상담 내역 조회 실패: ' + e.message);
         }
     };
 
     const handleGlobalBriefing = async () => {
-        if (!window.__TAURI__) return;
         try {
             setIsAiLoading(true);
-            const summary = await invokeAI(showAlert, 'get_pending_consultations_summary');
-            showAlert('AI 상담 브리핑', summary); // Or better: use a custom rich modal if available
+            const res = await fetch('/api/crm/ai/summary');
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+            const data = await res.json();
+            showAlert('AI 상담 브리핑', data.summary || data);
         } catch (e) {
             console.error(e);
+            showAlert('오류', 'AI 브리핑 실패: ' + e.message);
         } finally {
             setIsAiLoading(false);
         }
@@ -85,38 +95,53 @@ const CustomerConsultation = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!window.__TAURI__) return;
 
         try {
             if (editData.consult_id) {
                 // Update
-                await window.__TAURI__.core.invoke('update_consultation', {
-                    consultId: editData.consult_id,
-                    answer: editData.answer || null,
-                    status: editData.status,
-                    priority: editData.priority,
-                    followUpDate: editData.follow_up_date || null
+                const res = await fetch('/api/crm/consultations/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        consultId: editData.consult_id,
+                        answer: editData.answer || null,
+                        status: editData.status,
+                        priority: editData.priority,
+                        followUpDate: editData.follow_up_date || null
+                    })
                 });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText);
+                }
                 showAlert('성공', '상담 내역이 업데이트되었습니다.');
             } else {
                 // Create
-                await window.__TAURI__.core.invoke('create_consultation', {
-                    customerId: editData.customer_id || null, // Logic needs to handle customer linking separately or via search
-                    guestName: editData.guest_name,
-                    contact: editData.contact,
-                    channel: editData.channel,
-                    counselorName: editData.counselor_name,
-                    category: editData.category,
-                    priority: editData.priority,
-                    title: editData.title,
-                    content: editData.content
+                const res = await fetch('/api/crm/consultations/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: editData.customer_id || null,
+                        guestName: editData.guest_name,
+                        contact: editData.contact,
+                        channel: editData.channel,
+                        counselorName: editData.counselor_name,
+                        category: editData.category,
+                        priority: editData.priority,
+                        title: editData.title,
+                        content: editData.content
+                    })
                 });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(errText);
+                }
                 showAlert('성공', '새로운 상담이 등록되었습니다.');
             }
             setIsModalOpen(false);
             handleSearch();
         } catch (e) {
-            showAlert('오류', '저장 실패: ' + e);
+            showAlert('오류', '저장 실패: ' + e.message);
         }
     };
 
@@ -125,12 +150,16 @@ const CustomerConsultation = () => {
         if (!await showConfirm('삭제 확인', '정말 이 상담 내역을 삭제하시겠습니까?')) return;
 
         try {
-            await window.__TAURI__.core.invoke('delete_consultation', { consultId: editData.consult_id });
+            const res = await fetch(`/api/crm/consultations/delete?consult_id=${editData.consult_id}`);
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
             showAlert('성공', '삭제되었습니다.');
             setIsModalOpen(false);
             handleSearch();
         } catch (e) {
-            showAlert('오류', '삭제 실패: ' + e);
+            showAlert('오류', '삭제 실패: ' + e.message);
         }
     };
 
@@ -139,15 +168,33 @@ const CustomerConsultation = () => {
         if (!editData) return;
         setIsAiLoading(true);
         try {
-            const advice = await invokeAI(showAlert, 'get_consultation_ai_advisor', {
-                customerId: editData.customer_id || null, // Note: backend assumes string or option? Check type. Mostly String or Option<String>
-                category: editData.category,
-                title: editData.title,
-                content: editData.content
+            const res = await fetch('/api/crm/ai/advisor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    customerId: editData.customer_id || null,
+                    category: editData.category,
+                    title: editData.title,
+                    content: editData.content
+                })
             });
+
+            if (res.status === 429 || res.status === 403) {
+                throw new Error('AI_QUOTA_EXCEEDED');
+            }
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+            const advice = await res.json();
             setAiAdvisor(advice);
         } catch (e) {
             console.error(e);
+            if (e.message === 'AI_QUOTA_EXCEEDED') {
+                showAlert('AI 오류', '🚫 일일 무료 사용량을 초과했습니다.');
+            } else {
+                showAlert('오류', 'AI 조언 실패: ' + e.message);
+            }
         } finally {
             setIsAiLoading(false);
         }
@@ -157,18 +204,29 @@ const CustomerConsultation = () => {
         if (!editData?.customer_id) return;
         setIsAiLoading(true);
         try {
-            const briefing = await invokeAI(showAlert, 'get_consultation_briefing', {
-                customerId: editData.customer_id
-            });
-            setAiBriefing(briefing);
+            const res = await fetch(`/api/crm/ai/briefing?customer_id=${editData.customer_id}`);
+
+            if (res.status === 429 || res.status === 403) {
+                throw new Error('AI_QUOTA_EXCEEDED');
+            }
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+            const data = await res.json();
+            setAiBriefing(data.briefing || data);
         } catch (e) {
             console.error(e);
+            if (e.message === 'AI_QUOTA_EXCEEDED') {
+                showAlert('AI 오류', '🚫 일일 무료 사용량을 초과했습니다.');
+            } else {
+                showAlert('오류', 'AI 브리핑 실패: ' + e.message);
+            }
         } finally {
             setIsAiLoading(false);
         }
     };
 
-    // Customer Search for New Consult (Simplified)
     // Customer Search for New Consult
     const handleCustomerSearch = async (name) => {
         if (!name || name.length < 1) {
@@ -176,7 +234,12 @@ const CustomerConsultation = () => {
             return;
         }
         try {
-            const customers = await window.__TAURI__.core.invoke('search_customers_by_name', { name });
+            const res = await fetch(`/api/customer/search/name?query=${encodeURIComponent(name)}`);
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText);
+            }
+            const customers = await res.json();
             if (!customers || customers.length === 0) {
                 // No match - assume guest (silent)
             } else if (customers.length === 1) {
@@ -374,7 +437,6 @@ const CustomerConsultation = () => {
                         {/* Modal Body */}
                         <div className="flex-1 overflow-y-auto p-8 bg-[#f8fafc]">
                             <form onSubmit={handleSave} className="space-y-6">
-                                {/* Top Section: Customer & Date - 2 Cols */}
                                 {/* Top Section: Customer & Date - 2 Cols Flat Grid */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4 items-start">
                                     {/* 1. Customer Search */}
@@ -532,7 +594,6 @@ const CustomerConsultation = () => {
                                         </div>
                                     )}
 
-                                    {/* Answer Section */}
                                     {/* Answer Section */}
                                     {editData.consult_id && (
                                         <div className="pt-6 border-t border-slate-200">

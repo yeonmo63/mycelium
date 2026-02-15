@@ -1,35 +1,385 @@
-use crate::db::{DashboardStats, DbPool};
+use crate::commands::consultation::create_consultation_internal;
+use crate::commands::courier::batch_sync_courier_statuses_internal;
+use crate::commands::event::search_events_by_name_internal;
+use crate::commands::logistics::{get_shipments_by_status_internal, PendingShipment};
+use crate::commands::sales::batch::{
+    save_general_sales_batch_internal, save_special_sales_batch, GeneralSalesBatchItem,
+    SpecialEventInput, SpecialSaleInput,
+};
+use crate::commands::sales::claim::{
+    create_sales_claim_internal, delete_sales_claim_internal, get_sales_claims_internal,
+    process_sales_claim_internal, update_sales_claim_internal,
+};
+use crate::commands::sales::external::fetch_external_mall_orders_axum;
+use crate::commands::sales::query::{
+    get_sale_detail_internal, get_sales_by_event_id_and_date_range_internal,
+    search_sales_by_any_internal,
+};
+use crate::db::{Customer, CustomerAddress, DashboardStats, DbPool, Sales};
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::header,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
-
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub fn create_mobile_router(pool: DbPool, config_dir: PathBuf) -> Router {
     Router::new()
-        .route("/api/dashboard/priority-stats", get(get_priority_stats))
-        .route("/api/dashboard/secondary-stats", get(get_secondary_stats))
-        .route("/api/dashboard/weekly-sales", get(get_weekly_sales))
-        .route("/api/dashboard/top-products", get(get_top_products))
-        .route("/api/dashboard/top-profitable", get(get_top_profitable))
-        .route("/api/production/spaces", get(get_spaces))
-        .route("/api/production/batches", get(get_batches))
-        .route("/api/farming/save-log", post(save_farming_log))
-        .route("/api/production/save-harvest", post(save_harvest))
-        .route("/api/auth/status", get(get_auth_status))
-        .route("/api/auth/verify", post(verify_pin))
-        .route("/api/event/all", get(get_all_events_bridge))
-        .route("/api/product/list", get(get_product_list_bridge))
+        // Sales - Special Events
+        .route("/api/events/search", get(search_events_bridge))
+        .route("/api/sales/special/list", get(get_special_sales_bridge))
+        .route(
+            "/api/sales/special/batch",
+            post(save_special_sales_batch_bridge),
+        )
+        // External Mall
+        .route(
+            "/api/sales/external/fetch",
+            get(fetch_external_mall_orders_axum),
+        )
         .route(
             "/api/sales/batch-save",
             post(save_general_sales_batch_bridge),
         )
+        // Customers
+        .route("/api/customers/search", get(search_customers))
+        .route(
+            "/api/customers/addresses",
+            get(get_customer_addresses_bridge),
+        )
+        .route("/api/customers/create", post(create_customer_bridge))
+        // Sales - Query & Shipments
+        .route("/api/sales/query/date", get(get_sales_on_date))
+        .route("/api/sales/shipments", get(get_shipments_bridge))
+        .route("/api/sales/update-status", post(update_sale_status_bridge))
+        .route(
+            "/api/sales/complete-shipment",
+            post(complete_shipment_bridge),
+        )
+        .route("/api/sales/sync-courier", post(sync_courier_bridge))
+        // Sales Claims
+        .route("/api/sales/claims", get(get_sales_claims_bridge))
+        .route("/api/sales/claims/create", post(create_sales_claim_bridge))
+        .route(
+            "/api/sales/claims/process",
+            post(process_sales_claim_bridge),
+        )
+        .route("/api/sales/claims/update", post(update_sales_claim_bridge))
+        .route("/api/sales/claims/delete", post(delete_sales_claim_bridge))
+        .route("/api/sales/detail", get(get_sale_detail_bridge))
+        .route("/api/sales/search", get(search_sales_bridge))
+        .route(
+            "/api/crm/consultations/create",
+            post(create_consultation_bridge),
+        )
         .with_state((pool, config_dir))
+}
+
+// ... (Existing handlers omitted for brevity, adding new ones at the end) ...
+
+async fn get_sales_claims_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let start_date = params.get("startDate").cloned();
+    let end_date = params.get("endDate").cloned();
+
+    match get_sales_claims_internal(&pool, start_date, end_date).await {
+        Ok(data) => Json(json!(data)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn create_sales_claim_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let sales_id = payload
+        .get("salesId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let customer_id = payload
+        .get("customerId")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    let claim_type = payload
+        .get("claimType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let reason_category = payload
+        .get("reasonCategory")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let quantity = payload
+        .get("quantity")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+    let memo = payload
+        .get("memo")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+
+    match create_sales_claim_internal(
+        &pool,
+        sales_id,
+        customer_id,
+        claim_type,
+        reason_category,
+        quantity,
+        memo,
+    )
+    .await
+    {
+        Ok(id) => Json(json!({ "success": true, "claimId": id })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn process_sales_claim_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let claim_status = payload
+        .get("claimStatus")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let is_inventory_recovered = payload
+        .get("isInventoryRecovered")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let refund_amount = payload
+        .get("refundAmount")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+
+    match process_sales_claim_internal(
+        &pool,
+        claim_id,
+        claim_status,
+        is_inventory_recovered,
+        refund_amount,
+    )
+    .await
+    {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn update_sales_claim_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+    let reason_category = payload
+        .get("reasonCategory")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let quantity = payload
+        .get("quantity")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i32;
+    let memo = payload
+        .get("memo")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+
+    match update_sales_claim_internal(&pool, claim_id, reason_category, quantity, memo).await {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn delete_sales_claim_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    match delete_sales_claim_internal(&pool, claim_id).await {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn get_sale_detail_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let sales_id = params.get("salesId").cloned().unwrap_or_default();
+    match get_sale_detail_internal(&pool, sales_id).await {
+        Ok(data) => Json(json!(data)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn search_sales_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let query = params.get("query").cloned().unwrap_or_default();
+    // period param is ignored in current internal function, but could be added later
+    match search_sales_by_any_internal(&pool, query).await {
+        Ok(data) => Json(json!(data)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn create_consultation_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let customer_id = payload
+        .get("customerId")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    let guest_name = payload
+        .get("guestName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let contact = payload
+        .get("contact")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let channel = payload
+        .get("channel")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let counselor_name = payload
+        .get("counselorName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let category = payload
+        .get("category")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let title = payload
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let content = payload
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let priority = payload
+        .get("priority")
+        .and_then(|v| v.as_str())
+        .unwrap_or("보통")
+        .to_string();
+
+    match create_consultation_internal(
+        &pool,
+        customer_id,
+        guest_name,
+        contact,
+        channel,
+        counselor_name,
+        category,
+        title,
+        content,
+        priority,
+    )
+    .await
+    {
+        Ok(id) => Json(json!({ "success": true, "consultId": id })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn search_customers(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let name = params.get("name").cloned().unwrap_or_default();
+    let query =
+        "SELECT * FROM customers WHERE customer_name LIKE $1 OR mobile_number LIKE $1 LIMIT 50";
+    let filter = format!("%{}%", name);
+    let rows = sqlx::query_as::<_, Customer>(query)
+        .bind(filter)
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+    Json(json!(rows))
+}
+
+async fn get_customer_addresses_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let cid = params.get("customerId").cloned().unwrap_or_default();
+    let rows = sqlx::query_as::<_, CustomerAddress>(
+        "SELECT * FROM customer_addresses WHERE customer_id = $1",
+    )
+    .bind(cid)
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_default();
+    Json(json!(rows))
+}
+
+async fn get_sales_on_date(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let cid = params.get("customerId").cloned().unwrap_or_default();
+    let date_str = params.get("date").cloned().unwrap_or_default();
+    let date = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+
+    let rows = sqlx::query_as::<_, Sales>(
+        "SELECT * FROM sales WHERE customer_id = $1 AND order_date = $2 AND status != '취소'",
+    )
+    .bind(cid)
+    .bind(date)
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_default();
+    Json(json!(rows))
+}
+
+async fn save_general_sales_batch_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    // payload: { items: [...], deleted_ids: [...] }
+    let items_val = payload.get("items");
+    let deleted_val = payload.get("deleted_ids");
+
+    let items: Vec<GeneralSalesBatchItem> = if let Some(iv) = items_val {
+        serde_json::from_value(iv.clone()).unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let deleted_ids: Vec<String> = if let Some(dv) = deleted_val {
+        serde_json::from_value(dv.clone()).unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let res = save_general_sales_batch_internal(&pool, items, deleted_ids).await;
+
+    match res {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
 }
 
 async fn get_auth_status(State((_, config_dir)): State<(DbPool, PathBuf)>) -> impl IntoResponse {
@@ -375,38 +725,194 @@ async fn get_product_list_bridge(State((pool, _)): State<(DbPool, PathBuf)>) -> 
     }
 }
 
-async fn save_general_sales_batch_bridge(
+async fn create_customer_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
-    let sales = payload.get("sales").and_then(|v| v.as_array());
-    if let Some(sales_list) = sales {
-        let mut success_count = 0;
-        for sale in sales_list {
-            // Very simplified insert for mobile특판
-            let res = sqlx::query(
-                "INSERT INTO sales (sales_id, customer_id, product_name, specification, unit_price, quantity, total_amount, memo, status, payment_status, order_date) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_DATE)"
-            )
-            .bind(format!("M-{}", chrono::Local::now().format("%Y%m%d%H%M%S%f")))
-            .bind(sale.get("customer_id").and_then(|v| v.as_str()).unwrap_or("EVENT_GUEST"))
-            .bind(sale.get("product_name").and_then(|v| v.as_str()).unwrap_or(""))
-            .bind(sale.get("specification").and_then(|v| v.as_str()))
-            .bind(sale.get("unit_price").and_then(|v| v.as_i64()).unwrap_or(0))
-            .bind(sale.get("quantity").and_then(|v| v.as_i64()).unwrap_or(1))
-            .bind(sale.get("total_amount").and_then(|v| v.as_i64()).unwrap_or(0))
-            .bind(sale.get("memo").and_then(|v| v.as_str()))
-            .bind(sale.get("status").and_then(|v| v.as_str()).unwrap_or("결제완료"))
-            .bind(sale.get("payment_status").and_then(|v| v.as_str()).unwrap_or("입금완료"))
-            .execute(&pool)
-            .await;
+    let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let mobile = payload.get("mobile").and_then(|v| v.as_str()).unwrap_or("");
+    let phone = payload.get("phone").and_then(|v| v.as_str()).unwrap_or("");
+    let level = payload
+        .get("level")
+        .and_then(|v| v.as_str())
+        .unwrap_or("일반");
+    let zip = payload.get("zip").and_then(|v| v.as_str()).unwrap_or("");
+    let addr1 = payload.get("addr1").and_then(|v| v.as_str()).unwrap_or("");
+    let addr2 = payload.get("addr2").and_then(|v| v.as_str()).unwrap_or("");
+    let memo = payload.get("memo").and_then(|v| v.as_str()).unwrap_or("");
+    let join_date_str = payload
+        .get("joinDate")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-            if res.is_ok() {
-                success_count += 1;
-            }
+    let join_date = chrono::NaiveDate::parse_from_str(join_date_str, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+
+    // Generate Customer ID
+    let today_str = chrono::Local::now().format("%Y%m%d").to_string();
+    let prefix = format!("C-{}", today_str);
+    let like_query = format!("{}%", prefix);
+
+    let last_id: Option<(String,)> = sqlx::query_as("SELECT customer_id FROM customers WHERE customer_id LIKE $1 ORDER BY customer_id DESC LIMIT 1")
+        .bind(&like_query).fetch_optional(&pool).await.unwrap_or_default();
+
+    let next_seq = match last_id {
+        Some((lid,)) => {
+            lid.split('-')
+                .last()
+                .unwrap_or("0")
+                .parse::<i32>()
+                .unwrap_or(0)
+                + 1
         }
-        Json(json!({ "success": true, "count": success_count }))
+        None => 1,
+    };
+    let new_cid = format!("{}-{:05}", prefix, next_seq);
+
+    let res = sqlx::query("INSERT INTO customers (customer_id, customer_name, customer_level, address_primary, address_detail, mobile_number, phone_number, memo, join_date, zip_code, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '정상')")
+        .bind(&new_cid).bind(name).bind(level).bind(addr1).bind(addr2).bind(mobile).bind(phone).bind(memo).bind(join_date).bind(zip).execute(&pool).await;
+
+    match res {
+        Ok(_) => Json(json!({ "success": true, "customerId": new_cid })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn get_shipments_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let status = params
+        .get("status")
+        .cloned()
+        .unwrap_or_else(|| "전체".to_string());
+    let search = params.get("search").cloned().filter(|s| !s.is_empty());
+    let start_date = params.get("startDate").cloned();
+    let end_date = params.get("endDate").cloned();
+
+    match get_shipments_by_status_internal(&pool, status, search, start_date, end_date).await {
+        Ok(data) => Json(json!(data)),
+        Err(_) => Json(json!([])),
+    }
+}
+
+async fn update_sale_status_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let sales_id = payload
+        .get("salesId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let status = payload.get("status").and_then(|v| v.as_str()).unwrap_or("");
+
+    if sales_id.is_empty() || status.is_empty() {
+        return Json(json!({ "success": false, "error": "Invalid arguments" }));
+    }
+
+    let res = sqlx::query("UPDATE sales SET status = $1 WHERE sales_id = $2")
+        .bind(status)
+        .bind(sales_id)
+        .execute(&pool)
+        .await;
+
+    match res {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn complete_shipment_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let sales_id = payload
+        .get("salesId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let carrier = payload
+        .get("carrier")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let tracking_val = payload.get("trackingNumber");
+    let tracking = if tracking_val.is_some() && !tracking_val.unwrap().is_null() {
+        tracking_val.and_then(|v| v.as_str())
     } else {
-        Json(json!({ "success": false, "error": "Invalid payload" }))
+        None
+    };
+
+    let shipping_date_str = payload
+        .get("shippingDate")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let shipping_date = chrono::NaiveDate::parse_from_str(shipping_date_str, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+
+    let res = sqlx::query("UPDATE sales SET status = '배송중', courier_name = $1, tracking_number = $2, shipping_date = $3 WHERE sales_id = $4")
+        .bind(carrier)
+        .bind(tracking)
+        .bind(shipping_date)
+        .bind(sales_id)
+        .execute(&pool)
+        .await;
+
+    match res {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn sync_courier_bridge(
+    State((pool, config_dir)): State<(DbPool, PathBuf)>,
+) -> impl IntoResponse {
+    match batch_sync_courier_statuses_internal(&pool, &config_dir).await {
+        Ok(count) => Json(json!({ "success": true, "count": count })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn search_events_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let name = params.get("name").cloned().unwrap_or_default();
+    match search_events_by_name_internal(&pool, name).await {
+        Ok(data) => Json(json!(data)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+async fn get_special_sales_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let event_id = params.get("eventId").cloned().unwrap_or_default();
+    let start_date = params.get("startDate").cloned().unwrap_or_default();
+    let end_date = params.get("endDate").cloned().unwrap_or_default();
+
+    match get_sales_by_event_id_and_date_range_internal(&pool, event_id, start_date, end_date).await
+    {
+        Ok(data) => Json(json!(data)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SpecialBatchPayload {
+    event: SpecialEventInput,
+    sales: Vec<SpecialSaleInput>,
+    #[serde(default)]
+    deletedSalesIds: Vec<String>,
+}
+
+async fn save_special_sales_batch_bridge(
+    State((pool, _)): State<(DbPool, PathBuf)>,
+    Json(payload): Json<SpecialBatchPayload>,
+) -> impl IntoResponse {
+    match save_special_sales_batch(&pool, payload.event, payload.sales, payload.deletedSalesIds)
+        .await
+    {
+        Ok(id) => Json(json!(id)),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
 }

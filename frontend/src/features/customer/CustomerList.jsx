@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { formatPhoneNumber, formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
-import { invokeAI } from '../../utils/aiErrorHandler';
+
 
 /**
  * CustomerList.jsx
@@ -75,13 +75,14 @@ const CustomerList = () => {
 
         setIsProcessing(true);
         try {
-            const invoke = window.__TAURI__.core.invoke;
             let results = [];
             if (/[0-9]/.test(searchTerm)) {
-                results = await invoke('search_customers_by_mobile', { mobile: searchTerm });
+                const res = await fetch(`/api/customer/search/mobile?query=${encodeURIComponent(searchTerm)}`);
+                if (res.ok) results = await res.json();
             }
             if (results.length === 0) {
-                results = await invoke('search_customers_by_name', { name: searchTerm });
+                const res = await fetch(`/api/customer/search/name?query=${encodeURIComponent(searchTerm)}`);
+                if (res.ok) results = await res.json();
             }
 
             if (results.length === 0) {
@@ -101,20 +102,34 @@ const CustomerList = () => {
 
     const loadAddresses = async (cid) => {
         try {
-            const list = await window.__TAURI__.core.invoke('get_customer_addresses', { customerId: cid });
-            setAddresses(list || []);
-        } catch (e) { console.error(e); }
+            const res = await fetch(`/api/customer/addresses?customer_id=${cid}`);
+            if (res.ok) {
+                const list = await res.json();
+                setAddresses(list || []);
+            }
+        } catch (e) {
+            console.error("Address fetch error:", e);
+            showAlert("오류", `배송지 목록을 불러오지 못했습니다: ${e.message}`);
+        }
     };
 
     const loadCustomerLogs = async (cid) => {
         if (!cid) return;
         try {
-            const logs = await window.__TAURI__.core.invoke('get_customer_logs', { customerId: cid });
-            setCustomerLogs(logs);
-            setIsLogsModalOpen(true);
+            console.log(`Fetching logs for ${cid}`);
+            const res = await fetch(`/api/customer/logs?customer_id=${cid}`);
+            if (res.ok) {
+                const logs = await res.json();
+                console.log("Logs loaded:", logs);
+                setCustomerLogs(logs);
+                setIsLogsModalOpen(true);
+            } else {
+                const errText = await res.text();
+                throw new Error(`Status ${res.status}: ${errText}`);
+            }
         } catch (e) {
-            console.error(e);
-            showAlert("오류", "변경 이력을 불러오지 못했습니다.");
+            console.error("Log fetch error:", e);
+            showAlert("오류", `변경 이력을 불러오지 못했습니다: ${e.message}`);
         }
     };
 
@@ -176,13 +191,30 @@ const CustomerList = () => {
                 anniversaryType: formData.anniversaryType || null,
                 marketingConsent: formData.marketingConsent,
                 acquisitionChannel: formData.acquisition || null,
-                status: formData.status
+                status: formData.status,
+                prefProductType: formData.prefProduct || null,
+                prefPackageType: formData.prefPackage || null,
+                familyType: formData.familyType || null,
+                healthConcern: formData.healthConcern || null,
+                subInterest: formData.subInterest || false,
+                purchaseCycle: formData.purchaseCycle || null
             };
-            await window.__TAURI__.core.invoke('update_customer', payload);
+
+            const res = await fetch('/api/customer/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('Update failed');
+
             await showAlert("성공", "수정되었습니다.");
             setMode('view');
-            const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: formData.id });
-            if (fresh) loadCustomer(fresh);
+
+            const freshRes = await fetch(`/api/customer/get?customer_id=${formData.id}`);
+            if (freshRes.ok) {
+                const fresh = await freshRes.json();
+                loadCustomer(fresh);
+            }
         } catch (err) { await showAlert("오류", "수정 실패: " + err); } finally { setIsProcessing(false); }
     };
 
@@ -194,7 +226,13 @@ const CustomerList = () => {
         if (!await showConfirm("휴면 전환", "정말로 이 고객을 휴면 고객으로 전환하시겠습니까?\n고객 정보는 보관되지만, '정상' 고객 검색 결과에서 제외됩니다.")) return;
         setIsProcessing(true);
         try {
-            await window.__TAURI__.core.invoke('delete_customer', { customerId: customer.customer_id });
+            const res = await fetch('/api/customer/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customer_id: customer.customer_id })
+            });
+            if (!res.ok) throw new Error('Operation failed');
+
             await showAlert("성공", "휴면 고객으로 전환되었습니다.");
             handleReset();
         } catch (err) { await showAlert("오류", "휴면 전환 실패: " + err); } finally { setIsProcessing(false); }
@@ -205,10 +243,19 @@ const CustomerList = () => {
         if (!await showConfirm("정상 전환", "이 고객을 다시 '정상' 고객으로 전환하시겠습니까?")) return;
         setIsProcessing(true);
         try {
-            await window.__TAURI__.core.invoke('reactivate_customer', { customerId: customer.customer_id });
+            const res = await fetch('/api/customer/reactivate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customer_id: customer.customer_id })
+            });
+            if (!res.ok) throw new Error('Operation failed');
+
             await showAlert("성공", "정상 고객으로 전환되었습니다.");
-            const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: customer.customer_id });
-            if (fresh) loadCustomer(fresh);
+            const freshRes = await fetch(`/api/customer/get?customer_id=${customer.customer_id}`);
+            if (freshRes.ok) {
+                const fresh = await freshRes.json();
+                loadCustomer(fresh);
+            }
         } catch (err) { await showAlert("오류", "전환 실패: " + err); } finally { setIsProcessing(false); }
     };
 
@@ -427,17 +474,24 @@ const CustomerList = () => {
                                                 <input type="radio" checked={addr.is_default} onChange={async () => {
                                                     if (mode === 'view' || !customer) return;
                                                     try {
-                                                        await window.__TAURI__.core.invoke('set_default_customer_address', { customerId: customer.customer_id, addressId: addr.address_id });
+                                                        await fetch('/api/customer/address/set-default', {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ customerId: customer.customer_id, addressId: addr.address_id })
+                                                        });
                                                         loadAddresses(customer.customer_id);
-                                                        const fresh = await window.__TAURI__.core.invoke('get_customer', { customerId: customer.customer_id });
-                                                        if (fresh) loadCustomer(fresh);
+                                                        const freshRes = await fetch(`/api/customer/get?customer_id=${customer.customer_id}`);
+                                                        if (freshRes.ok) {
+                                                            const fresh = await freshRes.json();
+                                                            loadCustomer(fresh);
+                                                        }
                                                     } catch (e) { showAlert("오류", "설정 실패"); }
                                                 }} disabled={mode === 'view' || !customer} className="w-3.5 h-3.5 text-indigo-600" />
                                             </td>
                                             <td className="px-4 py-2 text-center">
                                                 <div className="flex justify-center gap-1">
                                                     <button type="button" disabled={mode === 'view' || addr.address_alias === '기본'} onClick={() => { setEditingAddress(addr); setIsAddressModalOpen(true); }} className="w-7 h-7 rounded bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 disabled:opacity-20"><span className="material-symbols-rounded text-sm">edit</span></button>
-                                                    <button type="button" disabled={mode === 'view' || addr.address_alias === '기본'} onClick={async () => { if (await showConfirm("삭제", "정말 삭제하시겠습니까?")) { await window.__TAURI__.core.invoke('delete_customer_address', { addressId: addr.address_id }); loadAddresses(customer.customer_id); } }} className="w-7 h-7 rounded bg-white border border-slate-200 text-slate-400 hover:text-rose-600 disabled:opacity-20"><span className="material-symbols-rounded text-sm">delete</span></button>
+                                                    <button type="button" disabled={mode === 'view' || addr.address_alias === '기본'} onClick={async () => { if (await showConfirm("삭제", "정말 삭제하시겠습니까?")) { await fetch('/api/customer/address/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address_id: addr.address_id }) }); loadAddresses(customer.customer_id); } }} className="w-7 h-7 rounded bg-white border border-slate-200 text-slate-400 hover:text-rose-600 disabled:opacity-20"><span className="material-symbols-rounded text-sm">delete</span></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -477,11 +531,26 @@ const CustomerList = () => {
                             if (!customer) return;
                             setIsProcessing(true);
                             try {
-                                const res = await invokeAI(showAlert, 'get_customer_ai_insight', { customerId: customer.customer_id });
-                                setAiInsight(res); setIsAiModalOpen(true);
+                                const res = await fetch(`/api/customer/ai-insight?customer_id=${customer.customer_id}`);
+
+                                if (res.status === 429 || res.status === 403) {
+                                    throw new Error('AI_QUOTA_EXCEEDED');
+                                }
+
+                                if (!res.ok) {
+                                    const errText = await res.text();
+                                    throw new Error(`AI Request Failed: ${res.status} ${errText}`);
+                                }
+
+                                const insight = await res.json();
+                                setAiInsight(insight);
+                                setIsAiModalOpen(true);
                             } catch (e) {
-                                if (e.message !== 'AI_QUOTA_EXCEEDED') {
-                                    showAlert("오류", "AI 분석 실패: " + e);
+                                console.error("AI Error:", e);
+                                if (e.message === 'AI_QUOTA_EXCEEDED') {
+                                    showAlert('🚫 AI 사용 한도 초과', '일일 무료 사용량을 초과했습니다.');
+                                } else {
+                                    showAlert("오류", "AI 분석 실패: " + e.message);
                                 }
                             }
                             finally { setIsProcessing(false); }
@@ -503,9 +572,19 @@ const CustomerList = () => {
                             if (!customer) return;
                             setIsProcessing(true);
                             try {
-                                const res = await window.__TAURI__.core.invoke('get_sales_by_customer_id', { customerId: customer.customer_id });
-                                setSalesHistory(res); setIsSalesModalOpen(true);
-                            } catch (e) { showAlert("오류", "이력 조회 실패"); }
+                                const res = await fetch(`/api/customer/sales?customer_id=${customer.customer_id}`);
+                                if (res.ok) {
+                                    const history = await res.json();
+                                    setSalesHistory(history);
+                                    setIsSalesModalOpen(true);
+                                } else {
+                                    const errText = await res.text();
+                                    throw new Error(`Status ${res.status}: ${errText}`);
+                                }
+                            } catch (e) {
+                                console.error("Sales fetch error:", e);
+                                showAlert("오류", `이력 조회 실패: ${e.message}`);
+                            }
                             finally { setIsProcessing(false); }
                         }}
                         disabled={!customer || isProcessing}
@@ -619,23 +698,31 @@ const CustomerList = () => {
                                 <form onSubmit={async (e) => {
                                     e.preventDefault();
                                     const p = {
-                                        customer_id: customer.customer_id,
+                                        customerId: customer.customer_id,
                                         alias: e.target.alias.value,
                                         recipient: e.target.recipient.value,
                                         mobile: e.target.mobile.value,
                                         zip: e.target.zip.value || null,
                                         addr1: e.target.addr1.value,
                                         addr2: e.target.addr2.value || null,
-                                        is_default: e.target.isDefault.checked,
+                                        isDefault: e.target.isDefault.checked,
                                         memo: e.target.memo.value || null
                                     };
                                     try {
                                         if (editingAddress.address_id) {
-                                            const updateP = { ...p, address_id: editingAddress.address_id };
-                                            await window.__TAURI__.core.invoke('update_customer_address', updateP);
+                                            const updateP = { ...p, addressId: editingAddress.address_id };
+                                            await fetch('/api/customer/address/update', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify(updateP)
+                                            });
                                         }
                                         else {
-                                            await window.__TAURI__.core.invoke('create_customer_address', p);
+                                            await fetch('/api/customer/address/create', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify(p)
+                                            });
                                         }
                                         loadAddresses(customer.customer_id); setIsAddressModalOpen(false);
                                     } catch (err) { showAlert("오류", "저장 실패: " + err); }

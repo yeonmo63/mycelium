@@ -1,13 +1,20 @@
 use crate::db::{DbPool, SalesClaim};
 use crate::error::MyceliumResult;
+use crate::stubs::{check_admin, command, State};
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, State, check_admin};
-
 
 pub async fn get_sales_claims(
     state: State<'_, DbPool>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+) -> MyceliumResult<Vec<SalesClaim>> {
+    get_sales_claims_internal(&state, start_date, end_date).await
+}
+
+pub async fn get_sales_claims_internal(
+    pool: &DbPool,
     start_date: Option<String>,
     end_date: Option<String>,
 ) -> MyceliumResult<Vec<SalesClaim>> {
@@ -25,21 +32,39 @@ pub async fn get_sales_claims(
         sqlx::query_as::<_, SalesClaim>(&sql)
             .bind(sd)
             .bind(ed)
-            .fetch_all(&*state)
+            .fetch_all(pool)
             .await
     } else {
         sql.push_str(" ORDER BY c.created_at DESC LIMIT 100");
-        sqlx::query_as::<_, SalesClaim>(&sql)
-            .fetch_all(&*state)
-            .await
+        sqlx::query_as::<_, SalesClaim>(&sql).fetch_all(pool).await
     }?;
 
     Ok(rows)
 }
 
-
 pub async fn create_sales_claim(
     state: State<'_, DbPool>,
+    sales_id: String,
+    customer_id: Option<String>,
+    claim_type: String,
+    reason_category: String,
+    quantity: i32,
+    memo: Option<String>,
+) -> MyceliumResult<i32> {
+    create_sales_claim_internal(
+        &state,
+        sales_id,
+        customer_id,
+        claim_type,
+        reason_category,
+        quantity,
+        memo,
+    )
+    .await
+}
+
+pub async fn create_sales_claim_internal(
+    pool: &DbPool,
     sales_id: String,
     customer_id: Option<String>,
     claim_type: String,
@@ -58,12 +83,11 @@ pub async fn create_sales_claim(
     .bind(reason_category)
     .bind(quantity)
     .bind(memo)
-    .fetch_one(&*state)
+    .fetch_one(pool)
     .await?;
 
     Ok(row.0)
 }
-
 
 pub async fn process_sales_claim(
     state: State<'_, DbPool>,
@@ -72,8 +96,25 @@ pub async fn process_sales_claim(
     is_inventory_recovered: bool,
     refund_amount: i32,
 ) -> MyceliumResult<()> {
+    process_sales_claim_internal(
+        &state,
+        claim_id,
+        claim_status,
+        is_inventory_recovered,
+        refund_amount,
+    )
+    .await
+}
+
+pub async fn process_sales_claim_internal(
+    pool: &DbPool,
+    claim_id: i32,
+    claim_status: String,
+    is_inventory_recovered: bool,
+    refund_amount: i32,
+) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
-    let mut tx = state.begin().await?;
+    let mut tx = pool.begin().await?;
 
     let claim: SalesClaim = sqlx::query_as("SELECT * FROM sales_claims WHERE claim_id = $1")
         .bind(claim_id)
@@ -107,19 +148,31 @@ pub async fn process_sales_claim(
     Ok(())
 }
 
-
 pub async fn delete_sales_claim(state: State<'_, DbPool>, claim_id: i32) -> MyceliumResult<()> {
+    delete_sales_claim_internal(&state, claim_id).await
+}
+
+pub async fn delete_sales_claim_internal(pool: &DbPool, claim_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM sales_claims WHERE claim_id = $1")
         .bind(claim_id)
-        .execute(&*state)
+        .execute(pool)
         .await?;
     Ok(())
 }
 
-
 pub async fn update_sales_claim(
     state: State<'_, DbPool>,
+    claim_id: i32,
+    reason_category: String,
+    quantity: i32,
+    memo: Option<String>,
+) -> MyceliumResult<()> {
+    update_sales_claim_internal(&state, claim_id, reason_category, quantity, memo).await
+}
+
+pub async fn update_sales_claim_internal(
+    pool: &DbPool,
     claim_id: i32,
     reason_category: String,
     quantity: i32,
@@ -131,7 +184,7 @@ pub async fn update_sales_claim(
         .bind(quantity)
         .bind(memo)
         .bind(claim_id)
-        .execute(&*state)
+        .execute(pool)
         .await?;
     Ok(())
 }

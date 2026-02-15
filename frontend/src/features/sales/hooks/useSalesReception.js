@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { formatDate, parseNumber, formatPhoneNumber } from '../../../utils/common';
 import { handlePrintRaw } from '../../../utils/printUtils';
+import { callBridge } from '../../../utils/apiBridge';
 
 export const useSalesReception = (showAlert, showConfirm) => {
     // --- State Management ---
@@ -49,8 +50,7 @@ export const useSalesReception = (showAlert, showConfirm) => {
     // --- Loading Logic ---
     const loadCompanyInfo = useCallback(async () => {
         try {
-            if (!window.__TAURI__) return;
-            const info = await window.__TAURI__.core.invoke('get_company_info');
+            const info = await callBridge('get_company_info');
             setCompanyInfo(info);
         } catch (e) {
             console.error(e);
@@ -59,8 +59,7 @@ export const useSalesReception = (showAlert, showConfirm) => {
 
     const loadProducts = useCallback(async () => {
         try {
-            if (!window.__TAURI__) return;
-            const list = await window.__TAURI__.core.invoke('get_product_list');
+            const list = await callBridge('get_product_list');
             setProducts(list.filter(p => (p.item_type || 'product') === 'product') || []);
         } catch (e) {
             console.error(e);
@@ -69,8 +68,7 @@ export const useSalesReception = (showAlert, showConfirm) => {
 
     const loadSalesHistory = useCallback(async (cid, date) => {
         try {
-            if (!window.__TAURI__) return;
-            const history = await window.__TAURI__.core.invoke('get_customer_sales_on_date', {
+            const history = await callBridge('get_customer_sales_on_date', {
                 customerId: String(cid),
                 date
             });
@@ -152,7 +150,7 @@ export const useSalesReception = (showAlert, showConfirm) => {
     const selectCustomer = async (cust) => {
         setCustomer(cust);
         try {
-            const addrs = await window.__TAURI__.core.invoke('get_customer_addresses', { customerId: cust.customer_id });
+            const addrs = await callBridge('get_customer_addresses', { customerId: cust.customer_id });
             setAddresses(addrs || []);
             const defAddr = addrs.find(a => a.is_default) || addrs[0];
             if (defAddr) fillShippingFromAddress(defAddr, cust);
@@ -285,7 +283,7 @@ export const useSalesReception = (showAlert, showConfirm) => {
                 discountRate: Number(r.discountRate),
                 isDirty: r.isDirty ? "true" : "false"
             }));
-            await window.__TAURI__.core.invoke('save_general_sales_batch', { items: payload, deletedIds: deletedSalesIds });
+            await callBridge('save_general_sales_batch', { items: payload, deletedIds: deletedSalesIds });
             await showAlert('성공', '정상적으로 저장되었습니다.');
             clearDraft();
             loadSalesHistory(customer.customer_id, orderDate);
