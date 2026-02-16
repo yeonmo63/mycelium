@@ -47,13 +47,14 @@ const FinancePurchase = () => {
     const [suggestedProducts, setSuggestedProducts] = useState([]);
 
     // --- Data Loading ---
+    // --- Data Loading ---
     const loadProducts = useCallback(async () => {
         try {
-            if (!window.__TAURI__) return;
-            // init_db_schema might be needed if it's the very first run, but usually main.rs handles it.
-            // keeping it safe if mushroomfarm logic relied on it explicitly.
-            const list = await window.__TAURI__.core.invoke('get_product_list');
-            setProducts(list || []);
+            const res = await fetch('/api/product/list');
+            if (res.ok) {
+                const list = await res.json();
+                setProducts(list || []);
+            }
         } catch (e) {
             console.error("Product load error:", e);
         }
@@ -61,9 +62,11 @@ const FinancePurchase = () => {
 
     const loadVendors = useCallback(async () => {
         try {
-            if (!window.__TAURI__) return;
-            const list = await window.__TAURI__.core.invoke('get_vendor_list');
-            setVendors(list || []);
+            const res = await fetch('/api/finance/vendors');
+            if (res.ok) {
+                const list = await res.json();
+                setVendors(list || []);
+            }
         } catch (e) {
             console.error("Vendor load error:", e);
         }
@@ -71,13 +74,17 @@ const FinancePurchase = () => {
 
     const loadPurchases = useCallback(async () => {
         try {
-            if (!window.__TAURI__) return;
-            const list = await window.__TAURI__.core.invoke('get_purchase_list', {
-                startDate: filterStart,
-                endDate: filterEnd,
-                vendorId: filterVendor ? parseInt(filterVendor) : null
+            const query = new URLSearchParams({
+                start_date: filterStart,
+                end_date: filterEnd,
             });
-            setPurchases(list || []);
+            if (filterVendor) query.append('vendor_id', filterVendor);
+
+            const res = await fetch(`/api/finance/purchases?${query.toString()}`);
+            if (res.ok) {
+                const list = await res.json();
+                setPurchases(list || []);
+            }
         } catch (e) {
             console.error("Purchase list load error:", e);
         }
@@ -224,10 +231,16 @@ const FinancePurchase = () => {
                     .map(i => ({ product_id: i.product_id, quantity: Number(i.quantity) }));
             }
 
-            await window.__TAURI__.core.invoke('save_purchase', {
-                purchase: purchasePayload,
-                inventorySyncData
+            const res = await fetch('/api/finance/purchases/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    purchase: purchasePayload,
+                    inventory_sync_data: inventorySyncData
+                })
             });
+
+            if (!res.ok) throw new Error("Failed to save purchase");
 
             await showAlert('성공', '매입 내역이 저장되었습니다.');
             handleReset();
@@ -268,7 +281,12 @@ const FinancePurchase = () => {
     const handleDelete = async (id) => {
         if (await showConfirm('삭제', '이 매입 내역을 정말 삭제하시겠습니까?')) {
             try {
-                await window.__TAURI__.core.invoke('delete_purchase', { id });
+                const res = await fetch('/api/finance/purchases/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                if (!res.ok) throw new Error("Failed to delete purchase");
                 loadPurchases();
             } catch (e) {
                 showAlert('오류', `삭제 실패: ${e}`);

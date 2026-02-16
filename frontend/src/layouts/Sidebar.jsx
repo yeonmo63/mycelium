@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { invoke } from '../utils/apiBridge';
 
 const MenuItem = ({ to, icon, label, end = false }) => (
     <li>
@@ -74,11 +75,9 @@ const Sidebar = () => {
     useEffect(() => {
         const loadCompanyName = async () => {
             try {
-                if (window.__TAURI__) {
-                    const info = await window.__TAURI__.core.invoke('get_company_info');
-                    if (info && info.company_name) {
-                        setCompanyName(info.company_name);
-                    }
+                const info = await invoke('get_company_info');
+                if (info && info.company_name) {
+                    setCompanyName(info.company_name);
                 }
             } catch (err) {
                 console.error("Failed to load company name:", err);
@@ -163,9 +162,9 @@ const Sidebar = () => {
                         <SubMenuItem to="/intel/sales" icon="analytics" label="지능형 판매 리포트" />
                         <SubMenuItem to="/intel/customer" icon="psychology" label="AI 고객 성장 센터" />
                         <SubMenuItem to="/marketing/association" icon="hub" label="상품 연관 분석" />
-                        <SubMenuItem to="/marketing/orm" icon="public" label="온라인 AI 평판" />
-                        <SubMenuItem to="/intel/region-analysis" icon="map" label="AI 지역별 히트맵" />
-                        <SubMenuItem to="/product/sales" icon="bar_chart" label="상품별 판매 현황" />
+                        <SubMenuItem to="/marketing/orm" icon="public" label="온라인 AI 평판 분석" />
+                        <SubMenuItem to="/intel/region-analysis" icon="map" label="AI 지역별 판매 히트맵" />
+                        <SubMenuItem to="/product/sales" icon="bar_chart" label="상품별 판매 실적 분석" />
                         <SubMenuItem to="/customer/sms" icon="sms" label="판촉 문자 발송" />
                     </MenuGroup>
 

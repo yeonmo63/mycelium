@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as d3 from 'd3';
 import { useModal } from '../../contexts/ModalContext';
 import { invokeAI } from '../../utils/aiErrorHandler';
+import { invoke } from '../../utils/apiBridge';
 
 /**
  * ProductAssociation.jsx
@@ -42,23 +43,7 @@ const ProductAssociation = () => {
         setIsLoading(true);
         setLoadingText("구매 패턴을 분석 중입니다. 최근 거래 데이터를 스캔하고 있습니다...");
         try {
-            if (!window.__TAURI__) {
-                // Mock Data for non-Tauri environment (Dev)
-                setTimeout(() => {
-                    const mockRules = [
-                        { product_a: '노루궁뎅이버섯', product_b: '참송이버섯', pair_count: 150, support_percent: 45 },
-                        { product_a: '노루궁뎅이버섯', product_b: '건조표고슬라이스', pair_count: 80, support_percent: 25 },
-                        { product_a: '표고버섯(생)', product_b: '표고버섯가루', pair_count: 60, support_percent: 70 },
-                        { product_a: '참송이버섯', product_b: '표고버섯(생)', pair_count: 40, support_percent: 15 },
-                        { product_a: '건조표고슬라이스', product_b: '표고버섯가루', pair_count: 90, support_percent: 88 },
-                    ];
-                    setRules(mockRules);
-                    setIsLoading(false);
-                }, 1000);
-                return;
-            }
-
-            const data = await window.__TAURI__.core.invoke('get_product_associations', {});
+            const data = await invoke('get_product_associations', {});
             setRules(data || []);
         } catch (e) {
             console.error("Association Analysis Error:", e);
@@ -234,29 +219,8 @@ const ProductAssociation = () => {
         setAiLoadingStep('거래 데이터베이스 분석 및 연관 관계(Lift & Confidence) 계산 중...');
 
         try {
-            let proposal;
-            if (!window.__TAURI__) {
-                // Mock
-                await new Promise(r => setTimeout(r, 2000));
-                proposal = {
-                    product_a: p1,
-                    product_b: p2,
-                    confidence_score: 75.5,
-                    lift_score: 3.2,
-                    strategies: [
-                        { title: '번들 패키지 판매', description: `[${p1}] 구매시 [${p2}] 10% 할인 혜택 제공`, impact: 'Revenue Up' },
-                        { title: '건강 레시피 제안', description: '두 버섯을 활용한 "면역력 강화 전골" 레시피 카드 동봉', impact: 'New Trend' }
-                    ],
-                    ad_copies: [
-                        '자연이 준 선물, 두 가지 버섯의 환상적인 조화!',
-                        `[${p1}] 좋아하시죠? [${p2}]와(과) 함께라면 맛도 건강도 두 배!`,
-                        '이번 주말, 가족을 위한 건강 식탁을 준비해보세요.'
-                    ]
-                };
-            } else {
-                setAiLoadingStep('최적의 마케팅 전략 수립 중...');
-                proposal = await invokeAI(showAlert, 'get_ai_marketing_proposal', { p1, p2 });
-            }
+            setAiLoadingStep('최적의 마케팅 전략 수립 중...');
+            const proposal = await invokeAI(showAlert, 'get_ai_marketing_proposal', { p1, p2 });
             setAiResult(proposal);
         } catch (e) {
             console.error("AI Promo Error:", e);
@@ -274,15 +238,9 @@ const ProductAssociation = () => {
         setDetailSubtitle(`${p1} + ${p2} | 전략: ${strategyTitle}`);
 
         try {
-            let detail;
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 1500));
-                detail = "### 1. 목표 설정\n\n이번 캠페인의 목표는...\n\n### 2. 실행 방안\n\n- **소셜 미디어**: 인스타그램 릴스를 활용하여...\n- **매장 디스플레이**: 입구 쪽에 배치하여...\n\n| 구분 | 내용 | 일정 |\n|---|---|---|\n| 기획 | 패키지 디자인 | 1주차 |\n| 실행 | 프로모션 시작 | 2주차 |";
-            } else {
-                detail = await invokeAI(showAlert, 'get_ai_detailed_plan', {
-                    planType, p1, p2, strategyTitle
-                });
-            }
+            const detail = await invokeAI(showAlert, 'get_ai_detailed_plan', {
+                planType: planType, p1, p2, strategyTitle
+            });
             setDetailContent(parseMarkdown(detail));
         } catch (e) {
             console.error("Detailed Plan Error:", e);

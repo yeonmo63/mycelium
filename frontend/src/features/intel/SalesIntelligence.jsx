@@ -4,6 +4,7 @@ import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import { handlePrintRaw } from '../../utils/printUtils';
 import { invokeAI } from '../../utils/aiErrorHandler';
+import { callBridge as invoke } from '../../utils/apiBridge';
 
 const intelligencePrintStyles = `
     @media print {
@@ -135,11 +136,10 @@ const SalesIntelligence = () => {
     }, []);
 
     const loadSharedData = async () => {
-        if (!window.__TAURI__) return;
         try {
             const [trendData, topProducts] = await Promise.all([
-                window.__TAURI__.core.invoke('get_ten_year_sales_stats'),
-                window.__TAURI__.core.invoke('get_top3_products_by_qty')
+                invoke('get_ten_year_sales_stats'),
+                invoke('get_top3_products_by_qty')
             ]);
             setSharedData({ trend: trendData || [], topProducts: topProducts || [] });
         } catch (e) {
@@ -378,7 +378,6 @@ const TabAdvice = ({ sharedData, isVisible, showAlert, toggleProcessing }) => {
     }, [sharedData]);
 
     const handleGenerate = async () => {
-        if (!window.__TAURI__) return;
         setIsGenerating(true);
         toggleProcessing(true, 'AI가 경영 데이터를 심층 분석하고 있습니다...');
         setReport(null); // Clear previous
@@ -392,8 +391,8 @@ const TabAdvice = ({ sharedData, isVisible, showAlert, toggleProcessing }) => {
 
             // Fetch fresh data
             const [trendData, topProducts] = await Promise.all([
-                window.__TAURI__.core.invoke('get_ten_year_sales_stats'),
-                window.__TAURI__.core.invoke('get_top3_products_by_qty')
+                invoke('get_ten_year_sales_stats'),
+                invoke('get_top3_products_by_qty')
             ]);
             const yearData = trendData.find(d => Number(d.year) === new Date().getFullYear()) || { total_amount: 0 };
 
@@ -409,8 +408,8 @@ const TabAdvice = ({ sharedData, isVisible, showAlert, toggleProcessing }) => {
 2. '${themeLabels[selectedTheme]}' 테마에 맞춘 실행 가능한 3가지 액션 플랜
 3. 전문적이고 따뜻한 어조, 마크다운 형식 활용 (소제목, 불렛포인트)`;
 
-            const result = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
-            setReport(result);
+            const res = await invokeAI(showAlert, 'call_gemini_ai', { prompt });
+            setReport(res.result || res);
         } catch (e) {
             console.error(e);
         } finally {
@@ -747,13 +746,12 @@ const TabProductRegion = ({ isVisible, toggleProcessing }) => {
     }, [isVisible]);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         toggleProcessing(true, '점포 및 지역별 판매 실적을 집계하고 있습니다...');
         try {
             const year = new Date().getFullYear();
             const [pData, rData] = await Promise.all([
-                window.__TAURI__.core.invoke('get_product_sales_stats', { year: year.toString() }),
-                window.__TAURI__.core.invoke('get_sales_by_region_analysis', { year })
+                invoke('get_product_sales_stats', { year: year.toString() }),
+                invoke('get_sales_by_region_analysis', { year })
             ]);
             setProducts(pData || []);
             setRegions(rData || []);
@@ -929,16 +927,14 @@ const TabForecast = ({ isVisible, showAlert, toggleProcessing }) => {
     }, [isVisible]);
 
     const loadProducts = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_product_list');
+            const list = await invoke('get_product_list');
             setProductList(list || []);
             setIsProductLoaded(true);
         } catch (e) { }
     };
 
     const runForecast = async () => {
-        if (!window.__TAURI__) return;
         toggleProcessing(true, 'AI가 향후 수요를 예측하고 최적 재고량을 계산 중입니다...');
         try {
             const res = await invokeAI(showAlert, 'get_ai_demand_forecast', {
@@ -1032,10 +1028,9 @@ const TabProfit = ({ isVisible, toggleProcessing }) => {
     }, [isVisible]);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         toggleProcessing(true, '품목별 수익 구조 및 마진율을 정밀 분석하고 있습니다...');
         try {
-            const res = await window.__TAURI__.core.invoke('get_profit_margin_analysis', { year: new Date().getFullYear() });
+            const res = await invoke('get_profit_margin_analysis', { year: new Date().getFullYear() });
             setData(res || []);
             setHasLoaded(true);
         } catch (e) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { formatPhoneNumber } from '../../utils/common';
 

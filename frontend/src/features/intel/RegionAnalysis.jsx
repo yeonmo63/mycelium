@@ -3,6 +3,7 @@ import * as echarts from 'echarts';
 import { useModal } from '../../contexts/ModalContext';
 import { formatCurrency } from '../../utils/common';
 import { invokeAI } from '../../utils/aiErrorHandler';
+import { invoke } from '../../utils/apiBridge';
 
 /**
  * RegionAnalysis.jsx
@@ -59,24 +60,7 @@ const RegionAnalysis = () => {
         setAiInsight(null);
 
         try {
-            if (!window.__TAURI__) {
-                // Mock for dev
-                await new Promise(r => setTimeout(r, 1500));
-                const mockData = [
-                    { region: '경기도', total_amount: 15400000, total_quantity: 450 },
-                    { region: '서울특별시', total_amount: 28900000, total_quantity: 820 },
-                    { region: '부산광역시', total_amount: 8500000, total_quantity: 210 },
-                    { region: '경상남도', total_amount: 4200000, total_quantity: 120 },
-                    { region: '강원도', total_amount: 2100000, total_quantity: 80 },
-                ];
-                setMapData(mockData);
-                initMap(mockData);
-                generateAiInsight(mockData, year);
-                setIsLoading(false);
-                return;
-            }
-
-            const data = await window.__TAURI__.core.invoke('get_sales_by_region_analysis', { year: Number(year) });
+            const data = await invoke('get_sales_by_region_analysis', { year: Number(year) });
             setMapData(data || []);
 
             setLoadingText("지도 데이터를 렌더링 중입니다...");
@@ -197,13 +181,6 @@ const RegionAnalysis = () => {
     const generateAiInsight = async (data, year) => {
         setIsAiLoading(true);
         try {
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 2000));
-                setAiInsight(`[AI 분석] ${year}년도 데이터 분석 결과, 서울/경기 지역이 전체 매출의 65%를 차지하며 핵심 시장임을 입증했습니다. 특히 강남구와 분당구에서의 재구매율이 높아 프리미엄 라인업 마케팅이 주효했던 것으로 보입니다. 반면, 경상권은 잠재 수요 대비 매출이 저조하여 무료 배송 프로모션 등을 통한 시장 확대 전략이 필요합니다.`);
-                setIsAiLoading(false);
-                return;
-            }
-
             const topRegions = data.slice(0, 8).map(d => `${d.region}: ${formatCurrency(d.total_amount)} (${d.total_quantity}건)`).join(', ');
             const prompt = `
                 당신은 Mycelium 전문 경영 컨설턴트 '제니'입니다.

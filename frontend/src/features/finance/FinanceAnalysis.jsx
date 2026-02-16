@@ -146,15 +146,18 @@ const FinanceAnalysis = () => {
     }, [costBreakdown, isLoading]);
 
     const loadData = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
             // Parallel Fetch
-            const [plData, costData, vendorData] = await Promise.all([
-                window.__TAURI__.core.invoke('get_monthly_pl_report', { year }),
-                window.__TAURI__.core.invoke('get_cost_breakdown_stats', { year }),
-                window.__TAURI__.core.invoke('get_vendor_purchase_ranking', { year })
+            const [plRes, costRes, vendorRes] = await Promise.all([
+                fetch(`/api/finance/analysis/monthly-pl?year=${year}`),
+                fetch(`/api/finance/analysis/cost-breakdown?year=${year}`),
+                fetch(`/api/finance/analysis/vendor-ranking?year=${year}`)
             ]);
+
+            const plData = plRes.ok ? await plRes.json() : [];
+            const costData = costRes.ok ? await costRes.json() : [];
+            const vendorData = vendorRes.ok ? await vendorRes.json() : [];
 
             // Process Stats
             const totalRev = plData.reduce((sum, d) => sum + d.revenue, 0);

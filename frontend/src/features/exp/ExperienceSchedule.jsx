@@ -4,7 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
 import { formatPhoneNumber, formatCurrency } from '../../utils/common';
 
@@ -95,9 +95,9 @@ const ExperienceSchedule = () => {
         if (!selectedEvent) return;
         try {
             await invoke('update_experience_status', {
-                reservationId: selectedEvent.reservation_id,
+                reservation_id: selectedEvent.reservation_id,
                 status,
-                appendMemo: null
+                append_memo: null
             });
             showAlert('상태 변경 완료', `[${status}] 상태로 변경되었습니다.`);
             setIsDetailOpen(false);
@@ -111,8 +111,8 @@ const ExperienceSchedule = () => {
         if (!selectedEvent) return;
         try {
             await invoke('update_experience_payment_status', {
-                reservationId: selectedEvent.reservation_id,
-                paymentStatus: status
+                reservation_id: selectedEvent.reservation_id,
+                payment_status: status
             });
             showAlert('결제 처리 완료', '결제가 완료되었습니다.');
             setIsDetailOpen(false);
@@ -127,7 +127,7 @@ const ExperienceSchedule = () => {
         if (!await showConfirm('예약 삭제', '정말로 이 예약을 삭제하시겠습니까?')) return;
 
         try {
-            await invoke('delete_experience_reservation', { reservationId: selectedEvent.reservation_id });
+            await invoke('delete_experience_reservation', { reservation_id: selectedEvent.reservation_id });
             showAlert('삭제 완료', '예약이 삭제되었습니다.');
             setIsDetailOpen(false);
             loadSchedule();

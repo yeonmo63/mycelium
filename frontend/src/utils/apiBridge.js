@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 
 /**
  * Universal bridge to call backend commands either via Tauri invoke
@@ -8,7 +8,7 @@ export async function callBridge(commandName, args = {}) {
     const isTauri = !!window.__TAURI__;
 
     if (isTauri) {
-        return await invoke(commandName, args);
+        return await tauriInvoke(commandName, args);
     } else {
         // Mapping Tauri command names to our Axum API routes
         const routeMap = {
@@ -91,10 +91,11 @@ export async function callBridge(commandName, args = {}) {
             'get_preset_data': '/api/preset/data',
             'reset_database': '/api/preset/reset',
             'save_general_sales_batch': '/api/sales/batch-save',
-            'search_customers_by_name': '/api/customers/search',
+            'search_customers_by_name': '/api/customer/search/name',
+            'search_customers_by_mobile': '/api/customer/search/mobile',
             'get_customer_addresses': '/api/customers/addresses',
             'get_customer_sales_on_date': '/api/sales/query/date',
-            'create_customer': '/api/customers/create',
+            'create_customer': '/api/customer/create',
             'get_shipments_by_status': '/api/sales/shipments',
             'update_sale_status': '/api/sales/update-status',
             'complete_shipment': '/api/sales/complete-shipment',
@@ -110,6 +111,38 @@ export async function callBridge(commandName, args = {}) {
             'search_events_by_name': '/api/events/search',
             'get_sales_by_event_id_and_date_range': '/api/sales/special/list',
             'save_special_sales_batch': '/api/sales/special/batch',
+            'call_gemini_ai': '/api/ai/gemini',
+            'get_ai_demand_forecast': '/api/ai/forecast',
+            'get_customer': '/api/customer/get',
+            'get_product_sales_stats': '/api/finance/analysis/product-stats',
+            'get_product_monthly_analysis': '/api/finance/analysis/product-monthly',
+            'get_product_10yr_sales_stats': '/api/finance/analysis/product-trend',
+            'get_sales_by_region_analysis': '/api/finance/analysis/region-stats',
+            'get_profit_margin_analysis': '/api/finance/analysis/profit-margin',
+            'get_rfm_analysis': '/api/crm/rfm-analysis',
+            'get_membership_sales_analysis': '/api/finance/membership-sales',
+            'update_customer_level': '/api/crm/update-level',
+            'get_ai_behavior_strategy': '/api/ai/behavior',
+            'get_ai_repurchase_analysis': '/api/ai/repurchase',
+            'update_customer_memo_batch': '/api/crm/update-memo-batch',
+            'get_product_associations': '/api/crm/product-associations',
+            'get_ai_marketing_proposal': '/api/ai/marketing-proposal',
+            'get_ai_detailed_plan': '/api/ai/detailed-plan',
+            'fetch_naver_search': '/api/ai/naver-search',
+            'analyze_online_sentiment': '/api/ai/online-sentiment',
+            'get_claim_targets': '/api/crm/claim-targets',
+            'send_sms_simulation': '/api/crm/sms/send',
+            'get_company_info': '/api/auth/company',
+            'create_experience_reservation': '/api/experience/reservations/create',
+            'get_experience_reservations': '/api/experience/reservations',
+            'update_experience_reservation': '/api/experience/reservations/update',
+            'delete_experience_reservation': '/api/experience/reservations/delete',
+            'update_experience_status': '/api/experience/reservations/status',
+            'update_experience_payment_status': '/api/experience/reservations/payment',
+            'get_schedules': '/api/schedule/list',
+            'create_schedule': '/api/schedule/create',
+            'update_schedule': '/api/schedule/update',
+            'delete_schedule': '/api/schedule/delete',
         };
 
         const route = routeMap[commandName];
@@ -140,9 +173,15 @@ export async function callBridge(commandName, args = {}) {
             'reset_database',
             'create_experience_program',
             'update_experience_program',
-            'create_experience_program',
-            'update_experience_program',
             'delete_experience_program',
+            'create_experience_reservation',
+            'update_experience_reservation',
+            'delete_experience_reservation',
+            'update_experience_status',
+            'update_experience_payment_status',
+            'create_schedule',
+            'update_schedule',
+            'delete_schedule',
             'save_sensor',
             'save_sensor',
             'delete_sensor',
@@ -160,7 +199,16 @@ export async function callBridge(commandName, args = {}) {
             'process_sales_claim',
             'update_sales_claim',
             'delete_sales_claim',
-            'create_consultation'
+            'create_consultation',
+            'call_gemini_ai',
+            'get_ai_demand_forecast',
+            'update_customer_level',
+            'update_customer_memo_batch',
+            'get_ai_marketing_proposal',
+            'get_ai_detailed_plan',
+            'fetch_naver_search',
+            'analyze_online_sentiment',
+            'send_sms_simulation'
         ];
         const isPost = postCommands.includes(commandName) || commandName.startsWith('save_');
 
@@ -208,3 +256,5 @@ export async function callBridge(commandName, args = {}) {
         }
     }
 }
+
+export const invoke = callBridge;

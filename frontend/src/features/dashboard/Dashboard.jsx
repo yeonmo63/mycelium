@@ -3,7 +3,7 @@ import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/apiBridge';
 import { invokeAI } from '../../utils/aiErrorHandler';
 
 // Components

@@ -29,10 +29,19 @@ const FinanceTaxReport = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     const loadReport = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            const data = await window.__TAURI__.core.invoke('get_tax_report_v2', { startDate, endDate });
+            const query = new URLSearchParams({
+                start_date: startDate,
+                end_date: endDate,
+            });
+            const res = await fetch(`/api/finance/tax/report?${query.toString()}`);
+            let data = [];
+            if (res.ok) {
+                data = await res.json();
+            } else {
+                throw new Error("Failed to load tax report");
+            }
 
             let taxableSales = [];
             let exemptSales = [];
@@ -120,18 +129,18 @@ const FinanceTaxReport = () => {
             csv += row + '\n';
         });
 
-        try {
-            const fileName = `부가세신고지원_${startDate.replace(/-/g, '')}~${endDate.replace(/-/g, '')}.csv`;
-            const filePath = await window.__TAURI__.core.invoke('plugin:dialog|save', {
-                options: { defaultPath: fileName, filters: [{ name: 'CSV File', extensions: ['csv'] }] }
-            });
-            if (filePath) {
-                await window.__TAURI__.core.invoke('plugin:fs|write_text_file', { path: filePath, contents: csv });
-                showAlert("성공", "파일이 성공적으로 저장되었습니다.");
-            }
-        } catch (e) {
-            showAlert("오류", "파일 저장 실패: " + e);
-        }
+        // ... CSV construction ...
+        // Using Blob for web download
+        const fileName = `부가세신고지원_${startDate.replace(/-/g, '')}~${endDate.replace(/-/g, '')}.csv`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showAlert("성공", "파일이 다운로드되었습니다.");
     };
 
     const handleSubmitTaxReport = async () => {
@@ -146,11 +155,21 @@ const FinanceTaxReport = () => {
 
         setIsLoading(true);
         try {
-            const result = await window.__TAURI__.core.invoke('submit_tax_report', {
-                items: allData,
-                startDate,
-                endDate
+            const res = await fetch('/api/finance/tax/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: allData,
+                    start_date: startDate,
+                    end_date: endDate
+                })
             });
+
+            if (!res.ok) {
+                const err = await res.text();
+                throw new Error(err);
+            }
+            const result = await res.json();
             showAlert("전송 성공", result);
         } catch (e) {
             console.error(e);

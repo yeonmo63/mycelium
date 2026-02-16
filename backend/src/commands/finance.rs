@@ -3,11 +3,16 @@ use crate::db::{
     DbPool, Expense, ProductSalesStats, ProfitAnalysisResult, Purchase, TenYearSalesStats, Vendor,
 };
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::state::AppState;
+use crate::stubs::{check_admin, command, State};
 use crate::DB_MODIFIED;
+use axum::{
+    extract::{Query, State as AxumState},
+    Json,
+};
 use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, State, check_admin};
 
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
@@ -32,13 +37,19 @@ pub struct SyncItem {
     pub quantity: i32,
 }
 
-
 pub async fn get_vendor_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Vendor>> {
     Ok(
         sqlx::query_as::<_, Vendor>("SELECT * FROM vendors ORDER BY vendor_name")
             .fetch_all(&*state)
             .await?,
     )
+}
+
+pub async fn get_vendor_list_axum(
+    AxumState(state): AxumState<AppState>,
+) -> crate::error::MyceliumResult<Json<Vec<Vendor>>> {
+    let vendors = get_vendor_list(State::from(&state.pool)).await?;
+    Ok(Json(vendors))
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,7 +65,6 @@ pub struct VendorInput {
     pub memo: Option<String>,
     pub is_active: Option<bool>,
 }
-
 
 pub async fn save_vendor(state: State<'_, DbPool>, vendor: VendorInput) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
@@ -74,6 +84,13 @@ pub async fn save_vendor(state: State<'_, DbPool>, vendor: VendorInput) -> Mycel
     Ok(())
 }
 
+pub async fn save_vendor_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(vendor): Json<VendorInput>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    save_vendor(State::from(&state.pool), vendor).await?;
+    Ok(Json(()))
+}
 
 pub async fn delete_vendor(state: State<'_, DbPool>, vendor_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
@@ -84,15 +101,59 @@ pub async fn delete_vendor(state: State<'_, DbPool>, vendor_id: i32) -> Mycelium
     Ok(())
 }
 
-
-pub async fn get_purchase_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Purchase>> {
-    Ok(sqlx::query_as::<_, Purchase>(
-        "SELECT p.*, v.vendor_name FROM purchases p LEFT JOIN vendors v ON p.vendor_id = v.vendor_id ORDER BY p.purchase_date DESC"
-    )
-    .fetch_all(&*state)
-    .await?)
+pub async fn delete_vendor_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    let id = payload
+        .get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or(MyceliumError::Validation("Missing id".into()))? as i32;
+    delete_vendor(State::from(&state.pool), id).await?;
+    Ok(Json(()))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PurchaseFilter {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub vendor_id: Option<i32>,
+}
+
+pub async fn get_purchase_list(
+    state: State<'_, DbPool>,
+    filter: PurchaseFilter,
+) -> MyceliumResult<Vec<Purchase>> {
+    let mut sql = "SELECT p.*, v.vendor_name FROM purchases p LEFT JOIN vendors v ON p.vendor_id = v.vendor_id WHERE 1=1".to_string();
+
+    if let Some(start) = filter.start_date {
+        if !start.is_empty() {
+            sql.push_str(&format!(" AND p.purchase_date >= '{}'", start));
+        }
+    }
+    if let Some(end) = filter.end_date {
+        if !end.is_empty() {
+            sql.push_str(&format!(" AND p.purchase_date <= '{}'", end));
+        }
+    }
+    if let Some(vid) = filter.vendor_id {
+        sql.push_str(&format!(" AND p.vendor_id = {}", vid));
+    }
+
+    sql.push_str(" ORDER BY p.purchase_date DESC");
+
+    Ok(sqlx::query_as::<_, Purchase>(&sql)
+        .fetch_all(&*state)
+        .await?)
+}
+
+pub async fn get_purchase_list_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(filter): Query<PurchaseFilter>,
+) -> crate::error::MyceliumResult<Json<Vec<Purchase>>> {
+    let purchases = get_purchase_list(State::from(&state.pool), filter).await?;
+    Ok(Json(purchases))
+}
 
 pub async fn save_purchase(
     state: State<'_, DbPool>,
@@ -155,6 +216,24 @@ pub async fn save_purchase(
     Ok(())
 }
 
+#[derive(Deserialize)]
+pub struct SavePurchasePayload {
+    pub purchase: PurchaseInput,
+    pub inventory_sync_data: Option<Vec<SyncItem>>,
+}
+
+pub async fn save_purchase_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<SavePurchasePayload>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    save_purchase(
+        State::from(&state.pool),
+        payload.purchase,
+        payload.inventory_sync_data,
+    )
+    .await?;
+    Ok(Json(()))
+}
 
 pub async fn delete_purchase(state: State<'_, DbPool>, purchase_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
@@ -165,13 +244,60 @@ pub async fn delete_purchase(state: State<'_, DbPool>, purchase_id: i32) -> Myce
     Ok(())
 }
 
+pub async fn delete_purchase_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    let id = payload
+        .get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or(MyceliumError::Validation("Missing id".into()))? as i32;
+    delete_purchase(State::from(&state.pool), id).await?;
+    Ok(Json(()))
+}
 
-pub async fn get_expense_list(state: State<'_, DbPool>) -> MyceliumResult<Vec<Expense>> {
-    Ok(
-        sqlx::query_as::<_, Expense>("SELECT * FROM expenses ORDER BY expense_date DESC")
-            .fetch_all(&*state)
-            .await?,
-    )
+#[derive(Debug, Deserialize)]
+pub struct ExpenseFilter {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub category: Option<String>,
+}
+
+pub async fn get_expense_list(
+    state: State<'_, DbPool>,
+    filter: ExpenseFilter,
+) -> MyceliumResult<Vec<Expense>> {
+    let mut sql = "SELECT * FROM expenses WHERE 1=1".to_string();
+
+    if let Some(start) = filter.start_date {
+        if !start.is_empty() {
+            sql.push_str(&format!(" AND expense_date >= '{}'", start));
+        }
+    }
+    if let Some(end) = filter.end_date {
+        if !end.is_empty() {
+            sql.push_str(&format!(" AND expense_date <= '{}'", end));
+        }
+    }
+    if let Some(cat) = filter.category {
+        if !cat.is_empty() && cat != "전체" {
+            sql.push_str(&format!(" AND category = '{}'", cat));
+        }
+    }
+
+    sql.push_str(" ORDER BY expense_date DESC");
+
+    Ok(sqlx::query_as::<_, Expense>(&sql)
+        .fetch_all(&*state)
+        .await?)
+}
+
+pub async fn get_expense_list_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(filter): Query<ExpenseFilter>,
+) -> crate::error::MyceliumResult<Json<Vec<Expense>>> {
+    let expenses = get_expense_list(State::from(&state.pool), filter).await?;
+    Ok(Json(expenses))
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,7 +309,6 @@ pub struct ExpenseInput {
     pub payment_method: Option<String>,
     pub memo: Option<String>,
 }
-
 
 pub async fn save_expense(state: State<'_, DbPool>, expense: ExpenseInput) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
@@ -216,6 +341,13 @@ pub async fn save_expense(state: State<'_, DbPool>, expense: ExpenseInput) -> My
     Ok(())
 }
 
+pub async fn save_expense_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(expense): Json<ExpenseInput>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    save_expense(State::from(&state.pool), expense).await?;
+    Ok(Json(()))
+}
 
 pub async fn delete_expense(state: State<'_, DbPool>, expense_id: i32) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
@@ -226,6 +358,18 @@ pub async fn delete_expense(state: State<'_, DbPool>, expense_id: i32) -> Myceli
     Ok(())
 }
 
+pub async fn delete_expense_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> crate::error::MyceliumResult<Json<()>> {
+    let id = payload
+        .get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or(MyceliumError::Validation("Missing id".into()))? as i32;
+    delete_expense(State::from(&state.pool), id).await?;
+    Ok(Json(()))
+}
+
 #[derive(Debug, serde::Serialize)]
 pub struct MonthlyPL {
     pub month: String,
@@ -233,7 +377,6 @@ pub struct MonthlyPL {
     pub cost: i64,
     pub profit: i64,
 }
-
 
 pub async fn get_monthly_pl_report(
     state: State<'_, DbPool>,
@@ -304,7 +447,6 @@ pub struct CostBreakdownItem {
     pub percentage: f64,
 }
 
-
 pub async fn get_cost_breakdown_stats(
     state: State<'_, DbPool>,
     year: i32,
@@ -356,7 +498,6 @@ pub struct VendorRankItem {
     pub purchase_count: i64,
 }
 
-
 pub async fn get_vendor_purchase_ranking(
     state: State<'_, DbPool>,
     year: i32, // Added year param to match frontend call
@@ -378,7 +519,6 @@ pub async fn get_vendor_purchase_ranking(
 
     Ok(ranking)
 }
-
 
 pub async fn get_profit_margin_analysis(
     state: State<'_, DbPool>,
@@ -441,7 +581,6 @@ pub struct MembershipSalesStats {
     pub total_amount: i64,
 }
 
-
 pub async fn get_membership_sales_analysis(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<MembershipSalesStats>> {
@@ -456,6 +595,12 @@ pub async fn get_membership_sales_analysis(
     Ok(analysis)
 }
 
+pub async fn get_membership_sales_analysis_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> crate::error::MyceliumResult<Json<Vec<MembershipSalesStats>>> {
+    let analysis = get_membership_sales_analysis(State::from(&state.pool)).await?;
+    Ok(Json(analysis))
+}
 
 pub async fn get_product_sales_stats(
     pool: State<'_, DbPool>,
@@ -496,7 +641,6 @@ pub struct ProductMonthlyStat {
     pub total_amount: i64,
 }
 
-
 pub async fn get_product_monthly_analysis(
     state: State<'_, DbPool>,
     product_name: String,
@@ -512,7 +656,6 @@ pub async fn get_product_monthly_analysis(
         .fetch_all(&*state)
         .await?)
 }
-
 
 pub async fn get_product_10yr_sales_stats(
     state: State<'_, DbPool>,
@@ -530,4 +673,83 @@ pub async fn get_product_10yr_sales_stats(
         .bind(product_name)
         .fetch_all(&*state)
         .await?)
+}
+
+#[derive(Deserialize)]
+pub struct YearQuery {
+    pub year: i32,
+}
+
+pub async fn get_monthly_pl_report_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<YearQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<MonthlyPL>>> {
+    let report = get_monthly_pl_report(State::from(&state.pool), query.year).await?;
+    Ok(Json(report))
+}
+
+pub async fn get_cost_breakdown_stats_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<YearQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<CostBreakdownItem>>> {
+    let stats = get_cost_breakdown_stats(State::from(&state.pool), query.year).await?;
+    Ok(Json(stats))
+}
+
+pub async fn get_vendor_purchase_ranking_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<YearQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<VendorRankItem>>> {
+    let ranking = get_vendor_purchase_ranking(State::from(&state.pool), query.year).await?;
+    Ok(Json(ranking))
+}
+
+pub async fn get_profit_margin_analysis_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<YearQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<ProfitAnalysisResult>>> {
+    let analysis = get_profit_margin_analysis(State::from(&state.pool), query.year).await?;
+    Ok(Json(analysis))
+}
+
+#[derive(Deserialize)]
+pub struct ProductStatsQuery {
+    pub year: Option<String>,
+}
+
+pub async fn get_product_sales_stats_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<ProductStatsQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<ProductSalesStats>>> {
+    let stats = get_product_sales_stats(State::from(&state.pool), query.year).await?;
+    Ok(Json(stats))
+}
+
+#[derive(Deserialize)]
+pub struct ProductMonthlyQuery {
+    pub product_name: String,
+    pub year: i32,
+}
+
+pub async fn get_product_monthly_analysis_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<ProductMonthlyQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<ProductMonthlyStat>>> {
+    let stats =
+        get_product_monthly_analysis(State::from(&state.pool), query.product_name, query.year)
+            .await?;
+    Ok(Json(stats))
+}
+
+#[derive(Deserialize)]
+pub struct ProductTrendQuery {
+    pub product_name: String,
+}
+
+pub async fn get_product_10yr_sales_stats_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<ProductTrendQuery>,
+) -> crate::error::MyceliumResult<Json<Vec<TenYearSalesStats>>> {
+    let stats = get_product_10yr_sales_stats(State::from(&state.pool), query.product_name).await?;
+    Ok(Json(stats))
 }

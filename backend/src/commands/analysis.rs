@@ -1,10 +1,9 @@
 #![allow(non_snake_case)]
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{check_admin, command, State};
 use chrono::NaiveDate;
 use polars::prelude::*;
-use crate::stubs::{command, State, check_admin};
-
 
 pub async fn sales_polars_analysis_v4(
     state: State<'_, DbPool>,
@@ -164,7 +163,6 @@ pub async fn sales_polars_analysis_v4(
         }
     }))
 }
-
 
 pub async fn get_all_time_customer_analysis(
     state: State<'_, DbPool>,
@@ -328,7 +326,6 @@ pub async fn get_all_time_customer_analysis(
     }))
 }
 
-
 pub async fn get_sales_by_region_analysis(
     state: State<'_, DbPool>,
     year: i32,
@@ -446,6 +443,19 @@ pub async fn get_sales_by_region_analysis(
     Ok(serde_json::json!(result_list))
 }
 
+#[derive(serde::Deserialize)]
+pub struct AnalysisYearQuery {
+    pub year: i32,
+}
+
+pub async fn get_sales_by_region_analysis_axum(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+    axum::extract::Query(query): axum::extract::Query<AnalysisYearQuery>,
+) -> crate::error::MyceliumResult<axum::Json<serde_json::Value>> {
+    let result =
+        get_sales_by_region_analysis(crate::stubs::State::from(&state.pool), query.year).await?;
+    Ok(axum::Json(result))
+}
 
 pub async fn get_order_value_distribution(
     state: State<'_, DbPool>,
@@ -512,7 +522,6 @@ pub async fn get_order_value_distribution(
 
     Ok(serde_json::json!(result))
 }
-
 
 pub async fn get_sales_period_analysis(
     state: State<'_, DbPool>,

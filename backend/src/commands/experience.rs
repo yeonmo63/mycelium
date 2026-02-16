@@ -1,13 +1,13 @@
 #![allow(non_snake_case)]
 use crate::db::{DbPool, ExperienceProgram, ExperienceReservation};
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::state::AppState;
+use crate::stubs::{check_admin, command, State};
 use crate::DB_MODIFIED;
+use axum::{extract::Query, extract::State as AxumState, Json};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use sqlx::FromRow;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, State, check_admin};
-use axum::{extract::State as AxumState, Json};
-use crate::state::AppState;
 
 #[derive(Debug, serde::Serialize, FromRow)]
 pub struct ExpMonthlyTrend {
@@ -28,7 +28,6 @@ pub struct ExperienceDashboardStats {
     pub program_popularity: Vec<ExpProgramPopularity>,
 }
 
-
 pub async fn get_experience_programs(
     state: State<'_, DbPool>,
 ) -> MyceliumResult<Vec<ExperienceProgram>> {
@@ -38,7 +37,6 @@ pub async fn get_experience_programs(
     .fetch_all(&*state)
     .await?)
 }
-
 
 pub async fn create_experience_program(
     state: State<'_, DbPool>,
@@ -65,7 +63,6 @@ pub async fn create_experience_program(
 
     Ok(row.0)
 }
-
 
 pub async fn update_experience_program(
     state: State<'_, DbPool>,
@@ -94,7 +91,6 @@ pub async fn update_experience_program(
     Ok(())
 }
 
-
 pub async fn delete_experience_program(
     state: State<'_, DbPool>,
     program_id: i32,
@@ -106,7 +102,6 @@ pub async fn delete_experience_program(
         .await?;
     Ok(())
 }
-
 
 pub async fn get_experience_reservations(
     state: State<'_, DbPool>,
@@ -136,7 +131,6 @@ pub async fn get_experience_reservations(
 
     Ok(query.fetch_all(&*state).await?)
 }
-
 
 pub async fn create_experience_reservation(
     state: State<'_, DbPool>,
@@ -208,7 +202,6 @@ pub async fn create_experience_reservation(
     tx.commit().await?;
     Ok(r_id)
 }
-
 
 pub async fn update_experience_reservation(
     state: State<'_, DbPool>,
@@ -296,7 +289,6 @@ pub async fn update_experience_reservation(
     Ok(())
 }
 
-
 pub async fn delete_experience_reservation(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -319,7 +311,6 @@ pub async fn delete_experience_reservation(
     tx.commit().await?;
     Ok(())
 }
-
 
 pub async fn update_experience_status(
     state: State<'_, DbPool>,
@@ -401,7 +392,6 @@ pub async fn update_experience_status(
     Ok(())
 }
 
-
 pub async fn update_experience_payment_status(
     state: State<'_, DbPool>,
     reservation_id: i32,
@@ -415,7 +405,6 @@ pub async fn update_experience_payment_status(
         .await?;
     Ok(())
 }
-
 
 pub async fn get_experience_dashboard_stats(
     state: State<'_, DbPool>,
@@ -552,6 +541,340 @@ pub async fn delete_experience_program_axum(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     sqlx::query("DELETE FROM experience_programs WHERE program_id = $1")
         .bind(payload.program_id)
+        .execute(&state.pool)
+        .await?;
+    Ok(Json(()))
+}
+#[derive(serde::Deserialize)]
+pub struct CreateExpReservationPayload {
+    pub program_id: i32,
+    pub customer_id: Option<String>,
+    pub guest_name: String,
+    pub guest_contact: String,
+    pub reservation_date: String,
+    pub reservation_time: String,
+    pub participant_count: i32,
+    pub total_amount: i32,
+    pub status: String,
+    pub payment_status: String,
+    pub memo: Option<String>,
+}
+
+pub async fn create_experience_reservation_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<CreateExpReservationPayload>,
+) -> MyceliumResult<Json<i32>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let date_parsed = NaiveDate::parse_from_str(&payload.reservation_date, "%Y-%m-%d")
+        .map_err(|e| MyceliumError::Validation(format!("Invalid date: {}", e)))?;
+    let time_parsed = NaiveTime::parse_from_str(&payload.reservation_time, "%H:%M")
+        .map_err(|e| MyceliumError::Validation(format!("Invalid time: {}", e)))?;
+
+    let row: (i32,) = sqlx::query_as(
+        "INSERT INTO experience_reservations (program_id, customer_id, guest_name, guest_contact, reservation_date, reservation_time, participant_count, total_amount, status, payment_status, memo) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING reservation_id",
+    )
+    .bind(payload.program_id)
+    .bind(payload.customer_id)
+    .bind(&payload.guest_name)
+    .bind(payload.guest_contact)
+    .bind(date_parsed)
+    .bind(time_parsed)
+    .bind(payload.participant_count)
+    .bind(payload.total_amount)
+    .bind(&payload.status)
+    .bind(&payload.payment_status)
+    .bind(&payload.memo)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let r_id = row.0;
+
+    // Auto-create Schedule
+    if payload.status == "예약완료" {
+        // Fetch Program duration
+        let prog: (String, i32) = sqlx::query_as(
+            "SELECT program_name, duration_min FROM experience_programs WHERE program_id = $1",
+        )
+        .bind(payload.program_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let start_dt = NaiveDateTime::new(date_parsed, time_parsed);
+        let end_dt = start_dt + chrono::Duration::minutes(prog.1 as i64);
+
+        sqlx::query(
+            "INSERT INTO schedules (title, description, start_time, end_time, status, related_type, related_id) VALUES ($1, $2, $3, $4, 'Planned', 'EXPERIENCE', $5)"
+        )
+        .bind(format!("[체험] {}", prog.0))
+        .bind(format!("{}명 ({})", payload.participant_count, payload.guest_name))
+        .bind(start_dt)
+        .bind(end_dt)
+        .bind(r_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(Json(r_id))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ExpReservationQuery {
+    pub start_date: Option<String>,
+    #[serde(alias = "startDate")]
+    pub startDate: Option<String>,
+    pub end_date: Option<String>,
+    #[serde(alias = "endDate")]
+    pub endDate: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateExpReservationPayload {
+    pub reservation_id: i32,
+    pub program_id: i32,
+    pub customer_id: Option<String>,
+    pub guest_name: String,
+    pub guest_contact: String,
+    pub reservation_date: String,
+    pub reservation_time: String,
+    pub participant_count: i32,
+    pub total_amount: i32,
+    pub status: String,
+    pub payment_status: String,
+    pub memo: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct DeleteExpReservationPayload {
+    pub reservation_id: i32,
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateExpStatusPayload {
+    pub reservation_id: i32,
+    pub status: String,
+    pub append_memo: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateExpPaymentStatusPayload {
+    pub reservation_id: i32,
+    pub payment_status: String,
+}
+
+pub async fn get_experience_reservations_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(params): Query<ExpReservationQuery>,
+) -> MyceliumResult<Json<Vec<ExperienceReservation>>> {
+    let start = params.start_date.or(params.startDate);
+    let end = params.end_date.or(params.endDate);
+
+    let mut sql = String::from(
+        "SELECT r.*, p.program_name 
+         FROM experience_reservations r
+         LEFT JOIN experience_programs p ON r.program_id = p.program_id
+         WHERE 1=1",
+    );
+
+    if start.is_some() && end.is_some() {
+        sql.push_str(" AND r.reservation_date >= $1::date AND r.reservation_date <= $2::date");
+    }
+
+    sql.push_str(" ORDER BY r.reservation_date ASC, r.reservation_time ASC");
+
+    let query = sqlx::query_as::<_, ExperienceReservation>(&sql);
+
+    let query = if let (Some(s), Some(e)) = (start, end) {
+        query.bind(s).bind(e)
+    } else {
+        query
+    };
+
+    let res = query.fetch_all(&state.pool).await?;
+    Ok(Json(res))
+}
+
+pub async fn update_experience_reservation_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<UpdateExpReservationPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let date_parsed = NaiveDate::parse_from_str(&payload.reservation_date, "%Y-%m-%d")
+        .map_err(|e| MyceliumError::Validation(format!("Invalid date: {}", e)))?;
+    let time_parsed = NaiveTime::parse_from_str(&payload.reservation_time, "%H:%M")
+        .map_err(|e| MyceliumError::Validation(format!("Invalid time: {}", e)))?;
+
+    // 1. Remove associated schedule
+    let _ =
+        sqlx::query("DELETE FROM schedules WHERE related_type = 'EXPERIENCE' AND related_id = $1")
+            .bind(payload.reservation_id)
+            .execute(&mut *tx)
+            .await;
+
+    sqlx::query(
+        "UPDATE experience_reservations SET program_id=$1, customer_id=$2, guest_name=$3, guest_contact=$4, 
+         reservation_date=$5, reservation_time=$6, participant_count=$7, total_amount=$8, status=$9, payment_status=$10, memo=$11 
+         WHERE reservation_id=$12",
+    )
+    .bind(payload.program_id)
+    .bind(payload.customer_id)
+    .bind(&payload.guest_name)
+    .bind(payload.guest_contact)
+    .bind(date_parsed)
+    .bind(time_parsed)
+    .bind(payload.participant_count)
+    .bind(payload.total_amount)
+    .bind(&payload.status)
+    .bind(&payload.payment_status)
+    .bind(&payload.memo)
+    .bind(payload.reservation_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if payload.status == "예약완료" || payload.status == "체험완료" {
+        let (program_name, duration_min): (String, i32) = sqlx::query_as(
+            "SELECT program_name, duration_min FROM experience_programs WHERE program_id = $1",
+        )
+        .bind(payload.program_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let start_dt = NaiveDateTime::new(date_parsed, time_parsed);
+        let end_dt = start_dt + chrono::Duration::minutes(duration_min as i64);
+        let title = format!("{}({})", program_name, payload.guest_name);
+        let schedule_status = if payload.status == "체험완료" {
+            "Completed"
+        } else {
+            "Planned"
+        };
+
+        sqlx::query(
+            "INSERT INTO schedules (title, description, start_time, end_time, status, related_type, related_id) VALUES ($1, $2, $3, $4, $5, 'EXPERIENCE', $6)"
+        )
+        .bind(title)
+        .bind(&payload.memo)
+        .bind(start_dt)
+        .bind(end_dt)
+        .bind(schedule_status)
+        .bind(payload.reservation_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+pub async fn delete_experience_reservation_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<DeleteExpReservationPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    let _ =
+        sqlx::query("DELETE FROM schedules WHERE related_type = 'EXPERIENCE' AND related_id = $1")
+            .bind(payload.reservation_id)
+            .execute(&mut *tx)
+            .await;
+
+    sqlx::query("DELETE FROM experience_reservations WHERE reservation_id = $1")
+        .bind(payload.reservation_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+pub async fn update_experience_status_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<UpdateExpStatusPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+
+    sqlx::query(
+        "UPDATE experience_reservations 
+         SET status = $1, 
+         memo = CASE 
+             WHEN $3 IS NOT NULL AND LENGTH($3) > 0 THEN 
+                CASE WHEN memo IS NULL OR LENGTH(memo) = 0 THEN $3 
+                ELSE memo || '\\n' || $3 END
+             ELSE memo 
+         END
+         WHERE reservation_id = $2",
+    )
+    .bind(&payload.status)
+    .bind(payload.reservation_id)
+    .bind(payload.append_memo)
+    .execute(&mut *tx)
+    .await?;
+
+    if payload.status == "예약완료" {
+        let _ = sqlx::query(
+            "DELETE FROM schedules WHERE related_type = 'EXPERIENCE' AND related_id = $1",
+        )
+        .bind(payload.reservation_id)
+        .execute(&mut *tx)
+        .await;
+
+        let (program_name, duration_min, guest_name, r_date, r_time, r_memo): (String, i32, String, NaiveDate, NaiveTime, Option<String>) = sqlx::query_as(
+            "SELECT p.program_name, p.duration_min, r.guest_name, r.reservation_date, r.reservation_time, r.memo 
+             FROM experience_reservations r
+             JOIN experience_programs p ON r.program_id = p.program_id
+             WHERE r.reservation_id = $1"
+        )
+        .bind(payload.reservation_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let start_dt = NaiveDateTime::new(r_date, r_time);
+        let end_dt = start_dt + chrono::Duration::minutes(duration_min as i64);
+        let title = format!("{}({})", program_name, guest_name);
+
+        sqlx::query(
+            "INSERT INTO schedules (title, description, start_time, end_time, status, related_type, related_id) 
+             VALUES ($1, $2, $3, $4, 'Planned', 'EXPERIENCE', $5)"
+        )
+        .bind(title)
+        .bind(r_memo)
+        .bind(start_dt)
+        .bind(end_dt)
+        .bind(payload.reservation_id)
+        .execute(&mut *tx)
+        .await?;
+    } else if payload.status == "예약취소" || payload.status == "예약대기" {
+        let _ = sqlx::query(
+            "DELETE FROM schedules WHERE related_type = 'EXPERIENCE' AND related_id = $1",
+        )
+        .bind(payload.reservation_id)
+        .execute(&mut *tx)
+        .await;
+    } else if payload.status == "체험완료" {
+        let _ = sqlx::query("UPDATE schedules SET status = 'Completed' WHERE related_type = 'EXPERIENCE' AND related_id = $1")
+            .bind(payload.reservation_id)
+            .execute(&mut *tx)
+            .await;
+    }
+
+    tx.commit().await?;
+    Ok(Json(()))
+}
+
+pub async fn update_experience_payment_status_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<UpdateExpPaymentStatusPayload>,
+) -> MyceliumResult<Json<()>> {
+    DB_MODIFIED.store(true, Ordering::Relaxed);
+    sqlx::query("UPDATE experience_reservations SET payment_status = $1 WHERE reservation_id = $2")
+        .bind(payload.payment_status)
+        .bind(payload.reservation_id)
         .execute(&state.pool)
         .await?;
     Ok(Json(()))

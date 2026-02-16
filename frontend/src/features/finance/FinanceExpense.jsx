@@ -37,15 +37,19 @@ const FinanceExpense = () => {
     }, []);
 
     const loadExpenses = async () => {
-        if (!window.__TAURI__) return;
         setIsLoading(true);
         try {
-            const list = await window.__TAURI__.core.invoke('get_expense_list', {
-                startDate: filter.start,
-                endDate: filter.end,
-                category: filter.category || null
+            const query = new URLSearchParams({
+                start_date: filter.start,
+                end_date: filter.end,
             });
-            setExpenses(list || []);
+            if (filter.category) query.append('category', filter.category);
+
+            const res = await fetch(`/api/finance/expenses?${query.toString()}`);
+            if (res.ok) {
+                const list = await res.json();
+                setExpenses(list || []);
+            }
         } catch (e) {
             console.error(e);
             showAlert("오류", "데이터 로딩 실패: " + e);
@@ -88,12 +92,17 @@ const FinanceExpense = () => {
         };
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('save_expense', { expense });
-                await showAlert("성공", "지출 내역이 저장되었습니다.");
-                handleReset();
-                loadExpenses();
-            }
+            const res = await fetch('/api/finance/expenses/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(expense)
+            });
+
+            if (!res.ok) throw new Error("Failed to save expense");
+
+            await showAlert("성공", "지출 내역이 저장되었습니다.");
+            handleReset();
+            loadExpenses();
         } catch (e) {
             showAlert("오류", "저장 실패: " + e);
         }
@@ -102,10 +111,14 @@ const FinanceExpense = () => {
     const handleDelete = async (id) => {
         if (!await showConfirm("삭제 확인", "이 지출 내역을 삭제하시겠습니까?")) return;
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_expense', { id });
-                loadExpenses();
-            }
+            const res = await fetch('/api/finance/expenses/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+
+            if (!res.ok) throw new Error("Failed to delete expense");
+            loadExpenses();
         } catch (e) {
             showAlert("오류", "삭제 실패: " + e);
         }

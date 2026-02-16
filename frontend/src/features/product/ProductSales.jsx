@@ -3,6 +3,7 @@ import Chart from 'chart.js/auto';
 import { useModal } from '../../contexts/ModalContext';
 import { formatCurrency } from '../../utils/common';
 import { handlePrintRaw } from '../../utils/printUtils';
+import { invoke } from '../../utils/apiBridge';
 
 /**
  * ProductSales.jsx
@@ -62,39 +63,15 @@ const ProductSales = () => {
         setProfitData([]);
 
         try {
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 1000));
-                // Mock Data
-                const mockSales = Array.from({ length: 15 }, (_, i) => ({
-                    product_name: `상품 ${i + 1}`,
-                    record_count: 100 + i * 10,
-                    total_quantity: 500 + i * 50,
-                    total_amount: 15000000 + i * 1200000
-                })).sort((a, b) => b.total_amount - a.total_amount);
-                setSalesData(mockSales);
-                renderChart(mockSales);
-
-                if (year !== '전체조회') {
-                    setProfitData(mockSales.map(m => ({
-                        ...m,
-                        total_revenue: m.total_amount,
-                        total_cost: m.total_amount * 0.7,
-                        net_profit: m.total_amount * 0.3,
-                        margin_rate: 30.0
-                    })));
-                }
-                setIsLoading(false);
-                return;
-            }
-
             // Real Data
-            const data = await window.__TAURI__.core.invoke('get_product_sales_stats', { year: year === '전체조회' ? null : year });
+            const params = year === '전체조회' ? {} : { year };
+            const data = await invoke('get_product_sales_stats', params);
             setSalesData(data || []);
             renderChart(data || []);
 
             // Profit Analysis (Only for specific year)
             if (year !== '전체조회') {
-                const profits = await window.__TAURI__.core.invoke('get_profit_margin_analysis', { year: parseInt(year) });
+                const profits = await invoke('get_profit_margin_analysis', { year: parseInt(year) });
                 setProfitData(profits || []);
             }
 
@@ -112,21 +89,7 @@ const ProductSales = () => {
         setTrendData([]);
 
         try {
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 800));
-                const mockTrend = Array.from({ length: 10 }, (_, i) => ({
-                    year: 2024 - i,
-                    record_count: 50 + i,
-                    total_quantity: 200 + i * 20,
-                    total_amount: 5000000 + i * 500000
-                })).sort((a, b) => a.year - b.year);
-                setTrendData(mockTrend);
-                renderTrendChart(mockTrend);
-                setIsTrendLoading(false);
-                return;
-            }
-
-            const data = await window.__TAURI__.core.invoke('get_product_10yr_sales_stats', { productName });
+            const data = await invoke('get_product_10yr_sales_stats', { productName });
             setTrendData(data || []);
             renderTrendChart(data || []);
         } catch (e) {
@@ -141,17 +104,7 @@ const ProductSales = () => {
         setMonthlyYear(year);
         // Using a temporary loading state approach or just swift separate modal
         try {
-            if (!window.__TAURI__) {
-                const mockMonthly = Array.from({ length: 12 }, (_, i) => ({
-                    month: i + 1,
-                    record_count: 10,
-                    total_quantity: 50,
-                    total_amount: 1000000
-                }));
-                setMonthlyData(mockMonthly);
-                return;
-            }
-            const data = await window.__TAURI__.core.invoke('get_product_monthly_analysis', { productName, year: parseInt(year) });
+            const data = await invoke('get_product_monthly_analysis', { productName, year: parseInt(year) });
             setMonthlyData(data || []);
         } catch (e) {
             console.error(e);

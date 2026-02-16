@@ -49,11 +49,13 @@ const FinanceVendor = () => {
     }, [searchQuery, allVendors]);
 
     const loadVendors = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const list = await window.__TAURI__.core.invoke('get_vendor_list');
-            setAllVendors(list || []);
-            setVendors(list || []);
+            const res = await fetch('/api/finance/vendors');
+            if (res.ok) {
+                const list = await res.json();
+                setAllVendors(list || []);
+                setVendors(list || []);
+            }
         } catch (e) {
             console.error(e);
             showAlert("오류", "데이터 로딩 실패: " + e);
@@ -83,12 +85,17 @@ const FinanceVendor = () => {
         };
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('save_vendor', { vendor });
-                await showAlert("성공", "거래처 정보가 저장되었습니다.");
-                handleReset();
-                loadVendors();
-            }
+            const res = await fetch('/api/finance/vendors/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(vendor)
+            });
+
+            if (!res.ok) throw new Error("Failed to save vendor");
+
+            await showAlert("성공", "거래처 정보가 저장되었습니다.");
+            handleReset();
+            loadVendors();
         } catch (e) {
             showAlert("오류", "저장 실패: " + e);
         }
@@ -97,10 +104,14 @@ const FinanceVendor = () => {
     const handleDelete = async (id, name) => {
         if (!await showConfirm("삭제 확인", `'${name}' 거래처를 삭제하시겠습니까?`)) return;
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('delete_vendor', { id });
-                loadVendors();
-            }
+            const res = await fetch('/api/finance/vendors/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+
+            if (!res.ok) throw new Error("Failed to delete vendor");
+            loadVendors();
         } catch (e) {
             showAlert("오류", "삭제 실패: " + e);
         }

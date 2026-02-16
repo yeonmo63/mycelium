@@ -702,7 +702,7 @@ pub struct SaveTaxPayload {
 
 // Helpers
 
-fn load_integration_settings() -> MyceliumResult<IntegrationSettings> {
+pub fn load_integration_settings() -> MyceliumResult<IntegrationSettings> {
     let path = get_app_config_dir()?.join("integrations.json");
     if path.exists() {
         let content = std::fs::read_to_string(path)?;

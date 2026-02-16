@@ -3,6 +3,7 @@ use crate::commands::config::get_gemini_api_key;
 use crate::commands::config::get_naver_keys;
 use crate::db::{Customer, DbPool};
 use crate::error::{MyceliumError, MyceliumResult};
+use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -488,7 +489,7 @@ pub struct BehaviorAnalysisResult {
 }
 
 pub async fn get_ai_behavior_strategy(
-    _app: AppHandle,
+    _app: crate::stubs::AppHandle,
     state: State<'_, DbPool>,
     _customer_id: Option<String>,
 ) -> MyceliumResult<BehaviorAnalysisResult> {
@@ -557,6 +558,18 @@ pub async fn get_ai_behavior_strategy(
     })?;
 
     Ok(result)
+}
+
+pub async fn get_ai_behavior_strategy_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<BehaviorAnalysisResult>> {
+    let result = get_ai_behavior_strategy(
+        crate::stubs::AppHandle::default(),
+        crate::stubs::State::from(&state.pool),
+        None,
+    )
+    .await?;
+    Ok(Json(result))
 }
 
 pub async fn analyze_online_sentiment(
@@ -680,8 +693,17 @@ pub async fn get_morning_briefing(
     call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await
 }
 
-pub async fn get_ai_repurchase_analysis(_state: State<'_, DbPool>) -> MyceliumResult<String> {
-    Ok("Repurchase Analysis Stub".to_string())
+#[derive(Serialize)]
+pub struct RepurchaseAnalysisResponse {
+    pub candidates: Vec<crate::db::RepurchaseCandidate>,
+}
+
+pub async fn get_ai_repurchase_analysis_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<RepurchaseAnalysisResponse>> {
+    let candidates =
+        super::crm::get_repurchase_candidates(crate::stubs::State::from(&state.pool)).await?;
+    Ok(Json(RepurchaseAnalysisResponse { candidates }))
 }
 
 pub async fn get_weather_marketing_advice(
@@ -794,11 +816,87 @@ pub async fn get_ai_marketing_proposal(_state: State<'_, DbPool>) -> MyceliumRes
     Ok("AI Marketing Proposal Stub".to_string())
 }
 
+#[derive(serde::Deserialize)]
+pub struct MarketingProposalRequest {
+    pub p1: String,
+    pub p2: String,
+}
+
+pub async fn get_ai_marketing_proposal_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<MarketingProposalRequest>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let prompt = format!(
+        "당신은 마케팅 전문가입니다. 상품 '{}'와(과) '{}'가 고객들의 장바구니 분석(Market Basket Analysis)에서 강한 연관성을 보이고 있습니다.\n\n\
+        이 두 상품을 함께 판매하기 위한 최적의 마케팅 제안서를 JSON 형식으로 작성해 주세요.\n\n\
+        [응답 형식 (JSON)]\n\
+        {{\n\
+          \"product_a\": \"{}\",\n\
+          \"product_b\": \"{}\",\n\
+          \"confidence_score\": 0.0-100.0 (예상 신뢰도),\n\
+          \"lift_score\": 0.0-10.0 (예상 향상도),\n\
+          \"strategies\": [\n\
+            {{ \"title\": \"전략 제목\", \"description\": \"상세 설명\", \"impact\": \"기대 효과\" }},\n\
+            ...\n\
+          ],\n\
+          \"ad_copies\": [\"카피1\", \"카피2\", ...]\n\
+        }}\n\n\
+        [지침]\n\
+        1. 한국어로 작성하세요.\n\
+        2. JSON 형식으로만 응답하세요.\n\
+        3. 전략은 실현 가능하고 창의적이어야 합니다.",
+        payload.p1, payload.p2, payload.p1, payload.p2
+    );
+
+    let result_json = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+    let res_val: serde_json::Value = serde_json::from_str(&result_json)
+        .map_err(|e| MyceliumError::Internal(format!("AI 응답 파싱 실패: {}", e)))?;
+
+    Ok(Json(res_val))
+}
+
 pub async fn get_ai_detailed_plan(
     _state: State<'_, DbPool>,
     _plan_type: String,
 ) -> MyceliumResult<String> {
     Ok("AI Detailed Plan Stub".to_string())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailedPlanRequest {
+    pub plan_type: String,
+    pub p1: String,
+    pub p2: String,
+    pub strategy_title: String,
+}
+
+pub async fn get_ai_detailed_plan_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<DetailedPlanRequest>,
+) -> MyceliumResult<Json<String>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let prompt = format!(
+        "상품 '{}'와(과) '{}'의 연관 분석을 기반으로 수립된 마케팅 전략 '{}'에 대한 상세 실행 계획(Action Plan)을 작성해 주세요.\n\n\
+        계획 유형: {}\n\n\
+        [작성 지침]\n\
+        1. 마크다운(Markdown) 형식을 사용하세요.\n\
+        2. ### 제목, ## 소제목, - 리스트, | 테이블 | 등을 적절히 활용하세요.\n\
+        3. 1. 목표 설정, 2. 단계별 실행 방안, 3. 기대 효과, 4. 예산 및 일정 등의 구성을 포함하세요.\n\
+        4. 매우 구체적이고 전문적으로 작성하세요.\n\
+        5. 한국어로 작성하세요.",
+        payload.p1, payload.p2, payload.strategy_title, payload.plan_type
+    );
+
+    let result = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+    Ok(Json(result))
 }
 
 pub async fn get_consultation_ai_advisor(
@@ -1021,4 +1119,109 @@ pub async fn get_consultation_ai_advisor_axum(
             "caution_points": ""
         }))),
     }
+}
+#[derive(Deserialize)]
+pub struct GeminiPromptRequest {
+    pub prompt: String,
+}
+
+pub async fn call_gemini_ai_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<GeminiPromptRequest>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    let result = call_gemini_ai_internal(Some(&state.pool), &api_key, &payload.prompt).await?;
+    Ok(Json(serde_json::json!({ "result": result })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DemandForecastRequest {
+    pub product_name: Option<String>,
+    pub forecast_days: i32,
+}
+
+pub async fn get_ai_demand_forecast_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<DemandForecastRequest>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let api_key = get_gemini_api_key().ok_or_else(|| {
+        MyceliumError::Internal("Gemini API 키가 설정되지 않았습니다.".to_string())
+    })?;
+
+    // Fetch some context data (last 30 days of sales)
+    let sales_rows: Vec<(NaiveDate, i32)> = if let Some(name) = &payload.product_name {
+        sqlx::query_as("SELECT order_date, SUM(quantity)::int FROM sales WHERE product_name = $1 AND order_date > CURRENT_DATE - INTERVAL '60 days' AND status != '취소' GROUP BY order_date ORDER BY order_date ASC")
+            .bind(name)
+            .fetch_all(&state.pool)
+            .await?
+    } else {
+        sqlx::query_as("SELECT order_date, SUM(quantity)::int FROM sales WHERE order_date > CURRENT_DATE - INTERVAL '60 days' AND status != '취소' GROUP BY order_date ORDER BY order_date ASC")
+            .fetch_all(&state.pool)
+            .await?
+    };
+
+    let mut context = String::from("최근 60일간의 판매량 데이터:\n");
+    for (date, qty) in &sales_rows {
+        context.push_str(&format!("{}: {}개\n", date, qty));
+    }
+
+    let prompt = format!(
+        "당신은 스마트 농장 수요 예측 전문가입니다. 아래 데이터를 분석하여 향후 {}일간의 수요를 예측해 주세요.\n\n\
+        {}\n\n\
+        [응답 형식 (JSON)]\n\
+        {{\n\
+          \"history\": [ {{\"date\": \"YYYY-MM-DD\", \"count\": 10}}, ... ],\n\
+          \"forecast\": [ {{\"date\": \"YYYY-MM-DD\", \"count\": 12}}, ... ],\n\
+          \"expected_total_revenue\": 1500000,\n\
+          \"growth_rate\": 5.5,\n\
+          \"stock_tip\": \"예측된 수요에 따른 재고 관리 조언\"\n\
+        }}\n\
+        - history는 최근 10일 정도의 실제 데이터를 요약해서 포함하세요.\n\
+        - forecast는 향후 {}일간의 예측치를 일별 또는 주별로 요약해서 포함하세요.\n\
+        - 모든 텍스트는 한국어로 응답하세요.\n\
+        - JSON만 출력하세요.",
+        payload.forecast_days,
+        context,
+        payload.forecast_days
+    );
+
+    let result_json = call_gemini_ai_internal(Some(&state.pool), &api_key, &prompt).await?;
+
+    match serde_json::from_str::<serde_json::Value>(&result_json) {
+        Ok(parsed) => Ok(Json(parsed)),
+        Err(_) => Err(MyceliumError::Internal(
+            "AI 응답 형식이 올바르지 않습니다.".to_string(),
+        )),
+    }
+}
+
+// Online AI Reputation Analysis
+#[derive(Deserialize)]
+pub struct NaverSearchRequest {
+    pub query: String,
+}
+
+pub async fn fetch_naver_search_axum(
+    AxumState(_state): AxumState<crate::state::AppState>,
+    Json(payload): Json<NaverSearchRequest>,
+) -> MyceliumResult<Json<Vec<NaverItem>>> {
+    let items = fetch_naver_search((), payload.query).await?;
+    Ok(Json(items))
+}
+
+#[derive(Deserialize)]
+pub struct OnlineSentimentRequest {
+    pub mentions: Vec<OnlineMention>,
+}
+
+pub async fn analyze_online_sentiment_axum(
+    AxumState(_state): AxumState<crate::state::AppState>,
+    Json(payload): Json<OnlineSentimentRequest>,
+) -> MyceliumResult<Json<OnlineAnalysisResult>> {
+    let result = analyze_online_sentiment((), payload.mentions).await?;
+    Ok(Json(result))
 }

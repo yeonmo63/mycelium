@@ -190,6 +190,33 @@ pub async fn update_customer_level(
     Ok(())
 }
 
+pub async fn get_rfm_analysis_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<CustomerLifecycle>>> {
+    let analysis = get_rfm_analysis(crate::stubs::State::from(&state.pool)).await?;
+    Ok(Json(analysis))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLevelRequest {
+    pub customer_id: String,
+    pub new_level: String,
+}
+
+pub async fn update_customer_level_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<UpdateLevelRequest>,
+) -> MyceliumResult<Json<()>> {
+    update_customer_level(
+        crate::stubs::State::from(&state.pool),
+        payload.customer_id,
+        payload.new_level,
+    )
+    .await?;
+    Ok(Json(()))
+}
+
 pub async fn get_claim_customer_count(state: State<'_, DbPool>) -> MyceliumResult<i64> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT customer_id) FROM sales_claims")
         .fetch_one(&*state)
@@ -286,6 +313,65 @@ pub async fn get_special_care_customers_axum(
         .await?;
 
     Ok(Json(customers))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ClaimTargetQuery {
+    pub days: Option<i32>,
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct ClaimTarget {
+    pub name: String,
+    pub mobile: String,
+    pub is_member: bool,
+    pub claim_type: String,
+    pub reason: Option<String>,
+    pub date: String,
+}
+
+pub async fn get_claim_targets_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    axum::extract::Query(query): axum::extract::Query<ClaimTargetQuery>,
+) -> MyceliumResult<Json<Vec<ClaimTarget>>> {
+    let days = query.days.unwrap_or(90);
+    let sql = r#"
+        SELECT c.customer_name as name, c.mobile_number as mobile, true as is_member, 
+               sc.claim_type, sc.reason_category as reason, sc.created_at::text as date
+        FROM sales_claims sc JOIN customers c ON sc.customer_id = c.customer_id
+        WHERE sc.created_at >= (CURRENT_DATE - INTERVAL '1 day' * $1)
+        ORDER BY sc.created_at DESC
+        LIMIT 200
+    "#;
+    let list = sqlx::query_as::<_, ClaimTarget>(sql)
+        .bind(days)
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(list))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SmsSimulationRequest {
+    pub mode: String,
+    pub recipients: Vec<String>,
+    pub content: String,
+    pub template_code: Option<String>,
+}
+
+pub async fn send_sms_simulation_axum(
+    AxumState(_state): AxumState<crate::state::AppState>,
+    Json(payload): Json<SmsSimulationRequest>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let result = send_sms_simulation(
+        (),
+        payload.mode,
+        payload.recipients,
+        payload.content,
+        payload.template_code,
+    )
+    .await?;
+    Ok(Json(result))
 }
 
 pub async fn send_sms_simulation(
@@ -428,4 +514,11 @@ pub async fn get_product_associations(
         .bind(total_bundles)
         .fetch_all(&*state)
         .await?)
+}
+
+pub async fn get_product_associations_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<ProductAssociation>>> {
+    let associations = get_product_associations(crate::stubs::State::from(&state.pool)).await?;
+    Ok(Json(associations))
 }

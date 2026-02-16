@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Chart, registerables } from 'chart.js';
 import { formatCurrency } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
+import { invoke } from '../../utils/apiBridge';
+import { invokeAI } from '../../utils/aiErrorHandler';
 
 Chart.register(...registerables);
 
@@ -51,12 +53,11 @@ const CustomerIntelligence = () => {
     }, [activeTab]);
 
     const loadSharedData = useCallback(async () => {
-        if (!window.__TAURI__) return;
         try {
             const year = new Date().getFullYear();
             const [rfm, member] = await Promise.all([
-                window.__TAURI__.core.invoke('get_rfm_analysis', {}),
-                window.__TAURI__.core.invoke('get_membership_sales_analysis', { year })
+                invoke('get_rfm_analysis', {}),
+                invoke('get_membership_sales_analysis', { year })
             ]);
             setRfmData(rfm || []);
             setMembershipData(member || []);
@@ -307,9 +308,8 @@ const TabRfm = React.memo(({ data, isLoading, onRefresh, isVisible, showAlert, o
     };
 
     const handleLevelChange = async (customerId, newLevel) => {
-        if (!window.__TAURI__) return;
         try {
-            await window.__TAURI__.core.invoke('update_customer_level', { customerId, newLevel });
+            await invoke('update_customer_level', { customerId, newLevel });
             showAlert('변경 완료', `고객 등급이 ${newLevel}(으)로 변경되었습니다.`, 'success');
             onRefresh(); // Trigger parent refresh
         } catch (e) {
@@ -515,12 +515,11 @@ const TabRepurchase = ({ isVisible, showAlert, toggleProcessing, openSmsModal, o
     const [selectedIds, setSelectedIds] = useState(new Set());
 
     const runAnalysis = async () => {
-        if (!window.__TAURI__) return;
         toggleProcessing(true, 'AI가 고객 구매 패턴과 재구매 주기를 심층 분석 중입니다...');
         setSelectedIds(new Set());
         try {
             await new Promise(r => setTimeout(r, 1000)); // Fake nice delay
-            const res = await window.__TAURI__.core.invoke('get_ai_repurchase_analysis', {});
+            const res = await invoke('get_ai_repurchase_analysis', {});
             setResult(res?.candidates || []);
             setHasRun(true);
         } catch (e) {
@@ -683,16 +682,13 @@ const TabBehavior = ({ isVisible, showAlert, toggleProcessing }) => {
     const [hasRun, setHasRun] = useState(false);
 
     const runAnalysis = async () => {
-        if (!window.__TAURI__) return;
         toggleProcessing(true, 'AI가 최근 발생한 모든 로그를 대조하여 패턴을 읽고 있습니다...');
         try {
-            await new Promise(r => setTimeout(r, 1200));
-            const res = await window.__TAURI__.core.invoke('get_ai_behavior_strategy', {});
+            const res = await invokeAI(showAlert, 'get_ai_behavior_strategy', {});
             setResult(res);
             setHasRun(true);
         } catch (e) {
             console.error(e);
-            showAlert('분석 실패', e.toString());
         } finally {
             toggleProcessing(false);
         }
@@ -882,24 +878,8 @@ const CustomerSummaryModal = ({ customerId, onClose }) => {
 
     useEffect(() => {
         const load = async () => {
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 500));
-                setCustomer({
-                    customer_name: '홍길동',
-                    membership_level: 'VIP',
-                    customer_id: customerId,
-                    mobile_number: '010-1234-5678',
-                    join_date: '2023-01-01',
-                    address_primary: '서울시 강남구 테헤란로',
-                    address_detail: '123번지',
-                    zip_code: '06234',
-                    memo: 'VIP 고객입니다. 특별 관리 요망.'
-                });
-                setLoading(false);
-                return;
-            }
             try {
-                const c = await window.__TAURI__.core.invoke('get_customer', { customerId });
+                const c = await invoke('get_customer', { customerId });
                 setCustomer(c);
             } catch (e) {
                 console.error(e);
@@ -1019,10 +999,8 @@ const SmsSendModal = ({ customers, mode: initialMode, onClose, showAlert }) => {
         const delay = isBatch ? 2000 : 1000;
         await new Promise(r => setTimeout(r, delay));
 
-        if (window.__TAURI__) {
-            // Logic for internal processing would go here
-            // Each name is replaced: message.replace(/\[고객명\]/g, customer.name)
-        }
+        // Simulation for now
+        setIsSending(false);
 
         setIsSending(false);
         const targetDesc = isBatch ? `${customers.length}명의 고객에게` : '고객님께';
@@ -1219,12 +1197,11 @@ const BatchMemoModal = ({ customers, onClose, showAlert, onSuccess }) => {
 
     const handleSubmit = async () => {
         if (!memo.trim()) return showAlert('알림', '메모 내용을 입력해 주세요.');
-        if (!window.__TAURI__) return;
 
         setIsSubmitting(true);
         try {
             const customerIds = customers.map(c => c.customer_id);
-            await window.__TAURI__.core.invoke('update_customer_memo_batch', {
+            await invoke('update_customer_memo_batch', {
                 customerIds,
                 newMemo: memo.trim(),
                 append

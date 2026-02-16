@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useModal } from '../../contexts/ModalContext';
+import { invoke } from '../../utils/apiBridge';
 
 /**
  * CustomerSms.jsx
@@ -58,13 +59,11 @@ const CustomerSms = () => {
     }, []);
 
     const loadCompanyInfo = async () => {
-        if (window.__TAURI__) {
-            try {
-                const info = await window.__TAURI__.core.invoke('get_company_info');
-                if (info && info.company_name) setCompanyName(info.company_name);
-            } catch (e) {
-                console.error("Company Info Error:", e);
-            }
+        try {
+            const info = await invoke('get_company_info');
+            if (info && info.company_name) setCompanyName(info.company_name);
+        } catch (e) {
+            console.error("Company Info Error:", e);
         }
     };
 
@@ -149,34 +148,27 @@ const CustomerSms = () => {
         const confirmed = await showConfirm('발송 확인', `약 ${estimatedCount.toLocaleString()}명에게 ${modeText}를 발송하시겠습니까?\n(실제 발송은 API 설정에 따릅니다)`);
 
         if (confirmed) {
-            if (window.__TAURI__) {
-                try {
-                    const selectedGroups = Object.keys(targets).filter(k => targets[k] && k !== 'all');
-                    if (targets.all) selectedGroups.push('all');
+            try {
+                const selectedGroups = Object.keys(targets).filter(k => targets[k] && k !== 'all');
+                if (targets.all) selectedGroups.push('all');
 
-                    // Simulation Invoke
-                    const result = await window.__TAURI__.core.invoke('send_sms_simulation', {
-                        mode: msgMode,
-                        recipients: selectedGroups,
-                        content: message,
-                        templateCode: msgMode === 'kakao' ? 'TEMPLATE_001' : null
-                    });
+                // Simulation Invoke
+                const result = await invoke('send_sms_simulation', {
+                    mode: msgMode,
+                    recipients: selectedGroups,
+                    content: message,
+                    templateCode: msgMode === 'kakao' ? 'TEMPLATE_001' : null
+                });
 
-                    if (result.success) {
-                        showAlert('발송 성공', `메시지 아이디: ${result.message_id}\n성공적으로 접수되었습니다.`, 'success');
-                        setMessage('');
-                    } else {
-                        showAlert('발송 실패', result.error);
-                    }
-                } catch (e) {
-                    console.error(e);
-                    showAlert('오류', '발송 중 오류가 발생했습니다.');
+                if (result.success) {
+                    showAlert('발송 성공', `메시지 아이디: ${result.message_id || 'N/A'}\n성공적으로 접수되었습니다.`, 'success');
+                    setMessage('');
+                } else {
+                    showAlert('발송 실패', result.error || '알 수 없는 오류');
                 }
-            } else {
-                // Browser Mock
-                await new Promise(r => setTimeout(r, 1000));
-                showAlert('발송 성공', '성공적으로 접수되었습니다. (Demo)', 'success');
-                setMessage('');
+            } catch (e) {
+                console.error(e);
+                showAlert('오류', '발송 중 오류가 발생했습니다.');
             }
         }
     };
@@ -190,19 +182,8 @@ const CustomerSms = () => {
     const loadClaims = async (days) => {
         setIsLoadingClaims(true);
         try {
-            if (!window.__TAURI__) {
-                await new Promise(r => setTimeout(r, 1000));
-                // Mock Claims
-                const mock = [
-                    { mobile: '010-1111-2222', name: '홍길동', is_member: true, claim_type: '반품', reason: '단순 변심', date: '2024-01-15' },
-                    { mobile: '010-3333-4444', name: '김철수', is_member: false, claim_type: '취소', reason: '배송 지연', date: '2024-01-12' },
-                    { mobile: '010-5555-6666', name: '이영희', is_member: true, claim_type: '반품', reason: '상품 파손', date: '2024-01-10' },
-                ];
-                setClaimHistory(mock);
-            } else {
-                const data = await window.__TAURI__.core.invoke('get_claim_targets', { days: parseInt(days) });
-                setClaimHistory(data || []);
-            }
+            const data = await invoke('get_claim_targets', { days: parseInt(days) });
+            setClaimHistory(data || []);
         } catch (e) {
             console.error(e);
             showAlert('오류', '클레임 내역 로드 실패');

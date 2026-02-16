@@ -1470,3 +1470,25 @@ pub async fn update_customer_membership_batch_axum(
         .await?;
     Ok(Json(()))
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateMemoBatchRequest {
+    pub customer_ids: Vec<String>,
+    pub new_memo: String,
+    pub append: bool,
+}
+
+pub async fn update_customer_memo_batch_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Json(payload): Json<UpdateMemoBatchRequest>,
+) -> MyceliumResult<Json<()>> {
+    update_customer_memo_batch(
+        crate::stubs::State::from(&state.pool),
+        payload.customer_ids,
+        payload.new_memo,
+        payload.append,
+    )
+    .await?;
+    Ok(Json(()))
+}

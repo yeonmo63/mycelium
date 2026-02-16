@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useModal } from '../../contexts/ModalContext';
 import { invokeAI } from '../../utils/aiErrorHandler';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '../../utils/apiBridge';
 import { handlePrintRaw } from '../../utils/printUtils';
 
 /**
@@ -48,9 +48,8 @@ const OnlineReputation = () => {
     }, []);
 
     const loadCompanyInfo = async () => {
-        if (!window.__TAURI__) return;
         try {
-            const info = await window.__TAURI__.core.invoke('get_company_info');
+            const info = await invoke('get_company_info', {});
             setCompanyInfo({
                 name: info?.company_name || '설정된 업체명 없음',
                 products: '(주력 분석: 업체 관련 키워드)'
@@ -69,30 +68,10 @@ const OnlineReputation = () => {
         setMentions([]);
 
         try {
-            if (!window.__TAURI__) {
-                // Dev Mock Logic
-                setLoadingStep("네이버 실시간 소셜 데이터를 수집 중입니다...");
-                await new Promise(r => setTimeout(r, 1500));
-                setLoadingStep("수집된 데이터를 전처리하고 있습니다...");
-                await new Promise(r => setTimeout(r, 1000));
-                setLoadingStep("Gemini AI가 소셜 평판과 키워드를 분석 중입니다...");
-                await new Promise(r => setTimeout(r, 1500));
-
-                setAnalysisResult({
-                    totalScore: 86,
-                    verdict: "매우 긍정적 (Stable)",
-                    summary: "대부분의 리뷰가 신선도와 배송 속도에 만족하고 있습니다. 선물용으로 구매한 고객들의 반응이 특히 좋으며, 박스 포장에 대한 긍정적 언급이 많습니다. 일부 배송 중 파손에 대한 언급이 있으나 전반적인 평판은 매우 우수합니다.",
-                    keywords: MOCK_KEYWORDS
-                });
-                setMentions(MOCK_MENTIONS);
-                setHasRun(true);
-                return;
-            }
-
             // 1. Naver Search
             setLoadingStep("네이버 실시간 소셜 데이터를 수집 중입니다...");
             const query = companyInfo.name === '업체 정보 로딩 중...' || !companyInfo.name ? "버섯농장" : companyInfo.name;
-            const searchResults = await window.__TAURI__.core.invoke('fetch_naver_search', { query });
+            const searchResults = await invoke('fetch_naver_search', { query });
 
             // 2. Preprocess
             setLoadingStep("수집된 데이터를 전처리하고 있습니다...");

@@ -71,9 +71,9 @@ const ExperienceProgram = () => {
             program_id: p.program_id,
             program_name: p.program_name,
             description: p.description || '',
-            duration_minutes: p.duration_minutes || 60,
+            duration_minutes: p.duration_min || 60,
             price_per_person: p.price_per_person || 0,
-            max_participants: p.max_capacity || p.max_participants || 10,
+            max_participants: p.max_capacity || 10,
             is_active: p.is_active
         });
         nameInputRef.current?.focus();
@@ -331,7 +331,7 @@ const ExperienceProgram = () => {
                                                         </td>
                                                         <td className="px-6 py-5 text-right">
                                                             <div className="font-black text-indigo-700 text-sm">\{new Intl.NumberFormat('ko-KR').format(p.price_per_person)}</div>
-                                                            <div className="text-[10px] font-bold text-slate-400">{p.duration_minutes}분 / {p.max_participants}인</div>
+                                                            <div className="text-[10px] font-bold text-slate-400">{p.duration_min}분 / {p.max_capacity}인</div>
                                                         </td>
                                                         <td className="px-6 py-5 text-center">
                                                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${p.is_active ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>

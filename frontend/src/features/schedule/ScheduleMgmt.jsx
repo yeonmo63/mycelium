@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../utils/apiBridge';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { useModal } from '../../contexts/ModalContext';
@@ -120,19 +120,19 @@ const ScheduleMgmt = () => {
         try {
             if (editingSchedule) {
                 await invoke('update_schedule', {
-                    scheduleId: editingSchedule.schedule_id,
+                    schedule_id: editingSchedule.schedule_id,
                     title: formData.title,
                     description: formData.description,
-                    startTime: dayjs(formData.startTime).format('YYYY-MM-DDTHH:mm:ss'),
-                    endTime: dayjs(formData.endTime).format('YYYY-MM-DDTHH:mm:ss'),
+                    start_time: dayjs(formData.startTime).format('YYYY-MM-DDTHH:mm:ss'),
+                    end_time: dayjs(formData.endTime).format('YYYY-MM-DDTHH:mm:ss'),
                     status: formData.status
                 });
             } else {
                 await invoke('create_schedule', {
                     title: formData.title,
                     description: formData.description,
-                    startTime: dayjs(formData.startTime).format('YYYY-MM-DDTHH:mm:ss'),
-                    endTime: dayjs(formData.endTime).format('YYYY-MM-DDTHH:mm:ss'),
+                    start_time: dayjs(formData.startTime).format('YYYY-MM-DDTHH:mm:ss'),
+                    end_time: dayjs(formData.endTime).format('YYYY-MM-DDTHH:mm:ss'),
                     status: formData.status
                 });
             }
@@ -148,7 +148,7 @@ const ScheduleMgmt = () => {
         if (!await showConfirm('일정 삭제', '정말로 이 일정을 삭제하시겠습니까?')) return;
 
         try {
-            await invoke('delete_schedule', { scheduleId: id });
+            await invoke('delete_schedule', { schedule_id: id });
             closeModal();
             loadSchedules();
         } catch (err) {

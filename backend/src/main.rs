@@ -257,6 +257,47 @@ async fn main() {
             "/api/experience/programs/delete",
             post(commands::experience::delete_experience_program_axum),
         )
+        .route(
+            "/api/experience/reservations/create",
+            post(commands::experience::create_experience_reservation_axum),
+        )
+        .route(
+            "/api/experience/reservations",
+            get(commands::experience::get_experience_reservations_axum),
+        )
+        .route(
+            "/api/experience/reservations/update",
+            post(commands::experience::update_experience_reservation_axum),
+        )
+        .route(
+            "/api/experience/reservations/delete",
+            post(commands::experience::delete_experience_reservation_axum),
+        )
+        .route(
+            "/api/experience/reservations/status",
+            post(commands::experience::update_experience_status_axum),
+        )
+        .route(
+            "/api/experience/reservations/payment",
+            post(commands::experience::update_experience_payment_status_axum),
+        )
+        // Schedule Routes
+        .route(
+            "/api/schedule/list",
+            get(commands::schedule::get_schedules_axum),
+        )
+        .route(
+            "/api/schedule/create",
+            post(commands::schedule::create_schedule_axum),
+        )
+        .route(
+            "/api/schedule/update",
+            post(commands::schedule::update_schedule_axum),
+        )
+        .route(
+            "/api/schedule/delete",
+            post(commands::schedule::delete_schedule_axum),
+        )
         // Event Routes
         .route("/api/event/list", get(commands::event::get_all_events_axum))
         .route(
@@ -362,6 +403,86 @@ async fn main() {
             "/api/sales/ledger/debtors",
             get(commands::ledger::get_customers_with_debt_axum),
         )
+        // Finance Routes (Vendors & Purchases)
+        .route(
+            "/api/finance/vendors",
+            get(commands::finance::get_vendor_list_axum),
+        )
+        .route(
+            "/api/finance/vendors/save",
+            post(commands::finance::save_vendor_axum),
+        )
+        .route(
+            "/api/finance/vendors/delete",
+            post(commands::finance::delete_vendor_axum),
+        )
+        .route(
+            "/api/finance/purchases",
+            get(commands::finance::get_purchase_list_axum),
+        )
+        .route(
+            "/api/finance/purchases/save",
+            post(commands::finance::save_purchase_axum),
+        )
+        .route(
+            "/api/finance/purchases/delete",
+            post(commands::finance::delete_purchase_axum),
+        )
+        // Expense Routes
+        .route(
+            "/api/finance/expenses",
+            get(commands::finance::get_expense_list_axum),
+        )
+        .route(
+            "/api/finance/expenses/save",
+            post(commands::finance::save_expense_axum),
+        )
+        .route(
+            "/api/finance/expenses/delete",
+            post(commands::finance::delete_expense_axum),
+        )
+        // Tax Report Routes
+        .route(
+            "/api/finance/tax/report",
+            get(commands::sales::query::get_tax_report_v2_axum),
+        )
+        .route(
+            "/api/finance/tax/submit",
+            post(commands::sales::query::submit_tax_report_axum),
+        )
+        // Finance Analysis Routes
+        .route(
+            "/api/finance/analysis/monthly-pl",
+            get(commands::finance::get_monthly_pl_report_axum),
+        )
+        .route(
+            "/api/finance/analysis/cost-breakdown",
+            get(commands::finance::get_cost_breakdown_stats_axum),
+        )
+        .route(
+            "/api/finance/analysis/vendor-ranking",
+            get(commands::finance::get_vendor_purchase_ranking_axum),
+        )
+        .route(
+            "/api/finance/analysis/product-stats",
+            get(commands::finance::get_product_sales_stats_axum),
+        )
+        .route(
+            "/api/finance/analysis/product-monthly",
+            get(commands::finance::get_product_monthly_analysis_axum),
+        )
+        .route(
+            "/api/finance/analysis/product-trend",
+            get(commands::finance::get_product_10yr_sales_stats_axum),
+        )
+        .route(
+            "/api/finance/analysis/region-stats",
+            get(commands::analysis::get_sales_by_region_analysis_axum),
+        )
+        .route(
+            "/api/finance/analysis/profit-margin",
+            get(commands::finance::get_profit_margin_analysis_axum),
+        )
         .route(
             "/api/sales/ledger",
             get(commands::ledger::get_customer_ledger_axum),
@@ -404,13 +525,70 @@ async fn main() {
             post(commands::ai::get_consultation_ai_advisor_axum),
         )
         .route(
+            "/api/crm/claim-targets",
+            get(commands::crm::get_claim_targets_axum),
+        )
+        .route(
+            "/api/crm/sms/send",
+            post(commands::crm::send_sms_simulation_axum),
+        )
+        .route(
             "/api/crm/special-care",
             get(commands::crm::get_special_care_customers_axum),
+        )
+        .route(
+            "/api/crm/rfm-analysis",
+            get(commands::crm::get_rfm_analysis_axum),
+        )
+        .route(
+            "/api/crm/update-level",
+            post(commands::crm::update_customer_level_axum),
+        )
+        .route(
+            "/api/crm/update-memo-batch",
+            post(commands::customer::update_customer_memo_batch_axum),
+        )
+        .route(
+            "/api/crm/product-associations",
+            get(commands::crm::get_product_associations_axum),
+        )
+        .route(
+            "/api/finance/membership-sales",
+            get(commands::finance::get_membership_sales_analysis_axum),
         )
         // AI Routes
         .route(
             "/api/ai/business-card",
             post(commands::ai::parse_business_card_ai_axum),
+        )
+        .route("/api/ai/gemini", post(commands::ai::call_gemini_ai_axum))
+        .route(
+            "/api/ai/forecast",
+            post(commands::ai::get_ai_demand_forecast_axum),
+        )
+        .route(
+            "/api/ai/marketing-proposal",
+            post(commands::ai::get_ai_marketing_proposal_axum),
+        )
+        .route(
+            "/api/ai/detailed-plan",
+            post(commands::ai::get_ai_detailed_plan_axum),
+        )
+        .route(
+            "/api/ai/behavior",
+            get(commands::ai::get_ai_behavior_strategy_axum),
+        )
+        .route(
+            "/api/ai/repurchase",
+            get(commands::ai::get_ai_repurchase_analysis_axum),
+        )
+        .route(
+            "/api/ai/naver-search",
+            post(commands::ai::fetch_naver_search_axum),
+        )
+        .route(
+            "/api/ai/online-sentiment",
+            post(commands::ai::analyze_online_sentiment_axum),
         )
         // Settings & Integrations
         .route(

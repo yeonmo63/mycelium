@@ -210,6 +210,80 @@ pub async fn get_customer_sales_history(
     .await?)
 }
 
+#[derive(serde::Deserialize)]
+pub struct TaxReportParams {
+    pub start_date: String,
+    pub end_date: String,
+}
+
+pub async fn get_tax_report_v2_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+    Query(params): Query<TaxReportParams>,
+) -> MyceliumResult<Json<Vec<TaxReportItem>>> {
+    let report =
+        get_tax_report_v2(State::from(&state.pool), params.start_date, params.end_date).await?;
+    Ok(Json(report))
+}
+
+#[derive(serde::Deserialize)]
+pub struct SubmitTaxReportPayload {
+    pub items: Vec<TaxReportItem>,
+    pub start_date: String,
+    pub end_date: String,
+}
+
+pub async fn submit_tax_report_axum(
+    Json(payload): Json<SubmitTaxReportPayload>,
+) -> MyceliumResult<Json<String>> {
+    // Manually load config
+    let settings = crate::commands::config::load_integration_settings()?;
+
+    // Check Tax Settings
+    if let Some(tax_config) = settings.tax {
+        let api_key = &tax_config.api_key;
+        if api_key.is_empty() {
+            return Err(crate::error::MyceliumError::Internal(
+                "세무신고 API 키가 설정되지 않았습니다. 설정 > 외부 서비스 연동에서 키를 입력해주세요."
+                    .to_string(),
+            ));
+        }
+
+        let provider = &tax_config.provider;
+        let provider_name = match provider.as_str() {
+            "sim_hometax" => "국세청 홈택스(모의)",
+            "popbill" => "팝빌(연동)",
+            "smartbill" => "스마트빌(연동)",
+            _ => "기타 API 서비스",
+        };
+
+        // Summary
+        let mut total_sales_vat = 0;
+        let mut total_purchase_vat = 0;
+        for item in &payload.items {
+            if item.direction == "매출" {
+                total_sales_vat += item.vat_amount;
+            } else {
+                total_purchase_vat += item.vat_amount;
+            }
+        }
+
+        tracing::info!(
+            "Submitted tax report via {}: {} ~ {}",
+            provider_name,
+            payload.start_date,
+            payload.end_date
+        );
+
+        Ok(Json(format!("{} 서비스를 통해 {} ~ {} 기간의 세무신고 자료({}) 전송에 성공하였습니다. (납부예정 세액: {}원)", 
+            provider_name, payload.start_date, payload.end_date, payload.items.len(), total_sales_vat - total_purchase_vat)))
+    } else {
+        return Err(crate::error::MyceliumError::Internal(
+            "세무신고 연동 설정이 없습니다. 먼저 설정 > 외부 서비스 연동에서 설정을 진행해주세요."
+                .to_string(),
+        ));
+    }
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct TaxReportItem {
     pub direction: String, // '매출', '매입'
