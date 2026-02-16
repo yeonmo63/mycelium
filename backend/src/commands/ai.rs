@@ -899,6 +899,13 @@ pub async fn get_ai_detailed_plan_axum(
     Ok(Json(result))
 }
 
+pub async fn get_weather_marketing_advice_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<serde_json::Value>> {
+    let res = get_weather_marketing_advice(crate::stubs::State::from(&state.pool)).await?;
+    Ok(Json(res))
+}
+
 pub async fn get_consultation_ai_advisor(
     _state: State<'_, DbPool>,
     _consultation_id: i32,

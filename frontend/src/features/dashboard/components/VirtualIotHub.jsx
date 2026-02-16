@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../../../utils/apiBridge';
 import { Thermometer, Droplets, Wind, Activity, RefreshCw, Layers } from 'lucide-react';
 
 const VirtualIotHub = () => {
@@ -13,8 +13,8 @@ const VirtualIotHub = () => {
             const sensorList = await invoke('get_sensors');
             setSensors(sensorList);
 
-            if (sensorList.length > 0) {
-                const sensorIds = sensorList.map(s => s.sensor_id);
+            if (sensorList && sensorList.length > 0) {
+                const sensorIds = sensorList.map(s => s.sensor_id).join(',');
                 const latestReadings = await invoke('get_latest_readings', { sensorIds });
 
                 const readingMap = {};

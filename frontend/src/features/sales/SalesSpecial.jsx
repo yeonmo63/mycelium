@@ -113,17 +113,6 @@ const SalesSpecial = () => {
 
         setSearchQuery(query);
 
-        if (!window.__TAURI__) {
-            // Mock
-            // setEventSearchResults([
-            //     { event_id: 1, event_name: '2023 강릉 커피 축제', organizer: '강릉시', start_date: '2023-10-01', end_date: '2023-10-05' },
-            //     { event_id: 2, event_name: '서울 식품 박람회', organizer: 'KOTRA', start_date: '2023-11-01', end_date: '2023-11-04' }
-            // ]);
-            // setIsEventSearchOpen(true);
-            // setLastSearchQuery(query);
-            // return;
-        }
-
         try {
             const results = await callBridge('search_events_by_name', { name: query });
             setEventSearchResults(results || []);

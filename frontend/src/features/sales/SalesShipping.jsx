@@ -296,30 +296,13 @@ const SalesShipping = () => {
             ].join(','))
         ].join('\n');
 
-        try {
-            // Try Tauri Native Dialog
-            if (window.__TAURI__) {
-                const filePath = await window.__TAURI__.dialog.save({
-                    filters: [{ name: 'CSV', extensions: ['csv'] }],
-                    defaultPath: `배송목록_${new Date().toISOString().slice(0, 10)}.csv`
-                });
-
-                if (filePath) {
-                    await window.__TAURI__.fs.writeTextFile(filePath, '\uFEFF' + csvContent);
-                    showAlert('성공', '파일이 저장되었습니다.');
-                }
-            } else {
-                throw new Error("Web Environment: Using browser download");
-            }
-        } catch (err) {
-            console.warn("Native save failed, using fallback:", err);
-            // Fallback to browser download
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `배송목록_${new Date().toISOString().slice(0, 10)}.csv`;
-            link.click();
-        }
+        // Browser standard download
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `배송목록_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        showAlert('완료', 'CSV 파일 다운로드가 시작되었습니다.');
     };
 
     const handlePrint = () => {
@@ -361,15 +344,7 @@ const SalesShipping = () => {
         }
 
         if (url) {
-            try {
-                if (window.__TAURI__) {
-                    await window.__TAURI__.core.invoke('open_external_url', { url });
-                } else {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }
-            } catch (err) {
-                console.error("Failed to open URL", err);
-            }
+            window.open(url, '_blank', 'noopener,noreferrer');
         }
     };
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useModal } from '../../../../contexts/ModalContext';
+import { callBridge } from '../../../../utils/apiBridge';
 
 const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
     const { showAlert, showConfirm } = useModal();
@@ -14,10 +15,8 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
         if (!product?.product_id) return;
         setLoading(true);
         try {
-            if (window.__TAURI__) {
-                const list = await window.__TAURI__.core.invoke('get_product_bom', { productId: product.product_id });
-                setBomList(list || []);
-            }
+            const list = await callBridge('get_product_bom', { productId: product.product_id });
+            setBomList(list || []);
         } catch (e) {
             console.error(e);
             showAlert('오류', '자재 명세서를 불러오는데 실패했습니다.');
@@ -45,16 +44,14 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
         }
 
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('add_bom_item', {
-                    productId: product.product_id,
-                    materialId: Number(selectedMaterial),
-                    ratio: Number(ratio)
-                });
-                await loadBom();
-                setSelectedMaterial('');
-                setRatio(1);
-            }
+            await callBridge('add_bom_item', {
+                productId: product.product_id,
+                materialId: Number(selectedMaterial),
+                ratio: Number(ratio)
+            });
+            await loadBom();
+            setSelectedMaterial('');
+            setRatio(1);
         } catch (e) {
             console.error(e);
             showAlert('오류', '자재 추가 중 오류가 발생했습니다. (이미 존재하는 자재일 수 있습니다)');
@@ -64,13 +61,11 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
     const handleDelete = async (materialId) => {
         if (!await showConfirm('삭제 확인', '이 자재를 구성 목록에서 제거하시겠습니까?')) return;
         try {
-            if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('remove_bom_item', {
-                    productId: product.product_id,
-                    materialId
-                });
-                await loadBom();
-            }
+            await callBridge('remove_bom_item', {
+                productId: product.product_id,
+                materialId
+            });
+            await loadBom();
         } catch (e) {
             console.error(e);
             showAlert('오류', '자재 삭제 중 오류가 발생했습니다.');

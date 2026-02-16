@@ -1,12 +1,12 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
+use crate::state::AppState;
+use crate::stubs::{check_admin, command, State};
+use axum::extract::{Json, Query, State as AxumState};
 use chrono::{Local, Timelike};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Row};
-use crate::stubs::{command, State, check_admin};
-use crate::state::AppState;
-use axum::extract::{State as AxumState, Json};
 
 #[derive(Serialize, Deserialize, FromRow)]
 pub struct Sensor {
@@ -27,7 +27,6 @@ pub struct SensorReading {
     pub recorded_at: String,
 }
 
-
 pub async fn get_sensors(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sensor>> {
     let pool = &*state;
     let sensors = sqlx::query_as::<_, Sensor>("SELECT sensor_id, sensor_name, space_id, device_type, connection_info, is_active FROM sensors WHERE is_active = TRUE")
@@ -35,7 +34,6 @@ pub async fn get_sensors(state: State<'_, DbPool>) -> MyceliumResult<Vec<Sensor>
         .await?;
     Ok(sensors)
 }
-
 
 pub async fn get_latest_readings(
     state: State<'_, DbPool>,
@@ -120,11 +118,9 @@ fn get_virtual_simulation_data() -> VirtualSensorData {
     }
 }
 
-
 pub async fn get_virtual_sensor_data() -> MyceliumResult<VirtualSensorData> {
     Ok(get_virtual_simulation_data())
 }
-
 
 pub async fn push_sensor_data(
     state: State<'_, DbPool>,
@@ -151,7 +147,6 @@ pub async fn push_sensor_data(
 
     Ok(())
 }
-
 
 pub async fn save_sensor(state: State<'_, DbPool>, sensor: Sensor) -> MyceliumResult<()> {
     let pool = &*state;
@@ -181,7 +176,6 @@ pub async fn save_sensor(state: State<'_, DbPool>, sensor: Sensor) -> MyceliumRe
     }
     Ok(())
 }
-
 
 pub async fn delete_sensor(state: State<'_, DbPool>, sensor_id: i32) -> MyceliumResult<()> {
     let pool = &*state;
@@ -254,5 +248,49 @@ pub async fn delete_sensor_axum(
         .bind(payload.sensor_id)
         .execute(&state.pool)
         .await?;
+    Ok(Json(()))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestReadingsQuery {
+    pub sensor_ids: String, // Comma separated IDs
+}
+
+pub async fn get_latest_readings_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(params): Query<LatestReadingsQuery>,
+) -> MyceliumResult<Json<Vec<SensorReading>>> {
+    let ids: Vec<i32> = params
+        .sensor_ids
+        .split(',')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    let readings = get_latest_readings(crate::stubs::State::from(&state.pool), ids).await?;
+    Ok(Json(readings))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushSensorDataPayload {
+    pub sensor_id: i32,
+    pub temp: f64,
+    pub humid: f64,
+    pub co2: f64,
+}
+
+pub async fn push_sensor_data_axum(
+    AxumState(state): AxumState<AppState>,
+    Json(payload): Json<PushSensorDataPayload>,
+) -> MyceliumResult<Json<()>> {
+    push_sensor_data(
+        crate::stubs::State::from(&state.pool),
+        payload.sensor_id,
+        payload.temp,
+        payload.humid,
+        payload.co2,
+    )
+    .await?;
     Ok(Json(()))
 }

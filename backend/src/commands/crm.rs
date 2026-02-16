@@ -522,3 +522,10 @@ pub async fn get_product_associations_axum(
     let associations = get_product_associations(crate::stubs::State::from(&state.pool)).await?;
     Ok(Json(associations))
 }
+
+pub async fn get_repurchase_candidates_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<crate::db::RepurchaseCandidate>>> {
+    let candidates = get_repurchase_candidates(crate::stubs::State::from(&state.pool)).await?;
+    Ok(Json(candidates))
+}

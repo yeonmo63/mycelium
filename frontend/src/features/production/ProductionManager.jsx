@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-import { appDataDir, join } from '@tauri-apps/api/path';
-import { save } from '@tauri-apps/plugin-dialog';
 import { useModal } from '../../contexts/ModalContext';
 import {
     LayoutDashboard,

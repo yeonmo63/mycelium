@@ -1,3 +1,5 @@
+// Release 빌드 시 Windows 콘솔 창 숨김 (자동 실행, 바로가기 등에서 콘솔 안 보임)
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(unused_imports, dead_code, unused_variables, non_snake_case)]
 use axum::http::{header, StatusCode, Uri};
 use axum::response::IntoResponse;
@@ -31,7 +33,22 @@ pub static BACKUP_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
+    // Load .env from executable's directory first (critical for shortcuts/auto-start),
+    // then fall back to CWD-based loading.
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let env_path = exe_dir.join(".env");
+            if env_path.exists() {
+                let _ = dotenvy::from_path(&env_path);
+            } else {
+                dotenv().ok();
+            }
+        } else {
+            dotenv().ok();
+        }
+    } else {
+        dotenv().ok();
+    }
 
     // Initialize tracing
     tracing_subscriber::registry()
@@ -229,6 +246,10 @@ async fn main() {
             get(commands::product::get_product_freshness_axum),
         )
         .route(
+            "/api/product/forecast-alerts",
+            get(commands::product::get_inventory_forecast_alerts_axum),
+        )
+        .route(
             "/api/product/logs",
             get(commands::product::get_inventory_logs_axum),
         )
@@ -297,6 +318,10 @@ async fn main() {
         .route(
             "/api/schedule/delete",
             post(commands::schedule::delete_schedule_axum),
+        )
+        .route(
+            "/api/schedule/anniversary",
+            get(commands::schedule::get_upcoming_anniversaries_axum),
         )
         // Event Routes
         .route("/api/event/list", get(commands::event::get_all_events_axum))
@@ -556,6 +581,10 @@ async fn main() {
             "/api/finance/membership-sales",
             get(commands::finance::get_membership_sales_analysis_axum),
         )
+        .route(
+            "/api/crm/repurchase",
+            get(commands::crm::get_repurchase_candidates_axum),
+        )
         // AI Routes
         .route(
             "/api/ai/business-card",
@@ -589,6 +618,10 @@ async fn main() {
         .route(
             "/api/ai/online-sentiment",
             post(commands::ai::analyze_online_sentiment_axum),
+        )
+        .route(
+            "/api/ai/weather-advice",
+            get(commands::ai::get_weather_marketing_advice_axum),
         )
         // Settings & Integrations
         .route(
@@ -776,6 +809,11 @@ async fn main() {
             "/api/iot/sensors/delete",
             post(commands::iot::delete_sensor_axum),
         )
+        .route(
+            "/api/iot/latest",
+            get(commands::iot::get_latest_readings_axum),
+        )
+        .route("/api/iot/push", post(commands::iot::push_sensor_data_axum))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

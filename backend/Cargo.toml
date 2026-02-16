@@ -40,3 +40,7 @@ aead = "0.5.2"
 local-ip-address = "0.6.10"
 sha2 = "0.10.9"
 dirs = "6.0.0"
+
+[package.metadata.wix]
+compiler-args = ["-ext", "WixUtilExtension"]
+linker-args = ["-ext", "WixUtilExtension"]

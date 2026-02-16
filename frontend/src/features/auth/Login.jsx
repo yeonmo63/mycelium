@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
 import { QRCodeSVG } from 'qrcode.react';
+import { invoke } from '../../utils/apiBridge';
 
 const Login = ({ onLoginSuccess }) => {
     const [username, setUsername] = useState('');
@@ -17,11 +16,9 @@ const Login = ({ onLoginSuccess }) => {
 
         const loadCompanyName = async () => {
             try {
-                if (window.__TAURI__) {
-                    const info = await invoke('get_company_info');
-                    if (info && info.company_name) {
-                        setCompanyName(info.company_name);
-                    }
+                const info = await invoke('get_company_info');
+                if (info && info.company_name) {
+                    setCompanyName(info.company_name);
                 }
             } catch (err) {
                 console.error("Failed to load company name:", err);
@@ -31,10 +28,8 @@ const Login = ({ onLoginSuccess }) => {
 
         const fetchIp = async () => {
             try {
-                if (window.__TAURI__) {
-                    const ip = await invoke('get_local_ip_command');
-                    if (ip) setLocalIp(ip);
-                }
+                const ip = await invoke('get_local_ip_command');
+                if (ip) setLocalIp(ip);
             } catch (err) {
                 console.error("Failed to fetch IP:", err);
             }
@@ -54,10 +49,8 @@ const Login = ({ onLoginSuccess }) => {
         setIsLoading(true);
 
         try {
-            const isWeb = !window.__TAURI__;
-
-            // Check if we are in a mobile browser (no Tauri bridge)
-            if (isWeb && window.location.pathname.startsWith('/mobile-')) {
+            // Check if we are in a mobile browser
+            if (window.location.pathname.startsWith('/mobile-')) {
                 console.log("Mobile browser detected. Entering Preview Mode.");
                 sessionStorage.setItem('isLoggedIn', 'true');
                 sessionStorage.setItem('userId', '999');
@@ -72,28 +65,10 @@ const Login = ({ onLoginSuccess }) => {
                 return;
             }
 
-            let response;
-            if (isWeb) {
-                try {
-                    const res = await fetch('/api/auth/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            username: username.trim(),
-                            password: password.trim()
-                        })
-                    });
-                    response = await res.json();
-                } catch (e) {
-                    console.error("Web Login Fetch Error:", e);
-                    throw e;
-                }
-            } else {
-                response = await invoke('login', {
-                    username: username.trim(),
-                    password: password.trim()
-                });
-            }
+            const response = await invoke('login', {
+                username: username.trim(),
+                password: password.trim()
+            });
 
             if (response.success) {
                 sessionStorage.setItem('isLoggedIn', 'true');
@@ -173,9 +148,10 @@ const Login = ({ onLoginSuccess }) => {
                     {/* UI Close Button (Top Right) */}
                     <button
                         type="button"
-                        onClick={() => {
-                            console.log("Login: UI Close button clicked");
-                            emit('window_close_requested', {});
+                        onClick={async () => {
+                            if (window.confirm("프로그램을 종료(창 닫기)하시겠습니까?")) {
+                                window.close();
+                            }
                         }}
                         style={{
                             position: 'absolute',

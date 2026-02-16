@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { formatCurrency } from '../../../../utils/common';
+import { callBridge } from '../../../../utils/apiBridge';
 
 const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, products, handleBatchConvert }) => {
     if (!isOpen) return null;
@@ -49,10 +50,8 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                 const uniqueIds = [...new Set(targetIds)];
                 const bomMap = {};
                 for (const pid of uniqueIds) {
-                    if (window.__TAURI__) {
-                        const boms = await window.__TAURI__.core.invoke('get_product_bom', { productId: pid });
-                        bomMap[pid] = boms || [];
-                    }
+                    const boms = await callBridge('get_product_bom', { productId: pid });
+                    bomMap[pid] = boms || [];
                 }
                 const aggregation = {};
                 convertModal.targets.forEach(target => {

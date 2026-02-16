@@ -233,3 +233,17 @@ pub async fn delete_schedule_axum(
 
     Ok(Json(true))
 }
+
+#[derive(serde::Deserialize)]
+pub struct UpcomingAnniversaryQuery {
+    pub days: Option<i32>,
+}
+
+pub async fn get_upcoming_anniversaries_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(params): Query<UpcomingAnniversaryQuery>,
+) -> MyceliumResult<Json<Vec<serde_json::Value>>> {
+    let days = params.days.unwrap_or(7);
+    let res = get_upcoming_anniversaries(crate::stubs::State::from(&state.pool), days).await?;
+    Ok(Json(res))
+}

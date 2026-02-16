@@ -582,16 +582,16 @@ const ExperienceStatus = () => {
                                                 <div className="text-[11px] font-black text-slate-400 mt-0.5">{formatPhoneNumber(r.guest_contact)}</div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <div className="text-sm font-black text-slate-800">\{formatPrice(r.total_amount)}</div>
+                                                <div className="text-sm font-black text-slate-800">{formatPrice(r.total_amount)}</div>
                                                 <div className="text-[10px] font-bold text-slate-400">{r.participant_count}명</div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`text - [10px] font - black px - 2.5 py - 1.5 rounded - full border shadow - sm inline - block min - w - [60px] text - center ${getStatusStyle(r.status)} `}>
+                                                <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-full border shadow-sm inline-block min-w-[60px] text-center ${getStatusStyle(r.status)}`}>
                                                     {r.status}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
-                                                <span className={`text - [10px] font - black px - 2.5 py - 1.5 rounded - full border shadow - sm inline - block min - w - [60px] text - center ${getPaymentStyle(r.payment_status)} `}>
+                                                <span className={`text-[9px] font-black px-2.5 py-1.5 rounded-full border shadow-sm inline-block min-w-[60px] text-center ${getPaymentStyle(r.payment_status)}`}>
                                                     {r.payment_status}
                                                 </span>
                                             </td>
@@ -650,7 +650,7 @@ const ExperienceStatus = () => {
                             <div className="w-px h-12 bg-slate-200"></div>
                             <div className="flex flex-col items-center">
                                 <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-1">예상 매출액</span>
-                                <span className="text-2xl font-black text-slate-700">\{formatPrice(reservations.reduce((sum, r) => sum + (r.total_amount || 0), 0))}</span>
+                                <span className="text-2xl font-black text-slate-700">{formatPrice(reservations.reduce((sum, r) => sum + (r.total_amount || 0), 0))}</span>
                             </div>
                         </div>
                     </div>

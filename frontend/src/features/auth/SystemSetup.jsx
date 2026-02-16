@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
 import { useModal } from '../../contexts/ModalContext';
 
 const SystemSetup = ({ onComplete }) => {
@@ -69,7 +67,11 @@ const SystemSetup = ({ onComplete }) => {
 
                 {/* Close Button */}
                 <button
-                    onClick={() => emit('window_close_requested', {})}
+                    onClick={async () => {
+                        if (window.confirm("설정을 중단하고 창을 닫으시겠습니까?")) {
+                            window.close();
+                        }
+                    }}
                     className="absolute top-8 right-8 w-10 h-10 rounded-xl bg-slate-800/50 border border-slate-700 text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/20 transition-all flex items-center justify-center z-20"
                     title="프로그램 종료"
                 >

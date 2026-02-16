@@ -990,6 +990,36 @@ pub async fn get_inventory_forecast_alerts(
         .fetch_all(&*state)
         .await?)
 }
+
+pub async fn get_inventory_forecast_alerts_axum(
+    AxumState(state): AxumState<crate::state::AppState>,
+) -> MyceliumResult<Json<Vec<InventoryAlert>>> {
+    let sql = r#"
+        WITH consumption AS (
+            SELECT 
+                COALESCE(product_id, 0) as product_id,
+                product_name,
+                specification,
+                SUM(quantity) as total_qty, 
+                COUNT(DISTINCT order_date) as days_active
+            FROM sales 
+            WHERE order_date >= NOW() - INTERVAL '30 days' AND status != '취소' 
+            GROUP BY product_id, product_name, specification
+        )
+        SELECT p.product_id, p.product_name, p.specification, p.stock_quantity, p.safety_stock,
+            COALESCE(CAST(c.total_qty AS DOUBLE PRECISION) / NULLIF(c.days_active, 0), 0.0) as daily_avg_consumption,
+            CAST(CASE WHEN COALESCE(c.total_qty, 0) > 0 THEN CAST(p.stock_quantity AS INTEGER) / (CAST(c.total_qty AS FLOAT) / 30.0) ELSE 999 END AS INTEGER) as days_remaining,
+            COALESCE(p.item_type, 'product') as item_type
+        FROM products p 
+        LEFT JOIN consumption c ON (p.product_id = c.product_id OR (c.product_id = 0 AND p.product_name = c.product_name AND p.specification IS NOT DISTINCT FROM c.specification))
+        WHERE p.status = '판매중' ORDER BY stock_quantity ASC LIMIT 10
+    "#;
+
+    let res = sqlx::query_as::<_, InventoryAlert>(sql)
+        .fetch_all(&state.pool)
+        .await?;
+    Ok(Json(res))
+}
 #[derive(serde::Deserialize)]
 pub struct BomItemInput {
     pub material_id: i32,

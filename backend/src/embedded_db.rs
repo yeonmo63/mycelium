@@ -158,7 +158,13 @@ pub async fn start_db() -> Result<Child, String> {
         .arg("-c")
         .arg("max_connections=100")
         .arg("-c")
-        .arg("shared_buffers=128MB");
+        .arg("shared_buffers=128MB")
+        .arg("-c")
+        .arg("work_mem=16MB")
+        .arg("-c")
+        .arg("effective_cache_size=256MB")
+        .arg("-c")
+        .arg("random_page_cost=1.1");
 
     // Important: Set CWD to bin dir so it finds DLLs on Windows
     cmd.current_dir(&bin_dir);
