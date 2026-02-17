@@ -365,6 +365,8 @@ pub struct User {
     pub username: String,
     pub password_hash: Option<String>,
     pub role: String,
+    #[sqlx(default)]
+    pub ui_mode: Option<String>,
     pub created_at: Option<NaiveDateTime>,
     #[sqlx(default)]
     pub updated_at: Option<NaiveDateTime>,

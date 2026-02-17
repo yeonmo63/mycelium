@@ -29,7 +29,8 @@ const SettingsUser = () => {
     const [formData, setFormData] = useState({
         username: '',
         password: '',
-        role: 'user'
+        role: 'user',
+        ui_mode: 'pro'
     });
 
     const usernameInputRef = React.useRef(null);
@@ -74,7 +75,8 @@ const SettingsUser = () => {
         setFormData({
             username: user.username,
             password: '', // Leave empty for editing
-            role: user.role
+            role: user.role,
+            ui_mode: user.ui_mode || 'pro'
         });
         usernameInputRef.current?.focus();
     };
@@ -84,7 +86,8 @@ const SettingsUser = () => {
         setFormData({
             username: '',
             password: '',
-            role: 'user'
+            role: 'user',
+            ui_mode: 'pro'
         });
     };
 
@@ -101,7 +104,8 @@ const SettingsUser = () => {
                     id: editingUser.id,
                     username: formData.username,
                     password: formData.password || null,
-                    role: formData.role
+                    role: formData.role,
+                    ui_mode: formData.ui_mode
                 });
                 showAlert('수정 완료', '사용자 정보가 수정되었습니다.');
             } else {
@@ -112,7 +116,8 @@ const SettingsUser = () => {
                 await callBridge('create_user', {
                     username: formData.username,
                     password: formData.password,
-                    role: formData.role
+                    role: formData.role,
+                    ui_mode: formData.ui_mode
                 });
                 showAlert('등록 완료', '새로운 사용자가 등록되었습니다.');
             }
@@ -242,6 +247,26 @@ const SettingsUser = () => {
                                     </select>
                                 </div>
 
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2 text-left">UI Mode</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, ui_mode: 'lite' })}
+                                            className={`h-11 rounded-xl font-black text-[10px] uppercase transition-all border-2 ${formData.ui_mode === 'lite' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}
+                                        >
+                                            Lite (단순 모드)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, ui_mode: 'pro' })}
+                                            className={`h-11 rounded-xl font-black text-[10px] uppercase transition-all border-2 ${formData.ui_mode === 'pro' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}
+                                        >
+                                            Pro (전문가 모드)
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
                                     <button
                                         type="submit"
@@ -286,8 +311,9 @@ const SettingsUser = () => {
                                         <tr>
                                             <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[10%]">No.</th>
                                             <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[30%]">사용자 ID</th>
-                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[20%]">역할</th>
-                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[25%]">생성일</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[15%]">역할</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[15%]">UI 모드</th>
+                                            <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[20%]">생성일</th>
                                             <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-[15%]">관리</th>
                                         </tr>
                                     </thead>
@@ -310,6 +336,13 @@ const SettingsUser = () => {
                                                         ${u.role === 'admin' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-50 text-slate-600 border-slate-100'}
                                                     `}>
                                                         {u.role === 'admin' ? '관리자' : '일반 사용자'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tight border
+                                                        ${u.ui_mode === 'lite' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}
+                                                    `}>
+                                                        {u.ui_mode === 'lite' ? 'LITE' : 'PRO'}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-4 text-center text-xs font-bold text-slate-400 tabular-nums whitespace-nowrap">

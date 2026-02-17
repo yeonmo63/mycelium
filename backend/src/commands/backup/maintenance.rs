@@ -2,12 +2,14 @@ use crate::db::DbPool;
 use crate::error::MyceliumResult;
 
 // Using global stubs
-use crate::stubs::{AppHandle, State, TauriState, command, check_admin};
-use axum::extract::{State as AxumState, Json};
-
+use crate::stubs::{check_admin, command, AppHandle, State, TauriState};
+use axum::extract::{Json, State as AxumState};
 
 #[allow(dead_code)]
-pub async fn reset_database(app: AppHandle, state: TauriState<'_, DbPool>) -> MyceliumResult<String> {
+pub async fn reset_database(
+    app: AppHandle,
+    state: TauriState<'_, DbPool>,
+) -> MyceliumResult<String> {
     let _ = app;
     internal_reset_database(&state).await
 }
@@ -48,6 +50,9 @@ async fn internal_reset_database(pool: &sqlx::Pool<sqlx::Postgres>) -> MyceliumR
         "schedules",
         "sensor_readings",
         "sensors",
+        "sms_logs",
+        "customer_logs",
+        "system_logs",
     ];
 
     for table in tables {
@@ -58,7 +63,6 @@ async fn internal_reset_database(pool: &sqlx::Pool<sqlx::Postgres>) -> MyceliumR
 
     Ok("데이터베이스가 초기화되었습니다.".to_string())
 }
-
 
 pub async fn cleanup_old_logs(
     app: AppHandle,
@@ -75,36 +79,45 @@ pub async fn cleanup_old_logs(
         .unwrap_or_default();
 
     // Cleanup deletion log older than N months
-    let res: sqlx::postgres::PgQueryResult = sqlx::query("DELETE FROM deletion_log WHERE deleted_at < $1")
-        .bind(target_date)
-        .execute(pool)
-        .await?;
+    let res: sqlx::postgres::PgQueryResult =
+        sqlx::query("DELETE FROM deletion_log WHERE deleted_at < $1")
+            .bind(target_date)
+            .execute(pool)
+            .await?;
     total_deleted += res.rows_affected();
 
     // Cleanup inventory logs older than N months
-    let res: sqlx::postgres::PgQueryResult = sqlx::query("DELETE FROM inventory_logs WHERE created_at < $1")
-        .bind(target_date)
-        .execute(pool)
-        .await?;
+    let res: sqlx::postgres::PgQueryResult =
+        sqlx::query("DELETE FROM inventory_logs WHERE created_at < $1")
+            .bind(target_date)
+            .execute(pool)
+            .await?;
     total_deleted += res.rows_affected();
 
     // Cleanup system audit logs older than N months
-    let res: sqlx::postgres::PgQueryResult = sqlx::query("DELETE FROM system_logs WHERE created_at < $1")
-        .bind(target_date)
-        .execute(pool)
-        .await?;
+    let res: sqlx::postgres::PgQueryResult =
+        sqlx::query("DELETE FROM system_logs WHERE created_at < $1")
+            .bind(target_date)
+            .execute(pool)
+            .await?;
     total_deleted += res.rows_affected();
 
     // Cleanup sensor readings older than N months
-    let res: sqlx::postgres::PgQueryResult = sqlx::query("DELETE FROM sensor_readings WHERE recorded_at < $1")
+    let res: sqlx::postgres::PgQueryResult =
+        sqlx::query("DELETE FROM sensor_readings WHERE recorded_at < $1")
+            .bind(target_date)
+            .execute(pool)
+            .await?;
+    total_deleted += res.rows_affected();
+
+    // Cleanup SMS logs older than N months
+    let res: sqlx::postgres::PgQueryResult = sqlx::query("DELETE FROM sms_logs WHERE sent_at < $1")
         .bind(target_date)
         .execute(pool)
         .await?;
     total_deleted += res.rows_affected();
-
     Ok(total_deleted)
 }
-
 
 pub async fn run_db_maintenance(
     app: AppHandle,

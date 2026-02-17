@@ -27,4 +27,5 @@ pub struct SessionState {
     pub user_id: Option<i32>,
     pub username: Option<String>,
     pub role: Option<String>,
+    pub ui_mode: Option<String>,
 }

@@ -178,6 +178,7 @@ pub struct LoginResponse {
     pub user_id: Option<i32>,
     pub username: Option<String>,
     pub role: Option<String>,
+    pub ui_mode: Option<String>,
 }
 
 pub async fn login(
@@ -194,11 +195,12 @@ pub async fn login(
             user_id: None,
             username: None,
             role: None,
+            ui_mode: None,
         }));
     }
 
     let user_result = sqlx::query_as::<_, User>(
-        "SELECT id, username, password_hash, role, created_at, updated_at FROM users WHERE username = $1",
+        "SELECT id, username, password_hash, role, ui_mode, created_at, updated_at FROM users WHERE username = $1",
     )
     .bind(&username)
     .fetch_optional(&state.pool)
@@ -215,6 +217,7 @@ pub async fn login(
                                 session.user_id = Some(user.id);
                                 session.username = Some(user.username.clone());
                                 session.role = Some(user.role.clone());
+                                session.ui_mode = user.ui_mode.clone();
                             }
 
                             Ok(Json(LoginResponse {
@@ -223,6 +226,7 @@ pub async fn login(
                                 user_id: Some(user.id),
                                 username: Some(user.username.clone()),
                                 role: Some(user.role.clone()),
+                                ui_mode: user.ui_mode,
                             }))
                         } else {
                             Ok(Json(LoginResponse {
@@ -231,6 +235,7 @@ pub async fn login(
                                 user_id: None,
                                 username: None,
                                 role: None,
+                                ui_mode: None,
                             }))
                         }
                     }
@@ -240,6 +245,7 @@ pub async fn login(
                         user_id: None,
                         username: None,
                         role: None,
+                        ui_mode: None,
                     })),
                 }
             } else {
@@ -249,6 +255,7 @@ pub async fn login(
                     user_id: None,
                     username: None,
                     role: None,
+                    ui_mode: None,
                 }))
             }
         }
@@ -258,6 +265,7 @@ pub async fn login(
             user_id: None,
             username: None,
             role: None,
+            ui_mode: None,
         })),
     }
 }
@@ -267,6 +275,7 @@ pub async fn logout(State(state): State<AppState>) -> Json<()> {
         session.user_id = None;
         session.username = None;
         session.role = None;
+        session.ui_mode = None;
     }
     Json(())
 }
@@ -299,7 +308,7 @@ pub async fn check_auth_status(
 
 pub async fn get_all_users(State(state): State<AppState>) -> MyceliumResult<Json<Vec<User>>> {
     let users = sqlx::query_as::<_, User>(
-        "SELECT id, username, NULL as password_hash, role, created_at, updated_at FROM users ORDER BY id ASC",
+        "SELECT id, username, NULL as password_hash, role, ui_mode, created_at, updated_at FROM users ORDER BY id ASC",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -312,6 +321,7 @@ pub struct CreateUserRequest {
     pub username: String,
     pub password: String,
     pub role: String,
+    pub ui_mode: String,
 }
 
 pub async fn create_user(
@@ -321,12 +331,15 @@ pub async fn create_user(
     let hashed = hash(payload.password, DEFAULT_COST)
         .map_err(|e| MyceliumError::Internal(format!("Hash error: {}", e)))?;
 
-    sqlx::query("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)")
-        .bind(payload.username)
-        .bind(hashed)
-        .bind(payload.role)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        "INSERT INTO users (username, password_hash, role, ui_mode) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(payload.username)
+    .bind(hashed)
+    .bind(payload.role)
+    .bind(payload.ui_mode)
+    .execute(&state.pool)
+    .await?;
 
     Ok(Json(json!({ "success": true })))
 }
@@ -337,6 +350,7 @@ pub struct UpdateUserRequest {
     pub username: String,
     pub password: Option<String>,
     pub role: String,
+    pub ui_mode: String,
 }
 
 pub async fn update_user(
@@ -348,10 +362,11 @@ pub async fn update_user(
             let hashed = hash(password, DEFAULT_COST)
                 .map_err(|e| MyceliumError::Internal(format!("Hash error: {}", e)))?;
 
-            sqlx::query("UPDATE users SET username = $1, password_hash = $2, role = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4")
+            sqlx::query("UPDATE users SET username = $1, password_hash = $2, role = $3, ui_mode = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5")
                 .bind(payload.username)
                 .bind(hashed)
                 .bind(payload.role)
+                .bind(payload.ui_mode)
                 .bind(payload.id)
                 .execute(&state.pool)
                 .await?;
@@ -360,10 +375,11 @@ pub async fn update_user(
     }
 
     sqlx::query(
-        "UPDATE users SET username = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
+        "UPDATE users SET username = $1, role = $2, ui_mode = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4",
     )
     .bind(payload.username)
     .bind(payload.role)
+    .bind(payload.ui_mode)
     .bind(payload.id)
     .execute(&state.pool)
     .await?;

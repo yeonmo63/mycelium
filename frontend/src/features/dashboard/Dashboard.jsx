@@ -26,6 +26,7 @@ import { useDashboard } from './hooks/useDashboard';
 const Dashboard = () => {
     const { showAlert, showConfirm } = useModal();
     const navigate = useNavigate();
+    const isLite = sessionStorage.getItem('uiMode') === 'lite';
 
     // Custom Hook for Data
     const {
@@ -195,14 +196,6 @@ const Dashboard = () => {
                     />
 
                     <StatCard
-                        icon="cake" iconColor="text-pink-600" iconBg="bg-pink-50"
-                        label="기념일 고객 케어" value={`${anniversaries.length}명`}
-                        badge="기념일" isLoading={isLoading}
-                        className={`border-l-4 border-l-pink-500 ${expandedAlert === 'anniversary' ? 'ring-2 ring-pink-500' : ''}`}
-                        onClick={() => toggleAlert('anniversary')}
-                    />
-
-                    <StatCard
                         icon="forum" iconColor="text-blue-600" iconBg="bg-blue-50"
                         label="상담 대기" value={`${stats?.pending_consultation_count || 0}건`}
                         badge="상담" isLoading={isLoading}
@@ -210,40 +203,42 @@ const Dashboard = () => {
                         onClick={() => navigate('/customer/consultation')}
                     />
 
-                    <StatCard
-                        icon="notifications_active" iconColor="text-indigo-600" iconBg="bg-indigo-50"
-                        label="재구매 예정" value={`${formatCurrency(repurchaseCandidates.length)}건`}
-                        badge="재구매" isLoading={isLoading}
-                        className={`border-l-4 border-l-indigo-500 ${expandedAlert === 'repurchase' ? 'ring-2 ring-indigo-500' : ''}`}
-                        onClick={() => toggleAlert('repurchase')}
-                    />
+                    {!isLite && (
+                        <StatCard
+                            icon="notifications_active" iconColor="text-indigo-600" iconBg="bg-indigo-50"
+                            label="재구매 예정" value={`${formatCurrency(repurchaseCandidates.length)}건`}
+                            badge="재구매" isLoading={isLoading}
+                            className={`border-l-4 border-l-indigo-500 ${expandedAlert === 'repurchase' ? 'ring-2 ring-indigo-500' : ''}`}
+                            onClick={() => toggleAlert('repurchase')}
+                        />
+                    )}
 
-                    {/* AI Intelligence Hub */}
-                    <div className="bg-white rounded-[28px] py-5 px-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col justify-between h-full group transition-all duration-500 hover:border-indigo-200">
-                        <div className="flex justify-between items-start">
-                            <h3 className="text-slate-500 text-[0.8rem] font-bold flex items-center gap-2 uppercase tracking-wider">
-                                <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-1.5 rounded-lg text-lg">insights</span>지능형 분석
-                            </h3>
-                            <span className="bg-indigo-50 text-indigo-500 text-[9px] font-black px-2 py-0.5 rounded-full border border-indigo-100 uppercase tracking-tighter">AI 분석</span>
-                        </div>
-                        <div className="flex flex-col gap-1 mt-2">
-                            <button onClick={handleAIBriefing} className="w-full bg-slate-50 hover:bg-slate-100 p-1.5 rounded-xl text-left transition-all group flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-slate-700 ml-1">일일 브리핑</span>
-                                <span className="material-symbols-rounded text-sm text-slate-300 group-hover:text-indigo-500 transition-colors">arrow_forward</span>
-                            </button>
-                            <div className="grid grid-cols-2 gap-1">
-                                <button onClick={() => handleBusinessReport('weekly')} className="bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-xl text-center transition-all group">
-                                    <span className="text-[11px] font-black text-slate-700 group-hover:text-indigo-600">주간 성과</span>
+                    {!isLite && (
+                        <div className="bg-white rounded-[28px] py-5 px-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col justify-between h-full group transition-all duration-500 hover:border-indigo-200">
+                            <div className="flex justify-between items-start">
+                                <h3 className="text-slate-500 text-[0.8rem] font-bold flex items-center gap-2 uppercase tracking-wider">
+                                    <span className="material-symbols-rounded text-indigo-600 bg-indigo-50 p-1.5 rounded-lg text-lg">insights</span>지능형 분석
+                                </h3>
+                                <span className="bg-indigo-50 text-indigo-500 text-[9px] font-black px-2 py-0.5 rounded-full border border-indigo-100 uppercase tracking-tighter">AI 분석</span>
+                            </div>
+                            <div className="flex flex-col gap-1 mt-2">
+                                <button onClick={handleAIBriefing} className="w-full bg-slate-50 hover:bg-slate-100 p-1.5 rounded-xl text-left transition-all group flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-700 ml-1">일일 브리핑</span>
+                                    <span className="material-symbols-rounded text-sm text-slate-300 group-hover:text-indigo-500 transition-colors">arrow_forward</span>
                                 </button>
-                                <button onClick={() => handleBusinessReport('monthly')} className="bg-slate-50 hover:bg-emerald-50 p-1.5 rounded-xl text-center transition-all group">
-                                    <span className="text-[11px] font-black text-slate-700 group-hover:text-emerald-600">월간 분석</span>
-                                </button>
+                                <div className="grid grid-cols-2 gap-1">
+                                    <button onClick={() => handleBusinessReport('weekly')} className="bg-slate-50 hover:bg-indigo-50 p-1.5 rounded-xl text-center transition-all group">
+                                        <span className="text-[11px] font-black text-slate-700 group-hover:text-indigo-600">주간 성과</span>
+                                    </button>
+                                    <button onClick={() => handleBusinessReport('monthly')} className="bg-slate-50 hover:bg-emerald-50 p-1.5 rounded-xl text-center transition-all group">
+                                        <span className="text-[11px] font-black text-slate-700 group-hover:text-emerald-600">월간 분석</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* 4. Virtual IoT Hub (Simulator) */}
-                    <VirtualIotHub />
+                    {!isLite && <VirtualIotHub />}
                 </div>
 
                 {/* 3. Alert Expansion Detail */}
@@ -259,8 +254,8 @@ const Dashboard = () => {
                 />
 
                 {/* 4. Bottom Data Sections */}
-                <div className="grid grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-5 flex-1 min-h-0">
-                    <SalesChart weeklyData={weeklyData} isChartLoading={isChartLoading} navigate={navigate} />
+                <div className={`grid grid-cols-1 ${isLite ? '' : 'xl:grid-cols-[1.5fr_1fr]'} gap-5 flex-1 min-h-0`}>
+                    {!isLite && <SalesChart weeklyData={weeklyData} isChartLoading={isChartLoading} navigate={navigate} />}
                     <TopProductsTable
                         top3Products={top3Products}
                         topProfitProducts={topProfitProducts}

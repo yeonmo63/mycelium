@@ -8,7 +8,7 @@ use crate::db::{
     CompanyInfo, Consultation, Customer, CustomerAddress, CustomerLedger, CustomerLog, DbPool,
     Event, Expense, ExperienceProgram, FarmingLog, HarvestRecord, InventoryLog, Product,
     ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, Sensor,
-    SensorReadingRecord, User, Vendor,
+    SensorReadingRecord, SmsLog, User, Vendor,
 };
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::BACKUP_CANCELLED;
@@ -20,8 +20,7 @@ use std::fs::File;
 use std::io::{BufRead, BufWriter, Read, Write};
 use std::sync::atomic::Ordering;
 // Using global stubs
-use crate::stubs::{AppHandle, Emitter, State as TauriState, check_admin};
-
+use crate::stubs::{check_admin, AppHandle, Emitter, State as TauriState};
 
 pub async fn restore_database_sql(
     app: AppHandle,
@@ -37,7 +36,6 @@ pub async fn restore_database_sql(
 
     Ok("복구가 완료되었습니다. 서비스를 다시 시작해 주세요.".to_string())
 }
-
 
 pub async fn backup_database(
     app: AppHandle,
@@ -217,6 +215,9 @@ pub async fn backup_database_internal(
         sqlx::query_as(&count_query("sensor_readings", Some("recorded_at")))
             .fetch_one(pool)
             .await?;
+    let count_sms_logs: (i64,) = sqlx::query_as(&count_query("sms_logs", Some("sent_at")))
+        .fetch_one(pool)
+        .await?;
 
     let total_records = count_users.0
         + count_products.0
@@ -245,7 +246,8 @@ pub async fn backup_database_internal(
         + count_harvest.0
         + count_custom_presets.0
         + count_sensors.0
-        + count_sensor_readings.0;
+        + count_sensor_readings.0
+        + count_sms_logs.0;
 
     if total_records == 0 {
         return Ok("백업할 데이터가 없습니다.".to_string());
@@ -386,6 +388,12 @@ pub async fn backup_database_internal(
         Some("created_at"),
         "커스텀 프리셋 백업 중..."
     );
+    backup_table!(
+        "sms_logs",
+        SmsLog,
+        Some("sent_at"),
+        "SMS 발송 로그 백업 중..."
+    );
 
     writer.flush()?;
 
@@ -399,7 +407,6 @@ pub async fn backup_database_internal(
     emit_progress(total_records, total_records, "백업 완료");
     Ok(format!("{}개의 데이터를 백업했습니다.", total_records))
 }
-
 
 pub async fn restore_database(
     app: AppHandle,
@@ -472,10 +479,10 @@ pub async fn restore_database(
             match table {
                 "users" => {
                     let d: User = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO users (id, username, password_hash, role, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6) 
-                                 ON CONFLICT (id) DO UPDATE SET username=$2, password_hash=$3, role=$4, updated_at=$6")
-                        .bind(d.id).bind(&d.username).bind(&d.password_hash).bind(&d.role).bind(d.created_at).bind(d.updated_at)
+                    sqlx::query("INSERT INTO users (id, username, password_hash, role, ui_mode, created_at, updated_at) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7) 
+                                 ON CONFLICT (id) DO UPDATE SET username=$2, password_hash=$3, role=$4, ui_mode=$5, updated_at=$7")
+                        .bind(d.id).bind(&d.username).bind(&d.password_hash).bind(&d.role).bind(&d.ui_mode).bind(d.created_at).bind(d.updated_at)
                         .execute(&mut *tx).await?;
                 }
                 "company_info" => {
@@ -496,10 +503,10 @@ pub async fn restore_database(
                 }
                 "products" => {
                     let d: Product = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, item_type, updated_at, product_code, status, category, tax_type, tax_exempt_value) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) 
-                                 ON CONFLICT (product_id) DO UPDATE SET product_name=$2, specification=$3, unit_price=$4, stock_quantity=$5, safety_stock=$6, cost_price=$7, material_id=$8, material_ratio=$9, item_type=$10, updated_at=$11, product_code=$12, status=$13, category=$14, tax_type=$15, tax_exempt_value=$16")
-                        .bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.stock_quantity).bind(d.safety_stock).bind(d.cost_price).bind(d.material_id).bind(d.material_ratio).bind(&d.item_type).bind(d.updated_at).bind(&d.product_code).bind(&d.status).bind(&d.category).bind(&d.tax_type).bind(d.tax_exempt_value)
+                    sqlx::query("INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, updated_at, product_code, status, category, tax_type, tax_exempt_value) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
+                                 ON CONFLICT (product_id) DO UPDATE SET product_name=$2, specification=$3, unit_price=$4, stock_quantity=$5, safety_stock=$6, cost_price=$7, material_id=$8, material_ratio=$9, aux_material_id=$10, aux_material_ratio=$11, item_type=$12, updated_at=$13, product_code=$14, status=$15, category=$16, tax_type=$17, tax_exempt_value=$18")
+                        .bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.stock_quantity).bind(d.safety_stock).bind(d.cost_price).bind(d.material_id).bind(d.material_ratio).bind(d.aux_material_id).bind(d.aux_material_ratio).bind(&d.item_type).bind(d.updated_at).bind(&d.product_code).bind(&d.status).bind(&d.category).bind(&d.tax_type).bind(d.tax_exempt_value)
                         .execute(&mut *tx).await?;
                 }
                 "product_bom" => {
@@ -604,10 +611,10 @@ pub async fn restore_database(
                 }
                 "production_spaces" => {
                     let d: ProductionSpace = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO production_spaces (space_id, space_name, space_type, is_active, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5) 
-                                 ON CONFLICT (space_id) DO UPDATE SET space_name=$2, space_type=$3, is_active=$4, updated_at=$5")
-                        .bind(d.space_id).bind(&d.space_name).bind(&d.space_type).bind(d.is_active).bind(d.updated_at)
+                    sqlx::query("INSERT INTO production_spaces (space_id, space_name, space_type, location_info, area_size, area_unit, is_active, memo, created_at, updated_at) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+                                 ON CONFLICT (space_id) DO UPDATE SET space_name=$2, space_type=$3, location_info=$4, area_size=$5, area_unit=$6, is_active=$7, memo=$8, updated_at=$10")
+                        .bind(d.space_id).bind(&d.space_name).bind(&d.space_type).bind(&d.location_info).bind(d.area_size).bind(&d.area_unit).bind(d.is_active).bind(&d.memo).bind(d.created_at).bind(d.updated_at)
                         .execute(&mut *tx).await?;
                 }
                 "experience_programs" => {
@@ -664,6 +671,14 @@ pub async fn restore_database(
                                  VALUES ($1, $2, $3, $4, $5, $6) 
                                  ON CONFLICT (reading_id) DO NOTHING")
                         .bind(d.reading_id).bind(d.sensor_id).bind(d.temperature).bind(d.humidity).bind(d.co2).bind(d.recorded_at)
+                        .execute(&mut *tx).await?;
+                }
+                "sms_logs" => {
+                    let d: SmsLog = serde_json::from_value(data.clone())?;
+                    sqlx::query("INSERT INTO sms_logs (log_id, recipient_name, mobile_number, content, status, sent_at) 
+                                 VALUES ($1, $2, $3, $4, $5, $6) 
+                                 ON CONFLICT (log_id) DO NOTHING")
+                        .bind(d.log_id).bind(&d.recipient_name).bind(&d.mobile_number).bind(&d.content).bind(&d.status).bind(d.sent_at)
                         .execute(&mut *tx).await?;
                 }
                 _ => {} // Other tables skip for now

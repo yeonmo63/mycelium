@@ -72,6 +72,9 @@ const Sidebar = () => {
     const [companyName, setCompanyName] = useState('마이셀리움');
     const location = useLocation();
 
+    const uiMode = sessionStorage.getItem('uiMode') || 'pro';
+    const isLite = uiMode === 'lite';
+
     useEffect(() => {
         const loadCompanyName = async () => {
             try {
@@ -127,11 +130,15 @@ const Sidebar = () => {
                     <MenuGroup id="sales" icon="shopping_cart" label="판매 관리" expanded={isExpanded('sales')} onToggle={toggleMenu} currentPath={location.pathname}>
                         <SubMenuItem to="/sales/reception" icon="receipt_long" label="일반 접수" />
                         <SubMenuItem to="/sales/shipping" icon="local_shipping" label="배송 관리" />
-                        <SubMenuItem to="/sales/claims" icon="assignment_return" label="취소/반품/교환" />
-                        <SubMenuItem to="/sales/special" icon="event_seat" label="특판 행사 접수" />
-                        <SubMenuItem to="/sales/online-sync" icon="sync_alt" label="쇼핑몰 주문 연동" />
-                        <SubMenuItem to="/sales/daily-receipts" icon="history_edu" label="일일 접수 현황" />
-                        <SubMenuItem to="/sales/daily" icon="person_search" label="개인별 판매 현황" />
+                        {!isLite && (
+                            <>
+                                <SubMenuItem to="/sales/claims" icon="assignment_return" label="취소/반품/교환" />
+                                <SubMenuItem to="/sales/special" icon="event_seat" label="특판 행사 접수" />
+                                <SubMenuItem to="/sales/online-sync" icon="sync_alt" label="쇼핑몰 주문 연동" />
+                                <SubMenuItem to="/sales/daily-receipts" icon="history_edu" label="일일 접수 현황" />
+                                <SubMenuItem to="/sales/daily" icon="person_search" label="개인별 판매 현황" />
+                            </>
+                        )}
                         <SubMenuItem to="/customer/event-mgmt" icon="fmd_good" label="행사(특판)장 관리" />
                     </MenuGroup>
 
@@ -139,10 +146,14 @@ const Sidebar = () => {
                         <SubMenuItem to="/customer/register" icon="person_add" label="고객 등록" />
                         <SubMenuItem to="/customer/edit" icon="manage_accounts" label="조회/수정/휴면 관리" />
                         <SubMenuItem to="/sales/ledger" icon="account_balance_wallet" label="고객 미수금 관리" />
-                        <SubMenuItem to="/customer/batch" icon="domain" label="고객 일괄 조회" />
-                        <SubMenuItem to="/customer/consultation" icon="support_agent" label="상담 관리(CRM)" />
-                        <SubMenuItem to="/customer/best" icon="grade" label="우수 고객 관리" />
-                        <SubMenuItem to="/customer/special-care" icon="priority_high" label="집중 관리 고객" />
+                        {!isLite && (
+                            <>
+                                <SubMenuItem to="/customer/batch" icon="domain" label="고객 일괄 조회" />
+                                <SubMenuItem to="/customer/consultation" icon="support_agent" label="상담 관리(CRM)" />
+                                <SubMenuItem to="/customer/best" icon="grade" label="우수 고객 관리" />
+                                <SubMenuItem to="/customer/special-care" icon="priority_high" label="집중 관리 고객" />
+                            </>
+                        )}
                     </MenuGroup>
 
                     <MenuGroup id="inventory_prod" icon="potted_plant" label="재고/생산/현장관리" expanded={isExpanded('inventory_prod')} onToggle={toggleMenu} currentPath={location.pathname}>
@@ -150,23 +161,27 @@ const Sidebar = () => {
                         <SubMenuItem to="/production" icon="verified" label="GAP/HACCP 인증센터" />
                     </MenuGroup>
 
-                    <MenuGroup id="finance" icon="account_balance" label="회계/지출 관리" expanded={isExpanded('finance')} onToggle={toggleMenu} currentPath={location.pathname}>
-                        <SubMenuItem to="/finance/purchase" icon="shopping_bag" label="매입 등록/내역" />
-                        <SubMenuItem to="/finance/expense" icon="payments" label="일반 지출 관리" />
-                        <SubMenuItem to="/finance/tax-report" icon="request_quote" label="세무/부가세 신고" />
-                        <SubMenuItem to="/finance/vendor" icon="factory" label="공급/거래처 관리" />
-                        <SubMenuItem to="/finance/analysis" icon="analytics" label="손익/재무 분석" />
-                    </MenuGroup>
+                    {!isLite && (
+                        <>
+                            <MenuGroup id="finance" icon="account_balance" label="회계/지출 관리" expanded={isExpanded('finance')} onToggle={toggleMenu} currentPath={location.pathname}>
+                                <SubMenuItem to="/finance/purchase" icon="shopping_bag" label="매입 등록/내역" />
+                                <SubMenuItem to="/finance/expense" icon="payments" label="일반 지출 관리" />
+                                <SubMenuItem to="/finance/tax-report" icon="request_quote" label="세무/부가세 신고" />
+                                <SubMenuItem to="/finance/vendor" icon="factory" label="공급/거래처 관리" />
+                                <SubMenuItem to="/finance/analysis" icon="analytics" label="손익/재무 분석" />
+                            </MenuGroup>
 
-                    <MenuGroup id="intel" icon="insights" label="판매 인텔리전스" expanded={isExpanded('intel')} onToggle={toggleMenu} currentPath={location.pathname}>
-                        <SubMenuItem to="/intel/sales" icon="analytics" label="지능형 판매 리포트" />
-                        <SubMenuItem to="/intel/customer" icon="psychology" label="AI 고객 성장 센터" />
-                        <SubMenuItem to="/marketing/association" icon="hub" label="상품 연관 분석" />
-                        <SubMenuItem to="/marketing/orm" icon="public" label="온라인 AI 평판 분석" />
-                        <SubMenuItem to="/intel/region-analysis" icon="map" label="AI 지역별 판매 히트맵" />
-                        <SubMenuItem to="/product/sales" icon="bar_chart" label="상품별 판매 실적 분석" />
-                        <SubMenuItem to="/customer/sms" icon="sms" label="판촉 문자 발송" />
-                    </MenuGroup>
+                            <MenuGroup id="intel" icon="insights" label="판매 인텔리전스" expanded={isExpanded('intel')} onToggle={toggleMenu} currentPath={location.pathname}>
+                                <SubMenuItem to="/intel/sales" icon="analytics" label="지능형 판매 리포트" />
+                                <SubMenuItem to="/intel/customer" icon="psychology" label="AI 고객 성장 센터" />
+                                <SubMenuItem to="/marketing/association" icon="hub" label="상품 연관 분석" />
+                                <SubMenuItem to="/marketing/orm" icon="public" label="온라인 AI 평판 분석" />
+                                <SubMenuItem to="/intel/region-analysis" icon="map" label="AI 지역별 판매 히트맵" />
+                                <SubMenuItem to="/product/sales" icon="bar_chart" label="상품별 판매 실적 분석" />
+                                <SubMenuItem to="/customer/sms" icon="sms" label="판촉 문자 발송" />
+                            </MenuGroup>
+                        </>
+                    )}
 
                     <MenuGroup id="experience" icon="calendar_today" label="체험 프로그램" activePrefix="/exp" expanded={isExpanded('experience')} onToggle={toggleMenu} currentPath={location.pathname}>
                         <SubMenuItem to="/exp/reservation-entry" icon="book_online" label="체험 예약 접수" />
@@ -181,13 +196,17 @@ const Sidebar = () => {
                             <SubMenuItem to="/settings/user-list" icon="manage_accounts" label="사용자 관리" />
                             <SubMenuItem to="/settings/company-info" icon="business" label="업체 정보 관리" />
                             <SubMenuItem to="/settings/product-list" icon="inventory_2" label="상품/자재 마스터" />
-                            <SubMenuItem to="/exp/program-mgmt" icon="settings_applications" label="체험 프로그램 설정" />
-                            <SubMenuItem to="/settings/api-keys" icon="api" label="외부 서비스 연동" />
-                            <SubMenuItem to="/settings/iot" icon="router" label="IoT 장비 관리" />
-                            <SubMenuItem to="/settings/template-mgmt" icon="chat_bubble" label="메시지 템플릿" />
-                            <SubMenuItem to="/settings/mobile-sync" icon="smartphone" label="모바일 연동 센터" />
-                            <SubMenuItem to="/settings/db-backup-restore" icon="backup" label="백업 및 복구" />
-                            <SubMenuItem to="/settings/db-reset" icon="delete_forever" label="데이터 초기화/프리셋" />
+                            {!isLite && (
+                                <>
+                                    <SubMenuItem to="/exp/program-mgmt" icon="settings_applications" label="체험 프로그램 설정" />
+                                    <SubMenuItem to="/settings/api-keys" icon="api" label="외부 서비스 연동" />
+                                    <SubMenuItem to="/settings/iot" icon="router" label="IoT 장비 관리" />
+                                    <SubMenuItem to="/settings/template-mgmt" icon="chat_bubble" label="메시지 템플릿" />
+                                    <SubMenuItem to="/settings/mobile-sync" icon="smartphone" label="모바일 연동 센터" />
+                                    <SubMenuItem to="/settings/db-backup-restore" icon="backup" label="백업 및 복구" />
+                                    <SubMenuItem to="/settings/db-reset" icon="delete_forever" label="데이터 초기화/프리셋" />
+                                </>
+                            )}
                         </MenuGroup>
                     )}
 
