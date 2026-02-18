@@ -13,6 +13,7 @@ use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use single_instance::SingleInstance;
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
     TrayIconBuilder,
@@ -36,7 +37,19 @@ pub static IS_EXITING: AtomicBool = AtomicBool::new(false);
 pub static BACKUP_CANCELLED: AtomicBool = AtomicBool::new(false);
 
 fn main() {
-    // 1. Setup Tray Icon
+    // 0. Load environment variables
+    load_env();
+
+    // 1. Single Instance Check
+    let instance = SingleInstance::new("com.mycelium.smartfarm.backend").unwrap();
+    if !instance.is_single() {
+        println!("Another instance is already running. Opening dashboard and exiting.");
+        let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+        let _ = open::that(format!("http://localhost:{}", port));
+        return;
+    }
+
+    // 2. Setup Tray Icon
     let event_loop = tao::event_loop::EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
@@ -87,22 +100,9 @@ fn main() {
 }
 
 async fn run_server() {
-    // Load .env from executable's directory first (critical for shortcuts/auto-start),
-    // then fall back to CWD-based loading.
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let env_path = exe_dir.join(".env");
-            if env_path.exists() {
-                let _ = dotenvy::from_path(&env_path);
-            } else {
-                dotenv().ok();
-            }
-        } else {
-            dotenv().ok();
-        }
-    } else {
-        dotenv().ok();
-    }
+    // .env should be loaded at this point from main ideally, but let's keep it here for now or ensure it is called.
+    // Actually, let's move the env loading to a separate function and call it at the start of main.
+    load_env();
 
     // Initialize tracing
     tracing_subscriber::registry()
@@ -940,6 +940,25 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
             // For SPA roots, return index.html
             index_html().await
         }
+    }
+}
+
+fn load_env() {
+    // Load .env from executable's directory first (critical for shortcuts/auto-start),
+    // then fall back to CWD-based loading.
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let env_path = exe_dir.join(".env");
+            if env_path.exists() {
+                let _ = dotenvy::from_path(&env_path);
+            } else {
+                dotenv().ok();
+            }
+        } else {
+            dotenv().ok();
+        }
+    } else {
+        dotenv().ok();
     }
 }
 
