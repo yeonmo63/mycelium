@@ -32,6 +32,7 @@ const DashboardLite = ({
         { label: '특판 주문', icon: <Store className="text-purple-500" />, path: '/sales/special', color: 'bg-purple-50' },
         { label: '상담 내역', icon: <MessageSquare className="text-amber-500" />, path: '/customer/consultation', color: 'bg-amber-50' },
         { label: '오늘 스케줄', icon: <Calendar className="text-rose-500" />, path: '/schedule', color: 'bg-rose-50' },
+        { label: '체험 설정', icon: <Settings className="text-indigo-400" />, path: '/exp/program-mgmt', color: 'bg-indigo-50' },
         { label: '설정', icon: <Settings className="text-slate-500" />, path: '/settings/company-info', color: 'bg-slate-50' },
     ];
 

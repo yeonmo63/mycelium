@@ -20,7 +20,12 @@ const LogoutModal = ({ onClose }) => {
                             돌아가기
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
+                                try {
+                                    await fetch('/api/auth/logout', { method: 'POST' });
+                                } catch (e) {
+                                    console.error("Logout API failed", e);
+                                }
                                 sessionStorage.clear();
                                 window.location.reload();
                             }}

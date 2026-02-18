@@ -196,9 +196,9 @@ const Sidebar = () => {
                             <SubMenuItem to="/settings/user-list" icon="manage_accounts" label="사용자 관리" />
                             <SubMenuItem to="/settings/company-info" icon="business" label="업체 정보 관리" />
                             <SubMenuItem to="/settings/product-list" icon="inventory_2" label="상품/자재 마스터" />
+                            <SubMenuItem to="/exp/program-mgmt" icon="settings_applications" label="체험 프로그램 설정" />
                             {!isLite && (
                                 <>
-                                    <SubMenuItem to="/exp/program-mgmt" icon="settings_applications" label="체험 프로그램 설정" />
                                     <SubMenuItem to="/settings/api-keys" icon="api" label="외부 서비스 연동" />
                                     <SubMenuItem to="/settings/iot" icon="router" label="IoT 장비 관리" />
                                     <SubMenuItem to="/settings/template-mgmt" icon="chat_bubble" label="메시지 템플릿" />
