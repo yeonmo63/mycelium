@@ -143,6 +143,14 @@ const FinanceTaxReport = () => {
         showAlert("성공", "파일이 다운로드되었습니다.");
     };
 
+    const handleDownloadPDF = () => {
+        const query = new URLSearchParams({
+            start_date: startDate,
+            end_date: endDate,
+        });
+        window.open(`/api/finance/report/pdf?${query.toString()}`, '_blank');
+    };
+
     const handleSubmitTaxReport = async () => {
         const allData = [...(reportData.taxableSales || []), ...(reportData.exemptSales || []), ...(reportData.purchases || [])];
         if (allData.length === 0) {
@@ -224,6 +232,13 @@ const FinanceTaxReport = () => {
                     >
                         <span className="material-symbols-rounded text-lg">download</span>
                         신고용 엑셀
+                    </button>
+                    <button
+                        onClick={handleDownloadPDF}
+                        className="bg-slate-700 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-black text-sm transition-all shadow-md shadow-slate-100 flex items-center gap-2"
+                    >
+                        <span className="material-symbols-rounded text-lg">picture_as_pdf</span>
+                        PDF 리포트
                     </button>
                     <button
                         onClick={handleSubmitTaxReport}

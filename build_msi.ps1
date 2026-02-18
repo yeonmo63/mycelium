@@ -2,7 +2,10 @@
 # This script ensures a consistent build process every time.
 
 $ProjectRoot = Get-Location
-$Version = "1.0.0"
+# Extract version from Cargo.toml
+$CargoToml = Get-Content "$ProjectRoot\backend\Cargo.toml" -Raw
+$Version = ([regex]::Match($CargoToml, 'version\s*=\s*"([^"]+)"')).Groups[1].Value
+if (!$Version) { $Version = "1.0.0" }
 
 Write-Host "--- Stage 1: Building Frontend ---" -ForegroundColor Cyan
 Set-Location "$ProjectRoot\frontend"

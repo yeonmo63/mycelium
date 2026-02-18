@@ -642,6 +642,15 @@ pub struct IntegrationSettings {
     pub mall: Option<MallSettings>,
     pub courier: Option<CourierSettings>,
     pub tax: Option<TaxSettings>,
+    pub weather: Option<WeatherSettings>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherSettings {
+    pub provider: String, // e.g., "openweathermap"
+    pub api_key: String,
+    pub location: String, // e.g., "Gangneung" or "lat,lon"
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -791,6 +800,15 @@ pub async fn save_tax_filing_config_axum(
 ) -> MyceliumResult<Json<()>> {
     let mut settings = load_integration_settings()?;
     settings.tax = Some(payload.config);
+    save_integration_settings(&settings)?;
+    Ok(Json(()))
+}
+
+pub async fn save_weather_config_axum(
+    Json(payload): Json<WeatherSettings>,
+) -> MyceliumResult<Json<()>> {
+    let mut settings = load_integration_settings()?;
+    settings.weather = Some(payload);
     save_integration_settings(&settings)?;
     Ok(Json(()))
 }

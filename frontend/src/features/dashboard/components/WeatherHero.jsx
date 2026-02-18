@@ -28,7 +28,7 @@ const WeatherHero = ({ weatherAdvice, isWeatherLoading }) => {
                         {!isWeatherLoading && (
                             <div className="bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full text-white/90 text-[0.9rem] font-bold border border-white/10 flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                                강릉 {weatherAdvice?.temperature?.toFixed(1)}°C · {weatherAdvice?.weather_desc}
+                                {weatherAdvice?.location_name || '강릉'} {weatherAdvice?.temperature?.toFixed(1)}°C · {weatherAdvice?.weather_desc}
                             </div>
                         )}
                     </div>

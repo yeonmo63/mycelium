@@ -706,13 +706,93 @@ pub async fn get_ai_repurchase_analysis_axum(
     Ok(Json(RepurchaseAnalysisResponse { candidates }))
 }
 
+#[derive(Deserialize)]
+struct OpenWeatherResponse {
+    main: MainData,
+    weather: Vec<WeatherData>,
+}
+
+#[derive(Deserialize)]
+struct MainData {
+    temp: f64,
+}
+
+#[derive(Deserialize)]
+struct WeatherData {
+    description: String,
+}
+
+async fn fetch_open_weather(api_key: &str, location: &str) -> MyceliumResult<OpenWeatherResponse> {
+    let client = reqwest::Client::new();
+    let url = if location.contains(',') {
+        let parts: Vec<&str> = location.split(',').collect();
+        format!(
+            "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric&lang=kr",
+            parts[0].trim(), parts[1].trim(), api_key
+        )
+    } else {
+        format!(
+            "https://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units=metric&lang=kr",
+            urlencoding::encode(location),
+            api_key
+        )
+    };
+
+    let resp = client.get(&url).send().await?;
+    if !resp.status().is_success() {
+        return Err(MyceliumError::Internal(format!(
+            "Weather API Error: {}",
+            resp.status()
+        )));
+    }
+    let data: OpenWeatherResponse = resp.json().await?;
+    Ok(data)
+}
+
 pub async fn get_weather_marketing_advice(
-    _state: State<'_, DbPool>,
+    state: State<'_, DbPool>,
 ) -> MyceliumResult<serde_json::Value> {
+    use crate::commands::config::load_integration_settings;
+
+    // 1. Get Integration Settings
+    let settings = load_integration_settings().ok();
+    let weather_settings = settings.as_ref().and_then(|s| s.weather.as_ref());
+
+    let (temp, desc) = if let Some(ws) = weather_settings {
+        match fetch_open_weather(&ws.api_key, &ws.location).await {
+            Ok(data) => (data.main.temp, data.weather[0].description.clone()),
+            Err(e) => {
+                tracing::warn!("Failed to fetch real weather: {}", e);
+                (15.0, "맑음(기본)".to_string())
+            }
+        }
+    } else {
+        (12.5, "맑음".to_string())
+    };
+
+    // 2. Get AI Advice (Cache handled by call_gemini_ai_internal)
+    let api_key = get_gemini_api_key().unwrap_or_default();
+    let advice = if !api_key.is_empty() {
+        let prompt = format!(
+            "오늘 농장 소재지 기온은 {}도, 날씨는 '{}'입니다. \
+             이 날씨 상황을 고려하여 스마트 농장 직영몰 고객들에게 보낼 \
+             친절하고 센스 있는 마케팅 한 줄 조언을 작성해 주세요. \
+             구체적인 상품(예: 버섯 세트, 체험 프로모션)을 언급해도 좋습니다.",
+            temp, desc
+        );
+        match call_gemini_ai_internal(Some(&*state), &api_key, &prompt).await {
+            Ok(res) => res,
+            Err(_) => "맑은 날씨에 어울리는 신선한 농산물을 추천해보세요!".to_string(),
+        }
+    } else {
+        "AI 설정이 완료되면 날씨 맞춤형 전략을 추천해 드립니다.".to_string()
+    };
+
     Ok(serde_json::json!({
-        "temperature": 12.5,
-        "weather_desc": "맑음",
-        "marketing_advice": "오늘처럼 맑은 날에는 신선한 산책과 함께 제철 버섯 요리를 추천해보세요! 우수 고객들에게 안부 문자를 보내보시는 건 어떨까요?"
+        "temperature": temp,
+        "weather_desc": desc,
+        "marketing_advice": advice,
+        "location_name": weather_settings.map(|s| s.location.clone()).unwrap_or_else(|| "강릉".to_string())
     }))
 }
 

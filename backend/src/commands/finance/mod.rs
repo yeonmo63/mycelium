@@ -14,6 +14,51 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::atomic::Ordering;
 
+pub mod pdf;
+
+#[derive(Debug, Deserialize)]
+pub struct FinanceReportQuery {
+    pub start_date: String,
+    pub end_date: String,
+}
+
+pub async fn generate_finance_report_axum(
+    AxumState(state): AxumState<AppState>,
+    Query(query): Query<FinanceReportQuery>,
+) -> crate::error::MyceliumResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    let temp_dir = std::env::temp_dir();
+    let file_name = format!(
+        "finance_report_{}.pdf",
+        chrono::Local::now().format("%Y%m%d_%H%M%S")
+    );
+    let save_path = temp_dir.join(&file_name).to_string_lossy().to_string();
+
+    pdf::generate_finance_report_pdf(
+        State::from(&state.pool),
+        save_path.clone(),
+        query.start_date,
+        query.end_date,
+    )
+    .await?;
+
+    let file_content =
+        std::fs::read(&save_path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+    let _ = std::fs::remove_file(&save_path);
+
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/pdf"),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                &format!("attachment; filename=\"{}\"", file_name),
+            ),
+        ],
+        file_content,
+    )
+        .into_response())
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(non_snake_case)]
 pub struct PurchaseInput {

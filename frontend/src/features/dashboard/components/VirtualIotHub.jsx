@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '../../../utils/apiBridge';
-import { Thermometer, Droplets, Wind, Activity, RefreshCw, Layers } from 'lucide-react';
+import { Thermometer, Droplets, Wind, Activity, RefreshCw, Info } from 'lucide-react';
+import IotGuideModal from './modals/IotGuideModal';
 
 const VirtualIotHub = () => {
     const [sensors, setSensors] = useState([]);
     const [readings, setReadings] = useState({});
     const [isLoading, setIsLoading] = useState(true);
+    const [showGuide, setShowGuide] = useState(false);
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -54,7 +56,14 @@ const VirtualIotHub = () => {
 
     return (
         <div className="bg-white rounded-[28px] py-6 px-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.03)] flex flex-col h-full group transition-all duration-500 hover:border-indigo-200">
-            <div className="flex justify-end mb-2">
+            <div className="flex justify-between items-center mb-2">
+                <button
+                    onClick={() => setShowGuide(true)}
+                    className="p-1.5 bg-indigo-50 text-indigo-400 hover:text-indigo-600 rounded-xl transition-all flex items-center gap-1.5"
+                >
+                    <Info size={12} />
+                    <span className="text-[9px] font-black uppercase tracking-tighter">연동 가이드</span>
+                </button>
                 <button onClick={fetchData} className={`p-1.5 bg-slate-50 rounded-xl text-slate-300 hover:text-indigo-500 transition-all ${isLoading ? 'animate-spin' : ''}`}>
                     <RefreshCw size={12} />
                 </button>
@@ -90,6 +99,8 @@ const VirtualIotHub = () => {
                     </div>
                 )}
             </div>
+
+            {showGuide && <IotGuideModal onClose={() => setShowGuide(false)} />}
         </div>
     );
 };

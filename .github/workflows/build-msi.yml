@@ -1,0 +1,82 @@
+name: Build and Release MSI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Build Backend
+        run: |
+          cd backend
+          cargo build --release
+
+      - name: Setup WiX Toolset
+        run: |
+          dotnet tool install --global wix
+          wix extension add WixToolset.UI.wixext
+          wix extension add WixToolset.Util.wixext
+
+      - name: Package MSI
+        shell: pwsh
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart('v')
+          if ($Version -eq "" -or $Version -eq "main") { $Version = "1.0.0" }
+          
+          cd backend
+          if (!(Test-Path "target\wix")) { New-Item -ItemType Directory -Path "target\wix" }
+          
+          wix build wix\main.wxs wix\resources.wxs `
+              -d Version=$Version `
+              -d CargoTargetBinDir=target\release `
+              -d ResourceDir=resources `
+              -ext WixToolset.UI.wixext `
+              -ext WixToolset.Util.wixext `
+              -o target\wix\Mycelium-$Version.msi
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mycelium-MSI
+          path: backend/target/wix/*.msi
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: backend/target/wix/*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

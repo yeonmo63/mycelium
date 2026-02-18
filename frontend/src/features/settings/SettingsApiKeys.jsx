@@ -17,7 +17,8 @@ import {
     EyeOff,
     ExternalLink,
     ShoppingBag,
-    Truck
+    Truck,
+    CloudSun
 } from 'lucide-react';
 
 const SettingsApiKeys = () => {
@@ -37,7 +38,8 @@ const SettingsApiKeys = () => {
         sabangnet: false,
         playauto: false,
         courier: false,
-        tax: false
+        tax: false,
+        weather: false
     });
 
     const [formData, setFormData] = useState({
@@ -62,10 +64,12 @@ const SettingsApiKeys = () => {
         courier_provider: 'sweettracker',
         courier_api_key: '',
         courier_client_id: '',
-        // Tax
-        tax_provider: 'sim_hometax',
         tax_api_key: '',
-        tax_client_id: ''
+        tax_client_id: '',
+        // Weather
+        weather_api_key: '',
+        weather_location: 'Gangneung',
+        weather_provider: 'openweathermap'
     });
 
     // --- Admin Guard Check ---
@@ -108,9 +112,11 @@ const SettingsApiKeys = () => {
                         courier_provider: config.courier?.provider || 'sweettracker',
                         courier_api_key: config.courier?.api_key || '',
                         courier_client_id: config.courier?.client_id || '',
-                        tax_provider: config.tax?.provider || 'sim_hometax',
                         tax_api_key: config.tax?.api_key || '',
-                        tax_client_id: config.tax?.client_id || ''
+                        tax_client_id: config.tax?.client_id || '',
+                        weather_api_key: config.weather?.api_key || '',
+                        weather_location: config.weather?.location || 'Gangneung',
+                        weather_provider: config.weather?.provider || 'openweathermap'
                     }));
                 } catch (err) {
                     console.error("Failed to load configs:", err);
@@ -241,6 +247,22 @@ const SettingsApiKeys = () => {
                 }
             });
             await showAlert('저장 완료', '세무신고 API 설정이 저장되었습니다.');
+        } catch (err) {
+            showAlert('저장 실패', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveWeather = async () => {
+        setIsLoading(true);
+        try {
+            await invoke('save_weather_config', {
+                api_key: formData.weather_api_key,
+                location: formData.weather_location,
+                provider: formData.weather_provider
+            });
+            await showAlert('저장 완료', '날씨 서비스 설정이 저장되었습니다.');
         } catch (err) {
             showAlert('저장 실패', err);
         } finally {
@@ -495,6 +517,66 @@ const SettingsApiKeys = () => {
                                             {showKeys.naver ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Weather API Card */}
+                        <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden ring-1 ring-slate-900/5 p-8 text-left transition-all">
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                                        <CloudSun size={20} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-3">
+                                            <h2 className="text-lg font-black text-slate-700 tracking-tight">Weather Service (OpenWeather)</h2>
+                                            <a href="https://home.openweathermap.org/api_keys" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-600 text-[10px] font-black hover:bg-sky-100 transition-colors">
+                                                <ExternalLink size={10} /> 서비스 센터
+                                            </a>
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-400">데이터 기반 정밀 농업 및 날씨 마케팅 연동</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleSaveWeather}
+                                    disabled={isLoading}
+                                    className="h-10 px-5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-black text-xs flex items-center gap-2 shadow-lg shadow-sky-100 transition-all active:scale-[0.95]"
+                                >
+                                    <Save size={14} /> 저장
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">날씨 API 인증키</label>
+                                    <div className="relative group">
+                                        <input
+                                            type={showKeys.weather ? "text" : "password"}
+                                            value={formData.weather_api_key}
+                                            onChange={e => setFormData({ ...formData, weather_api_key: e.target.value })}
+                                            className="w-full h-12 px-5 pr-12 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-sky-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                            placeholder="OpenWeather API Key"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleKeyVisibility('weather')}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                        >
+                                            {showKeys.weather ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">농장 위치 (도시명 또는 위도,경도)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.weather_location}
+                                        onChange={e => setFormData({ ...formData, weather_location: e.target.value })}
+                                        className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm focus:ring-4 focus:ring-sky-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
+                                        placeholder="예: Gangneung 또는 37.75,128.87"
+                                    />
                                 </div>
                             </div>
                         </div>

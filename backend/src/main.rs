@@ -159,9 +159,22 @@ async fn run_server() {
         tracing::info!("Database connection established");
         if let Err(e) = db::init_database(&pool).await {
             tracing::error!("Failed to run migrations: {}", e);
-            // Non-critical migration failure? Or maybe just warn?
-            // If migrations fail, we might want to let user re-setup or check logs.
         }
+
+        // Start Background Simulation Task
+        let sim_pool = pool.clone();
+        tokio::spawn(async move {
+            tracing::info!("Starting IoT simulation background loop...");
+            // Run immediately once, then every 30 minutes
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1800));
+            loop {
+                interval.tick().await;
+                if let Err(e) = commands::iot::record_simulated_readings(&sim_pool).await {
+                    tracing::error!("Failed to record simulated readings: {}", e);
+                }
+            }
+        });
+
         SetupStatus::Configured
     } else {
         tracing::warn!("Failed to connect to database. Starting in Setup Mode.");
@@ -188,6 +201,11 @@ async fn run_server() {
         .route(
             "/api/utility/debug_db_schema",
             post(commands::utility::debug_db_schema),
+        )
+        // System Routes
+        .route(
+            "/api/system/check-update",
+            get(commands::system::check_for_updates),
         )
         // Auth & Config Routes
         .route(
@@ -223,6 +241,10 @@ async fn run_server() {
         .route(
             "/api/auth/company/save",
             post(commands::config::save_company_info),
+        )
+        .route(
+            "/api/config/weather/save",
+            post(commands::config::save_weather_config_axum),
         )
         // Dashboard Routes
         .route(
@@ -543,6 +565,11 @@ async fn run_server() {
         .route(
             "/api/finance/expenses/delete",
             post(commands::finance::delete_expense_axum),
+        )
+        // Finance Report Routes
+        .route(
+            "/api/finance/report/pdf",
+            get(commands::finance::generate_finance_report_axum),
         )
         // Tax Report Routes
         .route(

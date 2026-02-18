@@ -122,6 +122,47 @@ pub async fn get_virtual_sensor_data() -> MyceliumResult<VirtualSensorData> {
     Ok(get_virtual_simulation_data())
 }
 
+pub async fn record_simulated_readings(pool: &DbPool) -> MyceliumResult<()> {
+    // 1. Get all active 'virtual' sensors
+    let sensors: Vec<Sensor> = sqlx::query_as(
+        "SELECT sensor_id, sensor_name, space_id, device_type, connection_info, is_active FROM sensors WHERE device_type = 'virtual' AND is_active = TRUE"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if sensors.is_empty() {
+        // If no virtual sensor exists, create a default one for simulation
+        let _ = sqlx::query(
+            "INSERT INTO sensors (sensor_name, device_type, is_active) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+        )
+        .bind("가상 센서 (Hub)")
+        .bind("virtual")
+        .bind(true)
+        .execute(pool)
+        .await;
+        return Ok(());
+    }
+
+    for sensor in sensors {
+        let data = get_virtual_simulation_data();
+        let t = rust_decimal::Decimal::from_f64_retain(data.temperature).unwrap_or_default();
+        let h = rust_decimal::Decimal::from_f64_retain(data.humidity).unwrap_or_default();
+        let c = rust_decimal::Decimal::from_f64_retain(data.co2).unwrap_or_default();
+
+        sqlx::query(
+            "INSERT INTO sensor_readings (sensor_id, temperature, humidity, co2) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(sensor.sensor_id)
+        .bind(t)
+        .bind(h)
+        .bind(c)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn push_sensor_data(
     state: State<'_, DbPool>,
     sensor_id: i32,

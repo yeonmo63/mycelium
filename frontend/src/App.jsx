@@ -58,6 +58,10 @@ import ScheduleMgmt from './features/schedule/ScheduleMgmt';
 import ProductionManager from './features/production/ProductionManager';
 import UserManual from './features/manual/UserManual';
 
+// Components
+import OfflineSyncMonitor from './components/OfflineSyncMonitor';
+import UpdateNotifier from './components/UpdateNotifier';
+
 // 1. Environment Detection (Mobile/Desktop)
 const getEnvironment = () => {
   if (window.__MYCELIUM_MOBILE__ !== undefined) return window.__MYCELIUM_MOBILE__;
@@ -231,6 +235,8 @@ function App() {
   return (
     <ModalProvider>
       <AppContent />
+      <OfflineSyncMonitor />
+      <UpdateNotifier />
     </ModalProvider>
   );
 }

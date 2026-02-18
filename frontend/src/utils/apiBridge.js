@@ -1,11 +1,13 @@
+import { addToOfflineQueue } from './offlineDb';
+
 /**
  * Universal bridge to call backend commands either via Tauri invoke
  * or via HTTP fetch when running in a mobile/web browser.
  */
 export async function callBridge(commandName, args = {}) {
-    // Fallback to fetch (Axum)
-    // Mapping Tauri command names to our Axum API routes
+    // ... rest of the mappings ...
     const routeMap = {
+        // [Existing routes...]
         'get_dashboard_stats': '/api/dashboard/stats',
         'get_dashboard_priority_stats': '/api/dashboard/priority-stats',
         'get_dashboard_secondary_stats': '/api/dashboard/secondary-stats',
@@ -261,6 +263,22 @@ export async function callBridge(commandName, args = {}) {
         return result;
     } catch (err) {
         console.error(`Bridge: Failed to fetch ${route}:`, err);
+
+        // --- Offline Support ---
+        // If it's a POST/Save command and it's a network error (no response), 
+        // we add it to the offline queue instead of failing.
+        const isNetworkError = err instanceof TypeError || err.message.includes('fetch');
+        if (isPost && isNetworkError) {
+            console.log(`Bridge: Offline detected. Queuing command "${commandName}" for later sync.`);
+            try {
+                await addToOfflineQueue(commandName, args);
+                // Return a special result so the UI knows it was queued
+                return { success: true, offline: true, message: '오프라인 모드: 연결 시 자동 저장됩니다.' };
+            } catch (dbErr) {
+                console.error("Bridge: Failed to add to offline queue:", dbErr);
+            }
+        }
+
         throw err; // Rethrow so the caller component can handle it
     }
 }
