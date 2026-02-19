@@ -1,0 +1,27 @@
+# Mycelium Caddy Configuration for Tailscale HTTPS
+# This file is automatically loaded by the Mycelium backend.
+
+{
+    # Global options
+    admin off
+}
+
+# The domain name will be injected from the TAILSCALE_DOMAIN environment variable
+{$TAILSCALE_DOMAIN} {
+    # Caddy automatically uses Tailscale for certificates if the domain ends in .ts.net
+    # and the Tailscale daemon is running.
+    
+    # Forward requests to the Axum backend
+    reverse_proxy localhost:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+    }
+
+    # Optional: Enable compression
+    encode gzip zstd
+
+    # Log requests for debugging
+    log {
+        output file ./resources/caddy_access.log
+    }
+}

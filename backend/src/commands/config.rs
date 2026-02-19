@@ -893,6 +893,7 @@ pub async fn reset_message_templates_axum() -> MyceliumResult<Json<MessageTempla
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct MobileConfig {
     pub remote_ip: String,
+    pub domain_name: String, // Added for Tailscale HTTPS
     pub access_pin: String,
     pub use_pin: bool,
 }
@@ -916,8 +917,10 @@ fn load_mobile_config_from_file() -> MyceliumResult<MobileConfig> {
         Ok(data)
     } else {
         tracing::info!("Mobile config file not found, using defaults");
+        let default_domain = std::env::var("TAILSCALE_DOMAIN").unwrap_or_default();
         Ok(MobileConfig {
             remote_ip: "".to_string(),
+            domain_name: default_domain,
             access_pin: "".to_string(),
             use_pin: false,
         })
@@ -927,7 +930,42 @@ fn load_mobile_config_from_file() -> MyceliumResult<MobileConfig> {
 fn save_mobile_config_to_file(config: &MobileConfig) -> MyceliumResult<()> {
     let path = get_app_config_dir()?.join("mobile_config.json");
     let content = serde_json::to_string_pretty(config)?;
-    std::fs::write(path, content)?;
+    std::fs::write(&path, content)?;
+
+    // Update .env for Caddy if domain_name is provided
+    if !config.domain_name.is_empty() {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let env_path = exe_dir.join(".env");
+                if env_path.exists() {
+                    if let Ok(env_content) = std::fs::read_to_string(&env_path) {
+                        let mut new_lines = Vec::new();
+                        let mut found = false;
+                        for line in env_content.lines() {
+                            if line.starts_with("TAILSCALE_DOMAIN=") {
+                                new_lines.push(format!("TAILSCALE_DOMAIN={}", config.domain_name));
+                                found = true;
+                            } else {
+                                new_lines.push(line.to_string());
+                            }
+                        }
+                        if !found {
+                            new_lines.push(format!("TAILSCALE_DOMAIN={}", config.domain_name));
+                        }
+                        let _ = std::fs::write(&env_path, new_lines.join("\n"));
+
+                        // Set environment variable in the current process too
+                        std::env::set_var("TAILSCALE_DOMAIN", &config.domain_name);
+
+                        // Restart Caddy to apply changes
+                        crate::proxy::stop_caddy();
+                        crate::proxy::start_caddy();
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
+import { useAdminGuard } from '../../hooks/useAdminGuard';
 import {
     Smartphone,
     Laptop,
@@ -15,11 +17,15 @@ import {
     RefreshCw,
     Info,
     CheckCircle2,
-    Settings2
+    Settings2,
+    ExternalLink
 } from 'lucide-react';
 
 const MobileSettings = () => {
+    const navigate = useNavigate();
     const { showAlert } = useModal();
+    const { isAuthorized, checkAdmin, isVerifying } = useAdminGuard();
+
     const [allIps, setAllIps] = useState([]);
     const [wifiIp, setWifiIp] = useState('');
     const [tailscaleIp, setTailscaleIp] = useState('');
@@ -30,22 +36,35 @@ const MobileSettings = () => {
     // Mobile Config State
     const [config, setConfig] = useState({
         remote_ip: '',
+        domain_name: '',
         access_pin: '',
         use_pin: false
     });
 
     const [viewMode, setViewMode] = useState('local'); // 'local' or 'remote'
 
+    const checkRunComp = React.useRef(false);
     useEffect(() => {
-        loadData();
-    }, []);
+        if (checkRunComp.current) return;
+        checkRunComp.current = true;
+
+        const init = async () => {
+            const ok = await checkAdmin();
+            if (!ok) {
+                navigate('/');
+            } else {
+                loadData();
+            }
+        };
+        init();
+    }, [checkAdmin, navigate]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
             const [ips, mobileConfig] = await Promise.all([
                 invoke('get_local_ip_command').catch(() => ['127.0.0.1']),
-                invoke('get_mobile_config').catch(() => ({ remote_ip: '', access_pin: '', use_pin: false }))
+                invoke('get_mobile_config').catch(() => ({ remote_ip: '', domain_name: '', access_pin: '', use_pin: false }))
             ]);
 
             setAllIps(ips);
@@ -72,7 +91,7 @@ const MobileSettings = () => {
             setWifiIp(preferredIp);
 
             // Apply mobile config
-            const initialConfig = mobileConfig || { remote_ip: '', access_pin: '', use_pin: false };
+            const initialConfig = mobileConfig || { remote_ip: '', domain_name: '', access_pin: '', use_pin: false };
 
             // If we found a Tailscale IP and config doesn't have one, suggest it
             if (tsIp && !initialConfig.remote_ip) {
@@ -113,8 +132,27 @@ const MobileSettings = () => {
     };
 
     const localUrl = buildUrl(wifiIp);
-    const remoteUrl = buildUrl(config.remote_ip);
+    const remoteUrl = config.domain_name
+        ? `https://${config.domain_name}/mobile-dashboard`
+        : buildUrl(config.remote_ip);
     const activeUrl = viewMode === 'local' ? localUrl : remoteUrl;
+
+    if (!isAuthorized) {
+        return (
+            <div className="flex h-full items-center justify-center bg-[#f8fafc]">
+                <div className="text-center animate-pulse">
+                    {isVerifying ? (
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mx-auto mb-4" />
+                    ) : (
+                        <Lock size={48} className="mx-auto text-slate-300 mb-4" />
+                    )}
+                    <p className="text-slate-400 font-bold">
+                        {isVerifying ? '인증 확인 중...' : '인증 대기 중...'}
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     if (isLoading) {
         return (
@@ -327,6 +365,29 @@ const MobileSettings = () => {
                                 )}
                             </div>
 
+                            {/* Domain Name */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center px-1">
+                                    <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Tailscale 도메인 (HTTPS)</label>
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-purple-50 text-purple-600 rounded-lg border border-purple-100">
+                                        <Lock size={10} />
+                                        <span className="text-[10px] font-black">HTTPS 전용</span>
+                                    </div>
+                                </div>
+                                <div className="relative group">
+                                    <input
+                                        type="text"
+                                        placeholder="장치이름.계정명.ts.net"
+                                        className="w-full h-14 bg-slate-50 border border-transparent rounded-[1.25rem] px-6 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:bg-white focus:border-purple-500/30 focus:shadow-lg focus:shadow-purple-500/5 transition-all text-center"
+                                        value={config.domain_name}
+                                        onChange={(e) => setConfig({ ...config, domain_name: e.target.value })}
+                                    />
+                                </div>
+                                <p className="px-2 text-[10px] text-slate-400 font-medium italic">
+                                    * 도메인이 설정되면 자동으로 HTTPS 보안 접속이 활성화됩니다.
+                                </p>
+                            </div>
+
                             {/* PIN Use Toggle */}
                             <div className="p-5 bg-slate-50/80 rounded-[1.5rem] border border-slate-100 flex items-center justify-between group hover:bg-slate-50 transition-colors">
                                 <div className="flex items-center gap-4">
@@ -376,54 +437,76 @@ const MobileSettings = () => {
                     </div>
                 </div>
 
-                {/* Info Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-80">
-                    <div className="p-6 bg-slate-100/50 rounded-[2rem] border border-slate-200/60 flex gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-indigo-400 shrink-0 shadow-sm">
-                            <Wifi size={18} />
+                {/* Detailed Guides */}
+                <div className="space-y-6">
+                    {/* Internal Network Guide */}
+                    <div className="p-8 bg-slate-100/50 rounded-[2.5rem] border border-slate-200/60 flex flex-col md:flex-row gap-6 items-start transition-all hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 group">
+                        <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center text-indigo-500 shrink-0 shadow-sm group-hover:scale-110 transition-transform duration-500">
+                            <Wifi size={28} />
                         </div>
-                        <div>
-                            <h4 className="text-xs font-black text-slate-700 mb-1">내부 네트워크 연동 가이드</h4>
-                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                PC와 모바일 기기가 동일한 Wi-Fi(공유기)에 연결되어 있어야 합니다. <br />
-                                방화벽 설정에 따라 접속이 원활하지 않을 수 있으니 확인이 필요합니다.
+                        <div className="space-y-2">
+                            <h4 className="text-sm font-black text-slate-700 flex items-center gap-2">
+                                내부 네트워크 (Local) 가이드
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-500 text-[10px] rounded-md uppercase font-black">Wi-Fi Connection</span>
+                            </h4>
+                            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                                현장의 공유기(Wi-Fi)에 PC와 모바일 기기를 함께 연결해 주세요. <br />
+                                방화벽에 의해 3000번 포트가 차단된 경우, 'Windows 보안' 설정에서 해당 포트를 허용해야 정상적으로 접속됩니다.
                             </p>
                         </div>
                     </div>
-                    <div className="p-6 bg-slate-100/50 rounded-[2rem] border border-slate-200/60 flex gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-purple-400 shrink-0 shadow-sm">
-                            <Globe size={18} />
-                        </div>
-                        <div>
-                            <h4 className="text-xs font-black text-slate-700 mb-1">Tailscale 원격 연동 가이드</h4>
-                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                각 기기에 Tailscale을 설치하고 로그인하면 외부에서도 안전하게 접속됩니다. <br />
-                                보안을 위해 6자리 PIN 번호 사용 설정을 강력히 권장합니다.
-                            </p>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Bottom Banner */}
-                <div className="mt-12 p-6 rounded-[2rem] bg-indigo-600 flex items-center justify-between text-white shadow-2xl shadow-indigo-200 overflow-hidden relative group">
-                    <div className="absolute top-0 right-0 p-8 opacity-10 rotate-12 group-hover:rotate-[20deg] transition-transform duration-700">
-                        <Smartphone size={120} />
-                    </div>
-                    <div className="flex items-center gap-6 relative z-10">
-                        <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-                            <Info size={28} />
+                    {/* Tailscale Detailed Guide */}
+                    <div className="p-8 bg-white rounded-[2.5rem] border border-purple-100 shadow-xl shadow-purple-500/5 flex flex-col gap-8 relative overflow-hidden group">
+                        {/* Decorative background */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/5 blur-[80px] rounded-full -mr-20 -mt-20"></div>
+
+                        <div className="flex flex-col md:flex-row gap-6 items-start relative z-10">
+                            <div className="w-14 h-14 rounded-2xl bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-purple-200 group-hover:rotate-6 transition-transform duration-500">
+                                <Globe size={28} />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-black text-slate-700 flex items-center gap-2">
+                                        Tailscale 원격 연동 (Remote) 가이드
+                                        <span className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[10px] rounded-md uppercase font-black">Secure VPN Access</span>
+                                    </h4>
+                                    <p className="text-xs text-slate-500 font-medium leading-relaxed mt-2">
+                                        Tailscale은 별도의 포트포워딩 설정 없이도 외부에서 안전하게 농장에 접속하게 해주는 보안 네트워킹 서비스입니다.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                                    {[
+                                        { step: "01", title: "가입하기", desc: "공식 홈페이지에서 무료 계정을 생성합니다.", icon: <ExternalLink size={14} />, link: "https://tailscale.com" },
+                                        { step: "02", title: "PC 설치", desc: "서버 PC에 Tailscale을 설치하고 로그인합니다.", icon: null },
+                                        { step: "03", title: "모바일 설치", desc: "모바일 앱 설치 후 동일한 계정으로 로그인합니다.", icon: null },
+                                        { step: "04", title: "연동 확인", desc: "상단의 '외부망' 탭을 눌러 QR 코드를 스캔하세요.", icon: null }
+                                    ].map((item, id) => (
+                                        <div key={id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-purple-200 transition-colors">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-[10px] font-black text-purple-500">{item.step}</span>
+                                                {item.icon && (
+                                                    <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-700">
+                                                        {item.icon}
+                                                    </a>
+                                                )}
+                                            </div>
+                                            <h5 className="text-[11px] font-black text-slate-700 mb-1">{item.title}</h5>
+                                            <p className="text-[10px] text-slate-400 font-bold leading-tight">{item.desc}</p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-3 p-4 bg-purple-50/50 rounded-2xl border border-purple-100/50">
+                                    <Info size={16} className="text-purple-500 shrink-0" />
+                                    <p className="text-[10px] text-purple-700 font-bold">
+                                        Tailscale을 사용하면 별도의 전용 IP 없이도 전 세계 어디서든 본인만의 보안망으로 농장 관리가 가능해집니다.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="text-lg font-black tracking-tight">도움이 필요하신가요?</h4>
-                            <p className="text-indigo-100 text-xs font-bold leading-relaxed opacity-80">
-                                모바일 연동에 문제가 있다면 사용자 메뉴얼을 확인하거나<br />
-                                기술지원 센터(cs@mycelium.farm)로 문의해 주세요.
-                            </p>
-                        </div>
                     </div>
-                    <button className="relative z-10 px-6 py-3 bg-white text-indigo-600 rounded-xl font-black text-xs hover:bg-indigo-50 transition-colors shadow-lg">
-                        사용자 메뉴얼 보기
-                    </button>
                 </div>
             </div>
 

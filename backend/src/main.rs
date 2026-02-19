@@ -28,6 +28,7 @@ mod stubs;
 mod stubs_macros;
 mod bridge;
 mod embedded_db;
+mod proxy;
 
 use state::{AppState, SessionState, SetupStatus};
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
@@ -35,10 +36,12 @@ use std::sync::{atomic::AtomicBool, Arc, Mutex};
 pub static DB_MODIFIED: AtomicBool = AtomicBool::new(false);
 pub static IS_EXITING: AtomicBool = AtomicBool::new(false);
 pub static BACKUP_CANCELLED: AtomicBool = AtomicBool::new(false);
-
 fn main() {
     // 0. Load environment variables
     load_env();
+
+    // 0.1 Start Caddy Proxy for HTTPS (Tailscale)
+    proxy::start_caddy();
 
     // 1. Single Instance Check
     let instance = SingleInstance::new("com.mycelium.smartfarm.backend").unwrap();
@@ -93,6 +96,7 @@ fn main() {
             if event.id == show_item.id() {
                 let _ = open::that("http://localhost:3000");
             } else if event.id == quit_item.id() {
+                proxy::stop_caddy();
                 std::process::exit(0);
             }
         }

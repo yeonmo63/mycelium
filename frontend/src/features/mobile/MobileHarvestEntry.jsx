@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { Capacitor } from '@capacitor/core';
+import { scanNativeQr, stopNativeQr } from '../../utils/nativeScanner';
 import { useNavigate } from 'react-router-dom';
 import { callBridge } from '../../utils/apiBridge';
 import { useModal } from '../../contexts/ModalContext';
@@ -38,44 +40,100 @@ const MobileHarvestEntry = () => {
     const [cameraError, setCameraError] = useState(null);
 
     useEffect(() => {
+        let isInstanceMounted = true;
+
         if (isScannerOpen) {
+            // Native Scanner logic
+            if (Capacitor.isNativePlatform()) {
+                const runNativeScan = async () => {
+                    try {
+                        const result = await scanNativeQr();
+                        if (result.content && isInstanceMounted) {
+                            processQrCode(result.content);
+                        }
+                    } catch (err) {
+                        console.error("Native scan error", err);
+                        setCameraError("네이티브 스캐너 실행 실패: " + err.message);
+                    }
+                };
+                runNativeScan();
+                return () => {
+                    isInstanceMounted = false;
+                    stopNativeQr();
+                };
+            }
+
             const timer = setTimeout(async () => {
+                if (!isInstanceMounted) return;
                 if (scannerInputRef.current) scannerInputRef.current.focus();
 
+                const readerElement = document.getElementById("reader-harvest");
+                if (!readerElement) return;
+
                 try {
+                    // Clean up existing instance
+                    if (html5QrCodeRef.current) {
+                        try {
+                            if (html5QrCodeRef.current.isScanning) {
+                                await html5QrCodeRef.current.stop();
+                            }
+                        } catch (e) {
+                            console.warn("Cleanup of old scanner failed", e);
+                        }
+                    }
+
                     const html5QrCode = new Html5Qrcode("reader-harvest");
                     html5QrCodeRef.current = html5QrCode;
 
-                    const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+                    const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0, disableFlip: false };
 
-                    await html5QrCode.start(
-                        { facingMode: { exact: "environment" } },
-                        config,
-                        (decodedText) => {
-                            setCameraError(null);
-                            processQrCode(decodedText);
-                        },
-                        (errorMessage) => { /* quiet */ }
-                    ).catch(async () => {
-                        await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                            setCameraError(null);
-                            processQrCode(decodedText);
-                        }, () => { });
-                    });
+                    // Try environment (back) camera
+                    try {
+                        await html5QrCode.start(
+                            { facingMode: "environment" },
+                            config,
+                            (decodedText) => {
+                                if (isInstanceMounted) {
+                                    setCameraError(null);
+                                    processQrCode(decodedText);
+                                }
+                            },
+                            (errorMessage) => { /* quiet */ }
+                        );
+                    } catch (startErr) {
+                        console.log("Environment camera start failed, trying any", startErr);
+                        await html5QrCode.start(
+                            { facingMode: "user" },
+                            config,
+                            (decodedText) => {
+                                if (isInstanceMounted) {
+                                    setCameraError(null);
+                                    processQrCode(decodedText);
+                                }
+                            },
+                            () => { }
+                        );
+                    }
                 } catch (err) {
-                    console.error("Camera start failed:", err);
+                    console.error("Scanner initialization failed:", err);
                     if (!window.isSecureContext && window.location.hostname !== 'localhost') {
-                        setCameraError("🔐 WiFi(HTTP) 접속 중에는 실시간 화면을 쓸 수 없습니다. 아래 [사진 촬영] 버튼을 눌러주세요.");
+                        setCameraError("🔐 보안 연결(HTTPS)이 아닙니다. WiFi(HTTP) 접속 중에는 실시간 카메라를 사용할 수 없습니다.");
                     } else {
-                        setCameraError("🔐 카메라 연결을 확인해 주세요. (권한 승인이 필요할 수 있습니다)");
+                        setCameraError(`🔐 카메라 연결 실패: ${err.message || '권한 요청을 확인해주세요'}`);
                     }
                 }
             }, 500);
 
             return () => {
+                isInstanceMounted = false;
                 clearTimeout(timer);
-                if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                    html5QrCodeRef.current.stop().catch(e => console.error("Stop failed", e));
+                if (html5QrCodeRef.current) {
+                    const currentScanner = html5QrCodeRef.current;
+                    if (currentScanner.getState && currentScanner.getState() === 2) {
+                        currentScanner.stop().catch(e => console.error("Stop failed", e));
+                    } else if (currentScanner.isScanning) {
+                        currentScanner.stop().catch(e => console.error("Stop failed", e));
+                    }
                 }
             };
         }
@@ -100,7 +158,7 @@ const MobileHarvestEntry = () => {
         setScannerValue('');
     };
 
-    const processQrCode = (code) => {
+    const processQrCode = async (code) => {
         if (!code) return;
         const rawCode = code.trim();
         setIsScanning(true);
@@ -119,6 +177,19 @@ const MobileHarvestEntry = () => {
         setIsScanning(false);
         if (foundBatch) {
             setFormData(prev => ({ ...prev, batch_id: foundBatch.batch_id }));
+
+            // Stop scanner immediately upon success
+            if (html5QrCodeRef.current) {
+                try {
+                    const state = html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : 0;
+                    if (state === 2 || html5QrCodeRef.current.isScanning) {
+                        await html5QrCodeRef.current.stop();
+                    }
+                } catch (e) {
+                    console.warn("Stop on success failed", e);
+                }
+            }
+
             setIsScannerOpen(false);
             // Auto-focus quantity for faster entry
             setTimeout(() => {

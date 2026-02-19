@@ -75,6 +75,8 @@
             <!--<ComponentRef Id='License'/>-->
 
             <ComponentRef Id="binary0" />
+            <ComponentRef Id="CaddyConfig" />
+            <ComponentRef Id="CaddyExe" />
             <ComponentGroupRef Id="ResourcesGroup" />
             <ComponentRef Id="ApplicationShortcutDesktop" />
             <ComponentRef Id="WebShortcutDesktop" />
@@ -172,7 +174,16 @@
                             <!-- .env 파일 추가 -->
                             <File Id="env_file" Name=".env" DiskId="1" Source="d:\workspace\rust\mycelium\backend\.env" />
                         </Component>
-                        <Directory Id="Resources" Name="resources" />
+                        <Directory Id="Resources" Name="resources">
+                            <Component Id="CaddyConfig" Guid="9A8B7C6E-5D4C-3B2A-1A09-8B7C6E5D4C3B">
+                                <File Id="Caddyfile" Name="Caddyfile" DiskId="1" Source="d:\workspace\rust\mycelium\backend\resources\Caddyfile" KeyPath="yes" />
+                            </Component>
+                            <Directory Id="ResourcesBin" Name="bin">
+                                <Component Id="CaddyExe" Guid="8B7C6E5D-4C3B-2A1A-098B-7C6E5D4C3B2A">
+                                    <File Id="caddy_exe" Name="caddy.exe" DiskId="1" Source="d:\workspace\rust\mycelium\backend\resources\bin\caddy.exe" KeyPath="yes" />
+                                </Component>
+                            </Directory>
+                        </Directory>
                     </Directory>
                 </Directory>
             </StandardDirectory>

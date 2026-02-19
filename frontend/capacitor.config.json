@@ -1,0 +1,16 @@
+{
+  "appId": "com.mycelium.smartfarm",
+  "appName": "Mycelium",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true,
+    "allowNavigation": [
+      "*"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

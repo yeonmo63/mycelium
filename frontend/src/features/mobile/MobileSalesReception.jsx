@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { Capacitor } from '@capacitor/core';
+import { scanNativeQr, stopNativeQr } from '../../utils/nativeScanner';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../contexts/ModalContext';
 import { useSalesReception } from '../sales/hooks/useSalesReception';
@@ -60,51 +62,110 @@ const MobileSalesReception = () => {
     const [cameraError, setCameraError] = useState(null);
 
     useEffect(() => {
+        let isInstanceMounted = true;
+
         if (isScannerOpen) {
+            // Native Scanner Logic
+            if (Capacitor.isNativePlatform()) {
+                const runNativeScan = async () => {
+                    try {
+                        const result = await scanNativeQr();
+                        if (result.content && isInstanceMounted) {
+                            processQrCode(result.content);
+                        }
+                    } catch (err) {
+                        console.error("Native scan error", err);
+                        setCameraError("네이티브 스캐너 실행 실패: " + err.message);
+                    }
+                };
+                runNativeScan();
+                return () => {
+                    isInstanceMounted = false;
+                    stopNativeQr();
+                };
+            }
+
+            // Web Fallback (Existing)
             // Give layout a moment to render the target div
             const timer = setTimeout(async () => {
+                if (!isInstanceMounted) return;
                 if (scannerInputRef.current) scannerInputRef.current.focus();
 
+                const readerElement = document.getElementById("reader");
+                if (!readerElement) return;
+
                 try {
+                    // Clean up any existing instance first
+                    if (html5QrCodeRef.current) {
+                        try {
+                            if (html5QrCodeRef.current.isScanning) {
+                                await html5QrCodeRef.current.stop();
+                            }
+                        } catch (e) {
+                            console.warn("Cleanup of old scanner failed", e);
+                        }
+                    }
+
                     const html5QrCode = new Html5Qrcode("reader");
                     html5QrCodeRef.current = html5QrCode;
 
                     const config = {
-                        fps: 15, // Smoothness
+                        fps: 15,
                         qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0
+                        aspectRatio: 1.0,
+                        disableFlip: false // Standard QRs don't need flip
                     };
 
-                    // 2. Strict Back Camera Request
-                    await html5QrCode.start(
-                        { facingMode: { exact: "environment" } }, // Force back camera
-                        config,
-                        (decodedText) => {
-                            setCameraError(null);
-                            processQrCode(decodedText);
-                        },
-                        (errorMessage) => { /* quiet */ }
-                    ).catch(async () => {
-                        // Fallback if 'exact' is too strict for some browsers
-                        await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                            setCameraError(null);
-                            processQrCode(decodedText);
-                        }, () => { });
-                    });
+                    // First try environment (back) camera
+                    try {
+                        await html5QrCode.start(
+                            { facingMode: "environment" },
+                            config,
+                            (decodedText) => {
+                                if (isInstanceMounted) {
+                                    setCameraError(null);
+                                    processQrCode(decodedText);
+                                }
+                            },
+                            (errorMessage) => { /* quiet callback */ }
+                        );
+                    } catch (startErr) {
+                        console.log("Environment camera start failed, trying any available camera", startErr);
+                        // Fallback: Use any available camera
+                        await html5QrCode.start(
+                            { facingMode: "user" }, // Try front if back fails
+                            config,
+                            (decodedText) => {
+                                if (isInstanceMounted) {
+                                    setCameraError(null);
+                                    processQrCode(decodedText);
+                                }
+                            },
+                            () => { }
+                        );
+                    }
                 } catch (err) {
-                    console.error("Camera start failed:", err);
+                    console.error("Scanner initialization failed:", err);
                     if (!window.isSecureContext && window.location.hostname !== 'localhost') {
-                        setCameraError("🔐 WiFi(HTTP) 접속 중에는 실시간 화면을 쓸 수 없습니다. 아래 [사진 촬영] 버튼을 눌러주세요.");
+                        setCameraError("🔐 보안 연결(HTTPS)이 아닙니다. WiFi(HTTP) 접속 중에는 실시간 카메라를 사용할 수 없습니다.");
                     } else {
-                        setCameraError("🔐 카메라 연결을 확인해 주세요. (권한 승인이 필요할 수 있습니다)");
+                        setCameraError(`🔐 카메라 연결 실패: ${err.message || '권한 요청을 확인해주세요'}`);
                     }
                 }
             }, 500);
 
             return () => {
+                isInstanceMounted = false;
                 clearTimeout(timer);
-                if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                    html5QrCodeRef.current.stop().catch(e => console.error("Stop failed", e));
+                if (html5QrCodeRef.current) {
+                    // Note: stop() is async, but we can't await in cleanup easily without side effects
+                    // The getState() check is more robust in 2.3.8
+                    const currentScanner = html5QrCodeRef.current;
+                    if (currentScanner.getState && currentScanner.getState() === 2) {
+                        currentScanner.stop().catch(e => console.error("Stop failed", e));
+                    } else if (currentScanner.isScanning) {
+                        currentScanner.stop().catch(e => console.error("Stop failed", e));
+                    }
                 }
             };
         }
@@ -201,7 +262,7 @@ const MobileSalesReception = () => {
         setScannerValue('');
     };
 
-    const processQrCode = (code) => {
+    const processQrCode = async (code) => {
         if (!code) return;
         const rawCode = code.trim();
         const parts = rawCode.split('|').map(p => p.trim());
@@ -227,8 +288,22 @@ const MobileSalesReception = () => {
                     value: foundProduct.product_name
                 }
             });
+
+            // Stop scanner immediately upon success to release camera
+            if (html5QrCodeRef.current) {
+                try {
+                    const state = html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : 0;
+                    if (state === 2 || html5QrCodeRef.current.isScanning) {
+                        await html5QrCodeRef.current.stop();
+                    }
+                } catch (e) {
+                    console.warn("Stop on success failed", e);
+                }
+            }
+
             showAlert("인식 완료", `[${foundProduct.product_name}] 상품이 선택되었습니다.`);
             setIsScannerOpen(false);
+
             // Auto-focus quantity for faster entry
             setTimeout(() => {
                 qtyInputRef.current?.focus();
