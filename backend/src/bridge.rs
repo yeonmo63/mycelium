@@ -36,7 +36,6 @@ pub fn create_mobile_router(pool: DbPool, config_dir: PathBuf) -> Router {
             "/api/sales/special/batch",
             post(save_special_sales_batch_bridge),
         )
-        .route("/api/event/list", get(get_all_events_bridge))
         // External Mall
         .route(
             "/api/sales/external/fetch",

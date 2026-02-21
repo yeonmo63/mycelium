@@ -39,7 +39,7 @@ wix extension add WixToolset.Util.wixext 2>$null
 wix extension add WixToolset.UI.wixext 2>$null
 
 # Execute WiX Build
-wix build `
+wix build -arch x64 `
     -d Version=1.0.0 `
     -d CargoTargetBinDir=target\release `
     -d ResourceDir=resources `

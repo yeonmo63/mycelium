@@ -75,6 +75,7 @@
             <!--<ComponentRef Id='License'/>-->
 
             <ComponentRef Id="binary0" />
+            <ComponentRef Id="EnvComponent" />
             <ComponentGroupRef Id="ResourcesGroup" />
             <ComponentRef Id="ApplicationShortcutDesktop" />
             <ComponentRef Id="WebShortcutDesktop" />
@@ -169,8 +170,10 @@
                         </Component>
                         <Component Id="binary0" Guid="DE8A3A4F-CC30-4C9D-9F62-581F6D64753F">
                             <File Id="exe0" Name="celium-backend.exe" DiskId="1" Source="$(var.CargoTargetBinDir)\celium-backend.exe" KeyPath="yes" />
+                        </Component>
+                        <Component Id="EnvComponent" Guid="A1B2C3D4-E5F6-4789-9A8B-C7D8E9F0A1B2">
                             <!-- .env 파일 추가 -->
-                            <File Id="env_file" Name=".env" DiskId="1" Source="d:\workspace\rust\mycelium\backend\.env" />
+                            <File Id="env_file" Name=".env" DiskId="1" Source="d:\workspace\rust\mycelium\backend\.env" KeyPath="yes" />
                         </Component>
                         <Directory Id="Resources" Name="resources" />
                     </Directory>
