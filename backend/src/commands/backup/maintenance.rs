@@ -2,7 +2,7 @@ use crate::db::DbPool;
 use crate::error::MyceliumResult;
 
 // Using global stubs
-use crate::stubs::{check_admin, command, AppHandle, State, TauriState};
+use crate::stubs::{check_admin, AppHandle, State, TauriState};
 use axum::extract::{Json, State as AxumState};
 
 #[allow(dead_code)]

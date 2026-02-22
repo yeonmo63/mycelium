@@ -3,13 +3,13 @@ use crate::commands::config::get_gemini_api_key;
 use crate::commands::config::get_naver_keys;
 use crate::db::{Customer, DbPool};
 use crate::error::{MyceliumError, MyceliumResult};
-use chrono::{Duration, NaiveDate};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 // Using global stubs
 // Using global stubs
-use crate::stubs::{check_admin, command, AppHandle, State};
+use crate::stubs::{AppHandle, State};
 
 use axum::{extract::State as AxumState, Json};
 

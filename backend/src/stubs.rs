@@ -1,5 +1,4 @@
 // backend/src/stubs.rs
-pub use crate::stubs_macros::command;
 
 pub type AppHandle = ();
 

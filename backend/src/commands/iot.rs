@@ -1,7 +1,7 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
 use crate::state::AppState;
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use axum::extract::{Json, Query, State as AxumState};
 use chrono::{Local, Timelike};
 use rand::Rng;

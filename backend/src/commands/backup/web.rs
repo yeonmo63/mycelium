@@ -1,13 +1,13 @@
-use axum::extract::{State as AxumState, Json};
-use crate::state::AppState;
-use crate::error::{MyceliumResult, MyceliumError};
-use crate::commands::backup::auto::{run_daily_custom_backup, get_auto_backups};
-use crate::commands::backup::models::AutoBackupItem;
+use crate::commands::backup::auto::{get_auto_backups, run_daily_custom_backup};
 use crate::commands::backup::logic::restore_database;
-use crate::commands::backup::maintenance::{run_db_maintenance, cleanup_old_logs};
+use crate::commands::backup::maintenance::{cleanup_old_logs, run_db_maintenance};
+use crate::commands::backup::models::AutoBackupItem;
 use crate::commands::backup::status::get_backup_status as get_status_cmd;
 use crate::commands::config::get_app_config_dir;
-use serde::{Deserialize, Serialize};
+use crate::error::{MyceliumError, MyceliumResult};
+use crate::state::AppState;
+use axum::extract::{Json, State as AxumState};
+use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Deserialize)]
@@ -41,16 +41,22 @@ pub async fn get_auto_backups_axum() -> MyceliumResult<Json<Vec<AutoBackupItem>>
 
 pub async fn run_daily_custom_backup_axum(
     AxumState(state): AxumState<AppState>,
-    Json(payload): Json<RunBackupPayload>
+    Json(payload): Json<RunBackupPayload>,
 ) -> MyceliumResult<Json<String>> {
     let app = ();
-    let result = run_daily_custom_backup(app, &state.pool, payload.is_incremental, payload.use_compression).await?;
+    let result = run_daily_custom_backup(
+        app,
+        &state.pool,
+        payload.is_incremental,
+        payload.use_compression,
+    )
+    .await?;
     Ok(Json(result))
 }
 
 pub async fn restore_database_axum(
     AxumState(state): AxumState<AppState>,
-    Json(payload): Json<RestorePayload>
+    Json(payload): Json<RestorePayload>,
 ) -> MyceliumResult<Json<String>> {
     let app = ();
     let result = restore_database(app, &state.pool, payload.path).await?;
@@ -58,7 +64,7 @@ pub async fn restore_database_axum(
 }
 
 pub async fn run_db_maintenance_axum(
-    AxumState(state): AxumState<AppState>
+    AxumState(state): AxumState<AppState>,
 ) -> MyceliumResult<Json<String>> {
     let app = ();
     let result = run_db_maintenance(app, &state.pool).await?;
@@ -67,7 +73,7 @@ pub async fn run_db_maintenance_axum(
 
 pub async fn cleanup_old_logs_axum(
     AxumState(state): AxumState<AppState>,
-    Json(payload): Json<CleanupPayload>
+    Json(payload): Json<CleanupPayload>,
 ) -> MyceliumResult<Json<u64>> {
     let app = ();
     let result = cleanup_old_logs(app, &state.pool, payload.months).await?;
@@ -86,28 +92,38 @@ fn get_config_path() -> MyceliumResult<std::path::PathBuf> {
 pub async fn get_external_backup_path_axum() -> MyceliumResult<Json<String>> {
     let path = get_config_path()?;
     if path.exists() {
-        let content = std::fs::read_to_string(&path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        let content =
+            std::fs::read_to_string(&path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
         let json: Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
-        let ext_path = json["external_backup_path"].as_str().unwrap_or("").to_string();
+        let ext_path = json["external_backup_path"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
         Ok(Json(ext_path))
     } else {
         Ok(Json("".to_string()))
     }
 }
 
-pub async fn save_external_backup_path_axum(Json(payload): Json<SavePathPayload>) -> MyceliumResult<Json<()>> {
+pub async fn save_external_backup_path_axum(
+    Json(payload): Json<SavePathPayload>,
+) -> MyceliumResult<Json<()>> {
     let path = get_config_path()?;
     let mut json: Value = if path.exists() {
-        let content = std::fs::read_to_string(&path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
+        let content =
+            std::fs::read_to_string(&path).map_err(|e| MyceliumError::Internal(e.to_string()))?;
         serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
-    
+
     json["external_backup_path"] = serde_json::Value::String(payload.path);
-    
-    std::fs::write(&path, serde_json::to_string_pretty(&json).map_err(|e| MyceliumError::Internal(e.to_string()))?)
-        .map_err(|e| MyceliumError::Internal(e.to_string()))?;
+
+    std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&json).map_err(|e| MyceliumError::Internal(e.to_string()))?,
+    )
+    .map_err(|e| MyceliumError::Internal(e.to_string()))?;
     Ok(Json(()))
 }
 

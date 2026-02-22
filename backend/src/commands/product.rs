@@ -8,11 +8,10 @@ use chrono::NaiveDateTime;
 use sqlx;
 use std::sync::atomic::Ordering;
 // Using global stubs
-use crate::stubs::{AppHandle, State as TauriState, command, check_admin};
-use crate::commands::config::check_admin as config_check_admin;
+use crate::stubs::{AppHandle, State as TauriState};
 use axum::extract::{State as AxumState, Json};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde::Deserialize;
+use serde_json::json;
 
 
 #[allow(dead_code)]

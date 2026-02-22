@@ -2,7 +2,7 @@
 use crate::db::{DbPool, ExperienceProgram, ExperienceReservation};
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::AppState;
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use axum::{extract::Query, extract::State as AxumState, Json};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};

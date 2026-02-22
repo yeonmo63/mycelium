@@ -20,7 +20,7 @@ use std::fs::File;
 use std::io::{BufRead, BufWriter, Read, Write};
 use std::sync::atomic::Ordering;
 // Using global stubs
-use crate::stubs::{check_admin, AppHandle, Emitter, State as TauriState};
+use crate::stubs::{AppHandle, Emitter, State as TauriState};
 
 pub async fn restore_database_sql(
     app: AppHandle,

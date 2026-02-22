@@ -1,13 +1,12 @@
 use crate::db::{DbPool, FarmingLog};
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{Manager, State};
 use chrono::NaiveDate;
 use printpdf::path::{PaintMode, WindingOrder};
 use printpdf::*;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
-use crate::stubs::{command, Manager, State, check_admin};
-
 
 pub async fn generate_production_pdf(
     state: State<'_, DbPool>,

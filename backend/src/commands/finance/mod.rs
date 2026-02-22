@@ -4,7 +4,7 @@ use crate::db::{
 };
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::AppState;
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use axum::{
     extract::{Query, State as AxumState},

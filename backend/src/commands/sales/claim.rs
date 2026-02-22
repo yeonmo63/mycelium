@@ -1,6 +1,6 @@
 use crate::db::{DbPool, SalesClaim};
 use crate::error::MyceliumResult;
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;

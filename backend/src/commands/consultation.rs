@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use crate::db::{Consultation, DbPool};
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;

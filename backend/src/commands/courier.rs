@@ -1,6 +1,6 @@
 use crate::db::DbPool;
 use crate::error::MyceliumResult;
-use crate::stubs::{check_admin, command, Manager, State};
+use crate::stubs::{Manager, State};
 use crate::DB_MODIFIED;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

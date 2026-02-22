@@ -91,7 +91,7 @@ use crate::commands::config::get_gemini_api_key;
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::DB_MODIFIED;
 
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use sqlx;
 use std::sync::atomic::Ordering;
 
@@ -247,7 +247,7 @@ pub async fn create_customer(
         if d.is_empty() {
             None
         } else {
-            crate::commands::sales::parse_date_safe(d)
+            crate::commands::sales::utils::parse_date_safe(d)
         }
     } else {
         None
@@ -325,7 +325,7 @@ pub async fn update_customer(
         if d.is_empty() {
             None
         } else {
-            crate::commands::sales::parse_date_safe(d)
+            crate::commands::sales::utils::parse_date_safe(d)
         }
     } else {
         None
@@ -831,7 +831,7 @@ pub async fn create_customer_axum(
         if d.is_empty() {
             None
         } else {
-            crate::commands::sales::parse_date_safe(d)
+            crate::commands::sales::utils::parse_date_safe(d)
         }
     } else {
         None
@@ -893,7 +893,7 @@ pub async fn update_customer_axum(
         if d.is_empty() {
             None
         } else {
-            crate::commands::sales::parse_date_safe(d)
+            crate::commands::sales::utils::parse_date_safe(d)
         }
     } else {
         None

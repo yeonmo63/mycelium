@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use crate::db::{DbPool, Event};
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use axum::{
     extract::{Query, State as AxumState},

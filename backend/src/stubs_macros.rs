@@ -5,5 +5,3 @@ macro_rules! command {
         $($tokens)*
     };
 }
-
-pub use command;

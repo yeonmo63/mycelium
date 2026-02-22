@@ -3,19 +3,20 @@ use crate::commands::backup::models::AutoBackupItem;
 use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at};
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{check_admin, AppHandle, Manager, State};
 use crate::{BACKUP_CANCELLED, DB_MODIFIED, IS_EXITING};
 use chrono::Datelike;
 use std::sync::atomic::Ordering;
-use crate::stubs::{command, AppHandle, Manager, State, check_admin};
-
 
 pub async fn cancel_backup_restore() {
     BACKUP_CANCELLED.store(true, Ordering::Relaxed);
     println!("[System] Cancellation requested by user.");
 }
 
-
-pub async fn confirm_exit(app: crate::stubs::AppHandle, skip_auto_backup: bool) -> MyceliumResult<()> {
+pub async fn confirm_exit(
+    app: crate::stubs::AppHandle,
+    skip_auto_backup: bool,
+) -> MyceliumResult<()> {
     // Prevent re-entry
     if IS_EXITING.load(Ordering::Relaxed) {
         return Ok(());
@@ -72,7 +73,6 @@ pub async fn confirm_exit(app: crate::stubs::AppHandle, skip_auto_backup: bool) 
     // Forcefully kill the process at OS level
     std::process::exit(0);
 }
-
 
 pub async fn trigger_auto_backup(
     app: crate::stubs::AppHandle,
@@ -190,7 +190,6 @@ pub fn format_and_push(
     });
 }
 
-
 pub async fn get_auto_backups(app: crate::stubs::AppHandle) -> MyceliumResult<Vec<AutoBackupItem>> {
     let mut list = Vec::new();
 
@@ -251,7 +250,6 @@ pub async fn get_auto_backups(app: crate::stubs::AppHandle) -> MyceliumResult<Ve
     Ok(list)
 }
 
-
 pub async fn run_daily_custom_backup(
     app: AppHandle,
     state: State<'_, DbPool>,
@@ -261,7 +259,6 @@ pub async fn run_daily_custom_backup(
     check_admin(&app)?;
     run_backup_logic(app, state, is_incremental, use_compression, true).await
 }
-
 
 pub async fn check_daily_backup(
     app: crate::stubs::AppHandle,
@@ -356,7 +353,6 @@ async fn run_backup_logic(
         Err(MyceliumError::Internal("Config dir not found".to_string()))
     }
 }
-
 
 pub async fn delete_backup(app: AppHandle, path: String) -> MyceliumResult<()> {
     check_admin(&app)?;

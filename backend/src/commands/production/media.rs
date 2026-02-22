@@ -1,6 +1,6 @@
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::AppState;
-use crate::stubs::{check_admin, command, Manager};
+use crate::stubs::Manager;
 use axum::{
     extract::{Multipart, State as AxumState},
     response::IntoResponse,

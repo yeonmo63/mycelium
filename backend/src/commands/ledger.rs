@@ -2,12 +2,9 @@
 use crate::db::Customer;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
-use axum::{
-    extract::{Json, Query, State as AxumState},
-    response::IntoResponse,
-};
+use axum::extract::{Json, Query, State as AxumState};
 use chrono::NaiveDate;
 use std::sync::atomic::Ordering;
 

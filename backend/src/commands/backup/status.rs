@@ -1,9 +1,8 @@
 use crate::commands::backup::models::DbLocationInfo;
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
+use crate::stubs::{Manager, State};
 use chrono::Datelike;
-use crate::stubs::{command, Manager, State, check_admin};
-
 
 pub async fn check_db_location(state: State<'_, DbPool>) -> MyceliumResult<DbLocationInfo> {
     let pool = &*state;
@@ -104,7 +103,6 @@ pub fn update_last_backup_at(
     Ok(())
 }
 
-
 pub async fn get_backup_status(app: crate::stubs::AppHandle) -> MyceliumResult<serde_json::Value> {
     let last_at = get_last_backup_at(&app);
     Ok(serde_json::json!({
@@ -113,7 +111,6 @@ pub async fn get_backup_status(app: crate::stubs::AppHandle) -> MyceliumResult<s
         "is_friday": chrono::Local::now().weekday() == chrono::Weekday::Fri
     }))
 }
-
 
 pub fn get_internal_backup_path(app: crate::stubs::AppHandle) -> MyceliumResult<String> {
     if let Ok(config_dir) = app.path().app_config_dir() {

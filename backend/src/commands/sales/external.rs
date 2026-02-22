@@ -1,6 +1,6 @@
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, AppHandle, Manager};
+use crate::stubs::{AppHandle, Manager};
 use axum::{
     extract::{Query, State},
     response::IntoResponse,

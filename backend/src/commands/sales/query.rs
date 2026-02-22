@@ -1,6 +1,6 @@
 use crate::db::{DbPool, Sales};
 use crate::error::MyceliumResult;
-use crate::stubs::{check_admin, command, Manager, State};
+use crate::stubs::State;
 use axum::{
     extract::{Query, State as AxumState},
     Json,

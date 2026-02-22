@@ -1,6 +1,6 @@
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use crate::DB_MODIFIED;
 use chrono::Local;
 use std::sync::atomic::Ordering;

@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 // Using global stubs
-use crate::stubs::{AppHandle, State as TauriState, command, check_admin};
-use crate::commands::config::check_admin as config_check_admin;
+use crate::stubs::{AppHandle, State as TauriState, check_admin};
 use axum::extract::{State as AxumState, Json};
 
 #[derive(Debug, Deserialize, Serialize, sqlx::FromRow)]

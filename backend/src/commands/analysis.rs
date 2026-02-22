@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use crate::db::DbPool;
 use crate::error::{MyceliumError, MyceliumResult};
-use crate::stubs::{check_admin, command, State};
+use crate::stubs::State;
 use chrono::NaiveDate;
 use polars::prelude::*;
 

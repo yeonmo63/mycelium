@@ -1,9 +1,8 @@
-use crate::commands::sales::query::{get_tax_report_v2, TaxReportItem};
+use crate::commands::sales::query::get_tax_report_v2;
 use crate::db::{CompanyInfo, DbPool};
 use crate::error::{MyceliumError, MyceliumResult};
 // use chrono::NaiveDate;
 use crate::stubs::State;
-use printpdf::path::{PaintMode, WindingOrder};
 use printpdf::*;
 use std::fs::File;
 use std::io::BufWriter;
