@@ -59,15 +59,44 @@ pub type MyceliumResult<T> = Result<T, MyceliumError>;
 impl IntoResponse for MyceliumError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            MyceliumError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            MyceliumError::Database(ref e) => {
+                tracing::error!("Database Error: {:?}", e);
+                if cfg!(debug_assertions) {
+                    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "데이터베이스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.".to_string(),
+                    )
+                }
+            }
             MyceliumError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg),
             MyceliumError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
-            MyceliumError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            MyceliumError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            MyceliumError::Migration(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            MyceliumError::Bcrypt(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            MyceliumError::Network(e) => (StatusCode::BAD_GATEWAY, e.to_string()),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            MyceliumError::Internal(msg) => {
+                tracing::error!("Internal Error: {}", msg);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "서버 내부 오류가 발생했습니다.".to_string(),
+                )
+            }
+            MyceliumError::Io(e) => {
+                tracing::error!("IO Error: {:?}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "파일 시스템 오류가 발생했습니다.".to_string(),
+                )
+            }
+            MyceliumError::Network(e) => (
+                StatusCode::BAD_GATEWAY,
+                "외부 네트워크 연결에 실패했습니다.".to_string(),
+            ),
+            _ => {
+                tracing::error!("Unhandled Error: {:?}", self);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "알 수 없는 오류가 발생했습니다.".to_string(),
+                )
+            }
         };
 
         let body = Json(json!({

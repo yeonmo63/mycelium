@@ -120,15 +120,15 @@ const ProductionManager = ({ initialTab = 'dashboard' }) => {
     return (
         <div className="flex flex-col h-full bg-slate-50/50">
             {/* Header / Navigation Bar */}
-            <div className="bg-white border-b border-slate-200 px-8 pt-2 shadow-sm relative z-10">
+            <div className="bg-white border-b border-slate-200 px-6 lg:px-8 min-[2000px]:px-12 pt-6 lg:pt-8 min-[2000px]:pt-12 pb-1 shadow-sm relative z-10">
                 {/* Line 1: Title */}
-                <div className="flex justify-between items-baseline mb-1">
-                    <div className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-100">
-                            <Activity size={16} />
+                <div className="flex justify-between items-end mb-4">
+                    <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                            <span className="w-6 h-1 bg-indigo-600 rounded-full"></span>
+                            <span className="text-[9px] font-black tracking-[0.2em] text-indigo-600 uppercase">Certification Management System</span>
                         </div>
-                        <h1 className="text-lg font-black text-slate-800 tracking-tight">GAP/HACCP 인증센터</h1>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-60">Certification Management System</p>
+                        <h1 className="text-3xl font-black text-slate-600 tracking-tighter" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>GAP/HACCP 인증센터 <span className="text-slate-300 font-light ml-1 text-xl">Certification</span></h1>
                     </div>
                 </div>
 

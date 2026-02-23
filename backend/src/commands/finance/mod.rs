@@ -169,27 +169,31 @@ pub async fn get_purchase_list(
     state: State<'_, DbPool>,
     filter: PurchaseFilter,
 ) -> MyceliumResult<Vec<Purchase>> {
-    let mut sql = "SELECT p.*, v.vendor_name FROM purchases p LEFT JOIN vendors v ON p.vendor_id = v.vendor_id WHERE 1=1".to_string();
+    let mut query_builder: sqlx::QueryBuilder<'_, sqlx::Postgres> = sqlx::QueryBuilder::new(
+        "SELECT p.*, v.vendor_name FROM purchases p LEFT JOIN vendors v ON p.vendor_id = v.vendor_id WHERE 1=1"
+    );
 
     if let Some(start) = filter.start_date {
         if !start.is_empty() {
-            sql.push_str(&format!(" AND p.purchase_date >= '{}'", start));
+            query_builder.push(" AND p.purchase_date >= ");
+            query_builder.push_bind(start);
         }
     }
     if let Some(end) = filter.end_date {
         if !end.is_empty() {
-            sql.push_str(&format!(" AND p.purchase_date <= '{}'", end));
+            query_builder.push(" AND p.purchase_date <= ");
+            query_builder.push_bind(end);
         }
     }
     if let Some(vid) = filter.vendor_id {
-        sql.push_str(&format!(" AND p.vendor_id = {}", vid));
+        query_builder.push(" AND p.vendor_id = ");
+        query_builder.push_bind(vid);
     }
 
-    sql.push_str(" ORDER BY p.purchase_date DESC");
+    query_builder.push(" ORDER BY p.purchase_date DESC");
 
-    Ok(sqlx::query_as::<_, Purchase>(&sql)
-        .fetch_all(&*state)
-        .await?)
+    let query = query_builder.build_query_as::<Purchase>();
+    Ok(query.fetch_all(&*state).await?)
 }
 
 pub async fn get_purchase_list_axum(
@@ -312,29 +316,32 @@ pub async fn get_expense_list(
     state: State<'_, DbPool>,
     filter: ExpenseFilter,
 ) -> MyceliumResult<Vec<Expense>> {
-    let mut sql = "SELECT * FROM expenses WHERE 1=1".to_string();
+    let mut query_builder: sqlx::QueryBuilder<'_, sqlx::Postgres> =
+        sqlx::QueryBuilder::new("SELECT * FROM expenses WHERE 1=1");
 
     if let Some(start) = filter.start_date {
         if !start.is_empty() {
-            sql.push_str(&format!(" AND expense_date >= '{}'", start));
+            query_builder.push(" AND expense_date >= ");
+            query_builder.push_bind(start);
         }
     }
     if let Some(end) = filter.end_date {
         if !end.is_empty() {
-            sql.push_str(&format!(" AND expense_date <= '{}'", end));
+            query_builder.push(" AND expense_date <= ");
+            query_builder.push_bind(end);
         }
     }
     if let Some(cat) = filter.category {
         if !cat.is_empty() && cat != "전체" {
-            sql.push_str(&format!(" AND category = '{}'", cat));
+            query_builder.push(" AND category = ");
+            query_builder.push_bind(cat);
         }
     }
 
-    sql.push_str(" ORDER BY expense_date DESC");
+    query_builder.push(" ORDER BY expense_date DESC");
 
-    Ok(sqlx::query_as::<_, Expense>(&sql)
-        .fetch_all(&*state)
-        .await?)
+    let query = query_builder.build_query_as::<Expense>();
+    Ok(query.fetch_all(&*state).await?)
 }
 
 pub async fn get_expense_list_axum(
@@ -651,31 +658,30 @@ pub async fn get_product_sales_stats(
     pool: State<'_, DbPool>,
     year: Option<String>,
 ) -> MyceliumResult<Vec<ProductSalesStats>> {
-    let year_filter = if let Some(ref y) = year {
-        if y != "전체조회" {
-            format!("AND TO_CHAR(order_date, 'YYYY') = '{}'", y)
-        } else {
-            "".to_string()
-        }
-    } else {
-        "".to_string()
-    };
-
-    let sql = format!(
+    let mut query_builder: sqlx::QueryBuilder<'_, sqlx::Postgres> = sqlx::QueryBuilder::new(
         r#"
         SELECT p.product_id, p.product_name, COALESCE(s.record_count, 0) as record_count, COALESCE(s.total_quantity, 0) as total_quantity, COALESCE(s.total_amount, 0) as total_amount
         FROM (SELECT * FROM products WHERE item_type = 'product') p
         INNER JOIN (
             SELECT product_id, product_name, specification, COUNT(*) as record_count, SUM(quantity) as total_quantity, SUM(total_amount) as total_amount
-            FROM sales WHERE status != '취소' {} GROUP BY product_id, product_name, specification
-        ) s ON (p.product_id = s.product_id OR (s.product_id IS NULL AND p.product_name = s.product_name AND p.specification IS NOT DISTINCT FROM s.specification)) ORDER BY total_amount DESC
-        "#,
-        year_filter
+            FROM sales WHERE status != '취소' "#,
     );
 
-    Ok(sqlx::query_as::<_, ProductSalesStats>(&sql)
-        .fetch_all(&*pool)
-        .await?)
+    if let Some(ref y) = year {
+        if y != "전체조회" {
+            query_builder.push(" AND TO_CHAR(order_date, 'YYYY') = ");
+            query_builder.push_bind(y);
+        }
+    }
+
+    query_builder.push(
+        r#" GROUP BY product_id, product_name, specification
+        ) s ON (p.product_id = s.product_id OR (s.product_id IS NULL AND p.product_name = s.product_name AND p.specification IS NOT DISTINCT FROM s.specification)) ORDER BY total_amount DESC
+        "#
+    );
+
+    let query = query_builder.build_query_as::<ProductSalesStats>();
+    Ok(query.fetch_all(&*pool).await?)
 }
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]

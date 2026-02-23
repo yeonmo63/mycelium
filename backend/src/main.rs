@@ -141,9 +141,8 @@ fn main() {
                 rt.block_on(async {
                     let config_dir = commands::config::get_app_config_dir()
                         .unwrap_or_else(|_| std::path::PathBuf::from("."));
-                    let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-                        "postgresql://postgres:ryu134^11@@localhost:5432/mycelium".to_string()
-                    });
+                    let database_url =
+                        env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env");
                     if let Ok(pool) = db::init_pool(&database_url).await {
                         // Final backup on exit if Friday or every time?
                         // The original logic was Friday = Full, others = Incremental.
@@ -197,8 +196,9 @@ async fn run_server() {
     tracing::info!("Starting Celium Backend core services...");
 
     let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-        tracing::warn!("DATABASE_URL not found in env, using default local postgres");
-        "postgresql://postgres:ryu134^11@@localhost:5432/mycelium".to_string()
+        tracing::error!("DATABASE_URL not found in env! Please run setup.");
+        // Fallback to a non-password URL or just empty to force failure
+        "postgresql://postgres@localhost:5432/mycelium".to_string()
     });
 
     let pool = match db::init_pool(&database_url).await {
@@ -263,6 +263,33 @@ async fn run_server() {
         session: Arc::new(Mutex::new(SessionState::default())),
     };
 
+    // Start Session/Login Block Cleanup Task
+    let cleanup_pool = pool.clone();
+    tokio::spawn(async move {
+        tracing::info!("Starting Session cleanup background loop...");
+        // Run every 1 hour
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            tracing::debug!("Cleaning up expired sessions and blocks...");
+
+            // Delete expired sessions
+            let _ = sqlx::query("DELETE FROM user_sessions WHERE expires_at < CURRENT_TIMESTAMP")
+                .execute(&cleanup_pool)
+                .await;
+
+            // Delete old login attempts (those not blocked and older than 1 day)
+            let _ = sqlx::query("DELETE FROM login_attempts WHERE is_blocked = FALSE AND last_attempt < CURRENT_TIMESTAMP - INTERVAL '1 day'")
+                .execute(&cleanup_pool)
+                .await;
+
+            // Unblock accounts if time passed
+            let _ = sqlx::query("UPDATE login_attempts SET is_blocked = FALSE, attempt_count = 0 WHERE is_blocked = TRUE AND blocked_until < CURRENT_TIMESTAMP")
+                .execute(&cleanup_pool)
+                .await;
+        }
+    });
+
     // Build bridge router (for sales, customers, shipments, etc.)
     let bridge_router = bridge::create_mobile_router::<AppState>();
 
@@ -277,6 +304,8 @@ async fn run_server() {
         ))
         .layer(axum::middleware::from_fn(log_requests))
         .layer(
+            // allow_origin(Any) is necessary for mobile devices connecting via LAN IP
+            // Security is maintained via mandatory JWT authentication on all sensitive routes
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods(Any)

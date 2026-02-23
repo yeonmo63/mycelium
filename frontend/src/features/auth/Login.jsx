@@ -40,21 +40,9 @@ const Login = ({ onLoginSuccess }) => {
         setIsLoading(true);
 
         try {
-            // Check if we are in a mobile browser
-            if (window.location.pathname.startsWith('/mobile-')) {
-                console.log("Mobile browser detected. Entering Preview Mode.");
-                sessionStorage.setItem('isLoggedIn', 'true');
-                sessionStorage.setItem('userId', '999');
-                sessionStorage.setItem('username', 'MobilePreview');
-                sessionStorage.setItem('userRole', 'admin');
+            // Mobile browser preview mode removed for security. 
+            // All users must now go through regular login.
 
-                if (onLoginSuccess) {
-                    onLoginSuccess();
-                } else {
-                    window.location.reload();
-                }
-                return;
-            }
 
             const response = await invoke('login', {
                 username: username.trim(),

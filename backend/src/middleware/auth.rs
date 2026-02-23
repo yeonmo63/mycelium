@@ -15,6 +15,7 @@ pub struct Claims {
     pub username: Option<String>,
     pub role: Option<String>,
     pub ui_mode: Option<String>,
+    pub sid: Option<String>, // Session ID for database tracking
     pub exp: usize,
 }
 
@@ -23,16 +24,23 @@ impl Claims {
         SessionState {
             user_id: self.user_id,
             username: self.username,
-            role: self.role,
+            role: self.role.clone(),
             ui_mode: self.ui_mode,
         }
     }
+
+    pub fn is_admin(&self) -> bool {
+        self.role.as_deref() == Some("admin")
+    }
 }
 
-pub fn get_jwt_secret() -> &'static [u8] {
-    // In a real app, this should be an environment variable.
-    // For now, hardcode a secret or load from env.
-    b"mycelium-jwt-secret-key-12345678"
+pub fn get_jwt_secret() -> Vec<u8> {
+    std::env::var("JWT_SECRET")
+        .unwrap_or_else(|_| {
+            tracing::warn!("JWT_SECRET not set, using insecure default!");
+            "insecure-development-secret-key-replace-me-immediately".to_string()
+        })
+        .into_bytes()
 }
 
 pub async fn auth_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
@@ -77,7 +85,7 @@ pub async fn auth_middleware(mut request: Request, next: Next) -> Result<Respons
     // 2. Validate the token
     let token_data = decode::<Claims>(
         token,
-        &DecodingKey::from_secret(get_jwt_secret()),
+        &DecodingKey::from_secret(&get_jwt_secret()),
         &Validation::default(),
     )
     .map_err(|_| StatusCode::UNAUTHORIZED)?;
@@ -100,7 +108,7 @@ pub async fn optional_auth_middleware(
                 let token = &auth_str["Bearer ".len()..];
                 if let Ok(token_data) = decode::<Claims>(
                     token,
-                    &DecodingKey::from_secret(get_jwt_secret()),
+                    &DecodingKey::from_secret(&get_jwt_secret()),
                     &Validation::default(),
                 ) {
                     request.extensions_mut().insert(token_data.claims);

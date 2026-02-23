@@ -33,7 +33,9 @@ const BusinessReportModal = ({ report, isLoading, onClose }) => {
                                 <p className="text-slate-500 text-sm mt-2 font-bold">실제 경영 데이터를 집계하여 전략 리포트를 생성하고 있습니다.</p>
                             </div>
                         ) : report.content.includes('<') ? (
-                            <div dangerouslySetInnerHTML={{ __html: report.content }} className="prose prose-slate max-w-none prose-headings:font-black prose-p:text-slate-600 prose-strong:text-indigo-600 prose-h3:text-indigo-700" />
+                            <div className="prose prose-slate max-w-none prose-headings:font-black prose-p:text-slate-600 prose-strong:text-indigo-600 prose-h3:text-indigo-700 whitespace-pre-wrap">
+                                {report.content}
+                            </div>
                         ) : (
                             <div className="whitespace-pre-wrap leading-relaxed text-slate-700 font-medium">{report.content}</div>
                         )}

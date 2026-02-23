@@ -41,6 +41,7 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
     const loadData = async () => {
         setIsLoading(true);
         try {
+            const baseUrl = localStorage.getItem('API_BASE_URL') || '';
             // Fetch using bridge
             const [logsData, companyData] = await Promise.all([
                 invoke('get_production_logs', { startDate, endDate, limit: 1000 }),
@@ -70,7 +71,9 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
 
                 const loadedPhotos = {};
                 photosToLoad.forEach(path => {
-                    loadedPhotos[path] = `/api/production/media/${path}`;
+                    // Prepend baseUrl for Tauri/Offline environments
+                    const mediaPath = path.startsWith('http') ? path : `${baseUrl}/api/production/media/${path}`;
+                    loadedPhotos[path] = mediaPath;
                 });
                 setPhotoData(loadedPhotos);
             }
@@ -347,40 +350,44 @@ const FarmingReportView = ({ startDate, endDate, includeAttachments, includeAppr
                 {`
                 @media print {
                     @page { size: A4; margin: 0; }
-                    html, body { 
-                        background: white !important; 
-                        color: black !important;
-                        color-scheme: light !important;
-                        height: auto !important;
-                        overflow: visible !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        -webkit-print-color-adjust: exact;
-                        print-color-adjust: exact;
+                    
+                    /* Hide everything by default */
+                    body * {
+                        visibility: hidden;
                     }
-                    #root, nav, .tauri-drag-region { display: none !important; }
-                    div:not(#printable-report):not(#printable-report *):not(style):not(script) {
-                        display: none !important;
+
+                    /* Only show the printable report and its children */
+                    #printable-report, #printable-report * {
+                        visibility: visible !important;
                     }
+
+                    /* Reset the printable area to the top-left of the page */
                     #printable-report {
-                        display: block !important;
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
                         width: 100% !important;
                         margin: 0 !important;
                         padding: 15mm !important;
-                        visibility: visible !important;
                         background: white !important;
+                        display: block !important;
                     }
-                    #printable-report * {
-                        visibility: visible !important;
+
+                    /* Ensure background colors and images are printed */
+                    * {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-scheme: light !important;
                     }
+
+                    /* Force page breaks */
                     .page-break {
-                        page-break-before: always;
+                        page-break-before: always !important;
+                        display: block;
                     }
+                    
                     .break-inside-avoid {
-                        break-inside: avoid;
+                        break-inside: avoid !important;
                     }
                 }
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }

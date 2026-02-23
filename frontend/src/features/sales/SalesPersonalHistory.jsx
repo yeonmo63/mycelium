@@ -459,7 +459,9 @@ const SalesPersonalHistory = () => {
                                 <h4 className="text-sky-700 font-bold text-sm mb-1.5 flex items-center gap-1.5">
                                     Jenny의 AI 분석 리포트
                                 </h4>
-                                <div className="text-sm text-slate-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: analysisContent }}></div>
+                                <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                    {analysisContent}
+                                </div>
                             </div>
                         </div>
                     </div>

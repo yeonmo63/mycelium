@@ -5,10 +5,9 @@ use crate::commands::backup::status::{get_last_backup_at, update_last_backup_at}
 
 use crate::commands::preset::CustomPreset;
 use crate::db::{
-    CompanyInfo, Consultation, Customer, CustomerAddress, CustomerLedger, CustomerLog, DbPool,
-    Event, Expense, ExperienceProgram, FarmingLog, HarvestRecord, InventoryLog, Product,
-    ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, Sensor,
-    SensorReadingRecord, SmsLog, User, Vendor,
+    Event, Expense, ExperienceProgram, FarmingLog, HarvestRecord, InventoryLog, LoginAttemptRecord,
+    Product, ProductPriceHistory, ProductionBatch, ProductionSpace, Sales, Schedule, Sensor,
+    SensorReadingRecord, SmsLog, User, UserSessionRecord, Vendor,
 };
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::BACKUP_CANCELLED;
@@ -206,6 +205,13 @@ pub async fn backup_database_internal(
     let count_sms_logs: (i64,) = sqlx::query_as(&count_query("sms_logs", Some("sent_at")))
         .fetch_one(pool)
         .await?;
+    let count_sessions: (i64,) = sqlx::query_as(&count_query("user_sessions", Some("created_at")))
+        .fetch_one(pool)
+        .await?;
+    let count_login_attempts: (i64,) =
+        sqlx::query_as(&count_query("login_attempts", Some("last_attempt")))
+            .fetch_one(pool)
+            .await?;
 
     let total_records = count_users.0
         + count_products.0
@@ -235,7 +241,9 @@ pub async fn backup_database_internal(
         + count_custom_presets.0
         + count_sensors.0
         + count_sensor_readings.0
-        + count_sms_logs.0;
+        + count_sms_logs.0
+        + count_sessions.0
+        + count_login_attempts.0;
 
     if total_records == 0 {
         return Ok("백업할 데이터가 없습니다.".to_string());
@@ -381,6 +389,18 @@ pub async fn backup_database_internal(
         SmsLog,
         Some("sent_at"),
         "SMS 발송 로그 백업 중..."
+    );
+    backup_table!(
+        "user_sessions",
+        UserSessionRecord,
+        Some("created_at"),
+        "세션 정보 백업 중..."
+    );
+    backup_table!(
+        "login_attempts",
+        LoginAttemptRecord,
+        Some("last_attempt"),
+        "로그인 시도 관리 정보 백업 중..."
     );
 
     writer.flush()?;
@@ -655,6 +675,22 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                                  VALUES ($1, $2, $3, $4, $5, $6) 
                                  ON CONFLICT (log_id) DO NOTHING")
                         .bind(d.log_id).bind(&d.recipient_name).bind(&d.mobile_number).bind(&d.content).bind(&d.status).bind(d.sent_at)
+                        .execute(&mut *tx).await?;
+                }
+                "user_sessions" => {
+                    let d: UserSessionRecord = serde_json::from_value(data.clone())?;
+                    sqlx::query("INSERT INTO user_sessions (session_id, user_id, token_hash, client_ip, user_agent, created_at, expires_at, last_activity) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+                                 ON CONFLICT (session_id) DO UPDATE SET last_activity=$8, expires_at=$7")
+                        .bind(d.session_id).bind(d.user_id).bind(&d.token_hash).bind(&d.client_ip).bind(&d.user_agent).bind(d.created_at).bind(d.expires_at).bind(d.last_activity)
+                        .execute(&mut *tx).await?;
+                }
+                "login_attempts" => {
+                    let d: LoginAttemptRecord = serde_json::from_value(data.clone())?;
+                    sqlx::query("INSERT INTO login_attempts (id, username, client_ip, attempt_count, last_attempt, is_blocked, blocked_until) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7) 
+                                 ON CONFLICT (id) DO UPDATE SET attempt_count=$4, last_attempt=$5, is_blocked=$6, blocked_until=$7")
+                        .bind(d.id).bind(&d.username).bind(&d.client_ip).bind(d.attempt_count).bind(d.last_attempt).bind(d.is_blocked).bind(d.blocked_until)
                         .execute(&mut *tx).await?;
                 }
                 _ => {} // Other tables skip for now

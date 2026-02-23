@@ -3,7 +3,7 @@ use crate::error::{MyceliumError, MyceliumResult};
 use crate::state::{AppState, SessionState, SetupStatus};
 use axum::extract::{Json, State};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
@@ -33,7 +33,16 @@ pub fn get_app_config_dir() -> MyceliumResult<PathBuf> {
 // For now, simple encryption/decryption stubs or use similar logic to before if needed
 #[allow(dead_code)]
 fn get_encryption_key() -> [u8; 32] {
-    *b"mycelium-secret-key-32-bytes-log"
+    let key_str = std::env::var("LOG_ENCRYPTION_KEY").unwrap_or_else(|_| {
+        tracing::warn!("LOG_ENCRYPTION_KEY not set, using insecure default!");
+        "insecure-default-encryption-key-32".to_string()
+    });
+
+    let mut key = [0u8; 32];
+    let bytes = key_str.as_bytes();
+    let len = bytes.len().min(32);
+    key[..len].copy_from_slice(&bytes[..len]);
+    key
 }
 
 // ... encryption helpers from original file (simplified for now or keep same logic) ...
@@ -184,10 +193,53 @@ pub struct LoginResponse {
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> MyceliumResult<Json<LoginResponse>> {
     let username = payload.username;
     let password = payload.password;
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .or(headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
+        .map(|s| s.to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // 1. Check login attempts (Brute force protection from DB)
+    let block_check: Option<(i32, bool, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+        "SELECT attempt_count, is_blocked, blocked_until FROM login_attempts WHERE username = $1",
+    )
+    .bind(&username)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if let Some((attempts, is_blocked, blocked_until)) = block_check {
+        if is_blocked {
+            if let Some(until) = blocked_until {
+                if until > chrono::Utc::now() {
+                    let wait_mins = (until - chrono::Utc::now()).num_minutes();
+                    return Ok(Json(LoginResponse {
+                        success: false,
+                        message: format!(
+                            "너무 많은 로그인 시도가 감지되었습니다. {}분 후 다시 시도해주세요.",
+                            wait_mins + 1
+                        ),
+                        user_id: None,
+                        username: None,
+                        role: None,
+                        ui_mode: None,
+                        token: None,
+                    }));
+                } else {
+                    // Block expired, reset in DB
+                    sqlx::query("UPDATE login_attempts SET is_blocked = FALSE, attempt_count = 0 WHERE username = $1").bind(&username).execute(&state.pool).await?;
+                }
+            }
+        }
+    }
 
     if username.trim().is_empty() || password.trim().is_empty() {
         return Ok(Json(LoginResponse {
@@ -214,19 +266,33 @@ pub async fn login(
                 match verify(&password, password_hash) {
                     Ok(is_valid) => {
                         if is_valid {
-                            // Update session state
-                            if let Ok(mut session) = state.session.lock() {
-                                session.user_id = Some(user.id);
-                                session.username = Some(user.username.clone());
-                                session.role = Some(user.role.clone());
-                                session.ui_mode = user.ui_mode.clone();
-                            }
+                            // Reset attempts in DB on success
+                            sqlx::query("DELETE FROM login_attempts WHERE username = $1")
+                                .bind(&username)
+                                .execute(&state.pool)
+                                .await?;
 
-                            // Generate JWT Token
+                            // Generate Session ID (UUID)
+                            let sid = uuid::Uuid::new_v4().to_string();
+
+                            // Generate JWT Token (1 day)
                             let expiration = chrono::Utc::now()
-                                .checked_add_signed(chrono::Duration::days(30))
+                                .checked_add_signed(chrono::Duration::days(1))
                                 .expect("valid timestamp")
                                 .timestamp() as usize;
+
+                            // Store session in DB
+                            sqlx::query(
+                                "INSERT INTO user_sessions (session_id, user_id, token_hash, client_ip, user_agent, expires_at) VALUES ($1, $2, $3, $4, $5, $6)"
+                            )
+                            .bind(uuid::Uuid::parse_str(&sid).unwrap())
+                            .bind(user.id)
+                            .bind("HashedTokenPlaceholder") // We could hash the actual token if needed
+                            .bind(client_ip)
+                            .bind(user_agent)
+                            .bind(chrono::Utc::now() + chrono::Duration::days(1))
+                            .execute(&state.pool)
+                            .await?;
 
                             let claims = crate::middleware::auth::Claims {
                                 sub: user.username.clone(),
@@ -234,6 +300,7 @@ pub async fn login(
                                 username: Some(user.username.clone()),
                                 role: Some(user.role.clone()),
                                 ui_mode: user.ui_mode.clone(),
+                                sid: Some(sid),
                                 exp: expiration,
                             };
 
@@ -241,7 +308,7 @@ pub async fn login(
                                 &jsonwebtoken::Header::default(),
                                 &claims,
                                 &jsonwebtoken::EncodingKey::from_secret(
-                                    crate::middleware::auth::get_jwt_secret(),
+                                    &crate::middleware::auth::get_jwt_secret(),
                                 ),
                             )
                             .ok();
@@ -256,6 +323,9 @@ pub async fn login(
                                 token,
                             }))
                         } else {
+                            // Increment attempts in DB on failure
+                            record_failed_attempt(&state.pool, &username).await;
+
                             Ok(Json(LoginResponse {
                                 success: false,
                                 message: "비밀번호가 올바르지 않습니다.".to_string(),
@@ -301,14 +371,44 @@ pub async fn login(
     }
 }
 
-pub async fn logout(State(state): State<AppState>) -> Json<()> {
+async fn record_failed_attempt(pool: &crate::db::DbPool, username: &str) {
+    let _ = sqlx::query(
+        "INSERT INTO login_attempts (username, attempt_count, last_attempt) 
+         VALUES ($1, 1, CURRENT_TIMESTAMP)
+         ON CONFLICT (username) DO UPDATE SET 
+         attempt_count = login_attempts.attempt_count + 1,
+         last_attempt = CURRENT_TIMESTAMP,
+         is_blocked = CASE WHEN login_attempts.attempt_count + 1 >= 5 THEN TRUE ELSE FALSE END,
+         blocked_until = CASE WHEN login_attempts.attempt_count + 1 >= 5 THEN CURRENT_TIMESTAMP + INTERVAL '15 minutes' ELSE NULL END"
+    )
+    .bind(username)
+    .execute(pool)
+    .await;
+}
+
+pub async fn logout(
+    State(state): State<AppState>,
+    axum::extract::Extension(claims): axum::extract::Extension<crate::middleware::auth::Claims>,
+) -> MyceliumResult<Json<bool>> {
+    // 1. Database-backed session deletion
+    if let Some(ref sid) = claims.sid {
+        if let Ok(uuid) = uuid::Uuid::parse_str(sid) {
+            sqlx::query("DELETE FROM user_sessions WHERE session_id = $1")
+                .bind(uuid)
+                .execute(&state.pool)
+                .await?;
+        }
+    }
+
+    // 2. Clear global shared session (legacy support)
     if let Ok(mut session) = state.session.lock() {
         session.user_id = None;
         session.username = None;
         session.role = None;
         session.ui_mode = None;
     }
-    Json(())
+
+    Ok(Json(true))
 }
 
 #[derive(Serialize)]
@@ -457,11 +557,6 @@ pub async fn verify_admin_password(
 ) -> MyceliumResult<Json<bool>> {
     let input_password = payload.password.trim();
 
-    // ULTRA EMERGENCY BYPASS: If input is admin, just let them in for now
-    if input_password == "admin" {
-        return Ok(Json(true));
-    }
-
     // 1. Get the current logged-in user from session
     let current_user_id = {
         let session = state
@@ -480,7 +575,7 @@ pub async fn verify_admin_password(
         None
     };
 
-    // 2. Fallback to default admin
+    // 2. Fallback to default admin if no user in session or user is not admin
     let final_user = match user_to_check {
         Some(u) if u.role == "admin" => Some(u),
         _ => {
@@ -496,12 +591,6 @@ pub async fn verify_admin_password(
     };
 
     if let Some(admin_user) = final_user {
-        // --- EMERGENCY BYPASS FOR MIGRATION ---
-        // If input is 'admin' and user is 'admin', allow it
-        if admin_user.username == "admin" && input_password == "admin" {
-            return Ok(Json(true));
-        }
-
         if let Some(hash) = admin_user.password_hash {
             match verify(input_password, &hash) {
                 Ok(is_valid) => {
@@ -519,12 +608,12 @@ pub async fn verify_admin_password(
                 }
             }
         } else {
-            // No password hash? If they entered 'admin' it might be a fresh system
-            Ok(Json(input_password == "admin"))
+            // If no password hash exists, we cannot verify. Returning false for security.
+            Ok(Json(false))
         }
     } else {
-        // No admin at all? This shouldn't happen, but let's allow 'admin' for first setup
-        Ok(Json(input_password == "admin"))
+        // No admin at all found in DB. Returning false.
+        Ok(Json(false))
     }
 }
 
@@ -1025,25 +1114,75 @@ pub async fn verify_mobile_pin(
     Json(payload): Json<VerifyPinRequest>,
 ) -> MyceliumResult<Json<VerifyPinResponse>> {
     let config = load_mobile_config_from_file().unwrap_or_default();
-    tracing::info!("PIN Verification Attempt: Input={}", payload.pin);
+    tracing::info!("PIN Verification Attempt from mobile device");
+
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .or(headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
+        .map(|s| s.to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // 1. Brute force protection for PIN (using the same persistent DB logic)
+    let pin_user = "mobile_pin_lock".to_string(); // Single key for global PIN protection
+    let block_check: Option<(i32, bool, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+        "SELECT attempt_count, is_blocked, blocked_until FROM login_attempts WHERE username = $1",
+    )
+    .bind(&pin_user)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if let Some((_, is_blocked, blocked_until)) = block_check {
+        if is_blocked {
+            if let Some(until) = blocked_until {
+                if until > chrono::Utc::now() {
+                    let wait_mins = (until - chrono::Utc::now()).num_minutes();
+                    return Ok(Json(VerifyPinResponse {
+                        success: false,
+                        username: "".to_string(),
+                        role: "".to_string(),
+                        error: Some(format!(
+                            "너무 많은 시도입니다. {}분 후 다시 시도해주세요.",
+                            wait_mins + 1
+                        )),
+                        token: None,
+                    }));
+                }
+            }
+        }
+    }
 
     // Bypass if: PIN is disabled globally OR PIN matches
     if !config.use_pin || config.access_pin == payload.pin {
-        tracing::info!("PIN Verification SUCCESS (use_pin={})", config.use_pin);
-        // Update session state for mobile access - Using try_lock to avoid deadlocks
-        if let Ok(mut session) = state.session.try_lock() {
-            session.user_id = Some(0); // Dummy ID for mobile session
-            session.username = Some("mobile_user".to_string());
-            session.role = Some("worker".to_string());
-        } else {
-            tracing::warn!(
-                "Could not acquire session lock during PIN verification, skipping session update."
-            );
-        }
+        tracing::info!("PIN Verification SUCCESS");
+
+        // Reset attempts
+        sqlx::query("DELETE FROM login_attempts WHERE username = $1")
+            .bind(&pin_user)
+            .execute(&state.pool)
+            .await?;
+
+        let sid = uuid::Uuid::new_v4().to_string();
         let expiration = chrono::Utc::now()
-            .checked_add_signed(chrono::Duration::days(30))
+            .checked_add_signed(chrono::Duration::days(1))
             .expect("valid timestamp")
             .timestamp() as usize;
+
+        // Store session in DB
+        sqlx::query(
+            "INSERT INTO user_sessions (session_id, user_id, token_hash, client_ip, user_agent, expires_at) VALUES ($1, $2, $3, $4, $5, $6)"
+        )
+        .bind(uuid::Uuid::parse_str(&sid).unwrap())
+        .bind(0) // Dummy mobile user ID
+        .bind("HashedMobileToken")
+        .bind(client_ip)
+        .bind(user_agent)
+        .bind(chrono::Utc::now() + chrono::Duration::days(1))
+        .execute(&state.pool)
+        .await?;
 
         let claims = crate::middleware::auth::Claims {
             sub: "mobile_user".to_string(),
@@ -1051,13 +1190,14 @@ pub async fn verify_mobile_pin(
             username: Some("mobile_user".to_string()),
             role: Some("worker".to_string()),
             ui_mode: Some("mobile".to_string()),
+            sid: Some(sid),
             exp: expiration,
         };
 
         let token = jsonwebtoken::encode(
             &jsonwebtoken::Header::default(),
             &claims,
-            &jsonwebtoken::EncodingKey::from_secret(crate::middleware::auth::get_jwt_secret()),
+            &jsonwebtoken::EncodingKey::from_secret(&crate::middleware::auth::get_jwt_secret()),
         )
         .ok();
 
@@ -1069,11 +1209,7 @@ pub async fn verify_mobile_pin(
             token,
         }))
     } else {
-        tracing::warn!(
-            "PIN Verification FAILED: Expected={}, Got={}",
-            config.access_pin,
-            payload.pin
-        );
+        record_failed_attempt(&state.pool, &pin_user).await;
         Ok(Json(VerifyPinResponse {
             success: false,
             username: "".to_string(),

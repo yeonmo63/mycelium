@@ -10,6 +10,8 @@ use std::sync::atomic::Ordering;
 // Using global stubs
 use crate::stubs::{AppHandle, State as TauriState};
 use axum::extract::{State as AxumState, Json};
+use axum::Extension;
+use crate::middleware::auth::Claims;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -1470,8 +1472,12 @@ pub struct CreateProductRequest {
 
 pub async fn create_product_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<CreateProductRequest>,
 ) -> MyceliumResult<axum::response::Json<serde_json::Value>> {
+    if !claims.is_admin() {
+        return Err(MyceliumError::Validation("Admin authority required".into()));
+    }
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
 
@@ -1544,8 +1550,12 @@ pub struct UpdateProductRequest {
 
 pub async fn update_product_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<UpdateProductRequest>,
 ) -> MyceliumResult<Json<()>> {
+    if !claims.is_admin() {
+        return Err(MyceliumError::Validation("Admin authority required".into()));
+    }
     let mut tx = state.pool.begin().await?;
     let sync = payload.syncSalesNames.unwrap_or(false);
     let cost = payload.costPrice.unwrap_or(0);
@@ -1661,8 +1671,12 @@ pub struct IdRequest {
 
 pub async fn discontinue_product_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<IdRequest>,
 ) -> MyceliumResult<Json<()>> {
+    if !claims.is_admin() {
+        return Err(MyceliumError::Validation("Admin authority required".into()));
+    }
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
 
@@ -1694,8 +1708,12 @@ pub async fn discontinue_product_axum(
 
 pub async fn delete_product_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<IdRequest>,
 ) -> MyceliumResult<Json<()>> {
+    if !claims.is_admin() {
+        return Err(MyceliumError::Validation("Admin authority required".into()));
+    }
     let sales_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales WHERE product_id = $1")
         .bind(payload.productId)
         .fetch_one(&state.pool)
