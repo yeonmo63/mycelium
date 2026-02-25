@@ -130,6 +130,7 @@ export async function callBridge(commandName, args = {}) {
         'get_backup_status': '/api/backup/status',
         'get_backup_progress': '/api/backup/progress',
         'cancel_backup_restore': '/api/backup/cancel',
+        'cleanup_old_backups': '/api/backup/cleanup-files',
         'get_custom_presets': '/api/preset/list',
         'apply_preset': '/api/preset/apply',
         'save_current_as_preset': '/api/preset/save',
@@ -233,6 +234,8 @@ export async function callBridge(commandName, args = {}) {
         'save_external_backup_path': '/api/backup/path/external',
         'run_db_maintenance': '/api/backup/maintenance',
         'cleanup_old_logs': '/api/backup/cleanup',
+        'cleanup_old_backups': '/api/backup/cleanup-files',
+        'cancel_backup_restore': '/api/backup/cancel',
     };
 
     const route = routeMap[commandName];
@@ -294,6 +297,7 @@ export async function callBridge(commandName, args = {}) {
         'cleanup_old_logs',
         'save_external_backup_path',
         'cancel_backup_restore',
+        'cleanup_old_backups',
         'update_sale_status',
         'complete_shipment',
         'batch_sync_courier_statuses',

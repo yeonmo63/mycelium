@@ -137,12 +137,45 @@ const FinanceTaxReport = () => {
         showAlert("성공", "파일이 다운로드되었습니다.");
     };
 
-    const handleDownloadPDF = () => {
-        const query = new URLSearchParams({
-            start_date: startDate,
-            end_date: endDate,
-        });
-        window.open(`/api/finance/report/pdf?${query.toString()}`, '_blank');
+    const handleDownloadPDF = async () => {
+        setIsLoading(true);
+        try {
+            const query = new URLSearchParams({
+                start_date: startDate,
+                end_date: endDate,
+            });
+
+            let baseUrl = localStorage.getItem('API_BASE_URL') || '';
+            if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+            const token = localStorage.getItem('token');
+
+            const url = `${baseUrl}/api/finance/report/pdf?${query.toString()}`;
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || `Status: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `세무보고서_${startDate.replace(/-/g, '')}_${endDate.replace(/-/g, '')}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(downloadUrl);
+            document.body.removeChild(a);
+        } catch (e) {
+            console.error(e);
+            showAlert("오류", "PDF 다운로드 실패: " + e.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSubmitTaxReport = async () => {

@@ -161,7 +161,12 @@ const Login = ({ onLoginSuccess }) => {
                         <p style={{ color: '#94a3b8', fontSize: '15px', fontWeight: '500' }}>지능형 통합 관제 센터</p>
                     </div>
 
-                    <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', zIndex: 10 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', zIndex: 10 }}>
+                        {/* Dummy fields to trick browser heuristics */}
+                        <div style={{ position: 'absolute', opacity: 0, height: 0, width: 0, overflow: 'hidden', zIndex: -1 }}>
+                            <input type="text" name="fake_user" tabIndex="-1" />
+                            <input type="password" name="fake_pass" tabIndex="-1" />
+                        </div>
                         <div style={{ position: 'relative' }}>
                             <span className="material-symbols-rounded" style={{
                                 position: 'absolute',
@@ -176,6 +181,7 @@ const Login = ({ onLoginSuccess }) => {
                                 placeholder="아이디"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
+                                autoComplete="off"
                                 style={{
                                     width: '100%',
                                     padding: '18px 20px 18px 60px',
@@ -203,22 +209,30 @@ const Login = ({ onLoginSuccess }) => {
                                 fontSize: '22px'
                             }}>lock</span>
                             <input
-                                type="password"
+                                // Use text type to hide it from password managers
+                                type="text"
                                 placeholder="비밀번호"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleLogin(e);
+                                }}
+                                autoComplete="new-password"
                                 style={{
                                     width: '100%',
                                     padding: '18px 20px 18px 60px',
-                                    background: '#020617', // Force dark background
+                                    background: '#020617',
                                     border: '1px solid #334155',
                                     borderRadius: '20px',
-                                    color: '#ffffff', // Force white text
+                                    color: '#ffffff',
                                     fontSize: '16px',
                                     fontWeight: '500',
                                     outline: 'none',
                                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    boxSizing: 'border-box'
+                                    boxSizing: 'border-box',
+                                    // The magic: mask text visually but keep type="text"
+                                    WebkitTextSecurity: 'disc',
+                                    textSecurity: 'disc'
                                 }}
                                 className="focus:border-indigo-500 transition-colors"
                             />
@@ -251,7 +265,8 @@ const Login = ({ onLoginSuccess }) => {
                         )}
 
                         <button
-                            type="submit"
+                            type="button"
+                            onClick={handleLogin}
                             disabled={isLoading}
                             style={{
                                 padding: '18px',
@@ -280,7 +295,7 @@ const Login = ({ onLoginSuccess }) => {
                                 <span>시스템 로그인</span>
                             )}
                         </button>
-                    </form>
+                    </div>
 
                     <div style={{
                         marginTop: '48px',

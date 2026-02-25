@@ -61,6 +61,10 @@ pub async fn backup_database_internal(
     use_compression: bool,
 ) -> MyceliumResult<String> {
     let last_update_time = std::sync::atomic::AtomicI64::new(0);
+    let start_time = std::time::Instant::now();
+    let current_table_idx = std::sync::atomic::AtomicI32::new(0);
+    let total_table_count: i32 = 40; // Updated to match actual table count or slightly more
+
     let emit_progress = |processed: i64, total: i64, message: &str| {
         let now = chrono::Utc::now().timestamp_millis();
         let last = last_update_time.load(Ordering::Relaxed);
@@ -70,9 +74,22 @@ pub async fn backup_database_internal(
             tracing::info!("[Backup] {} ({}/{})", message, processed, total);
         }
 
-        // Throttle state updates and Tauri events to 300ms
-        if processed >= total || (now - last) >= 300 {
+        // Throttling: Update state at most every 100ms or every 1000 records for smoothness
+        if processed >= total || (now - last) >= 100 || processed % 1000 == 0 {
             last_update_time.store(now, Ordering::Relaxed);
+
+            let elapsed_secs = start_time.elapsed().as_secs_f64();
+            let pct = if total > 0 {
+                processed as f64 / total as f64
+            } else {
+                0.0
+            };
+            let estimated_remaining = if pct > 0.01 {
+                (elapsed_secs / pct) * (1.0 - pct)
+            } else {
+                -1.0
+            };
+            let table_idx = current_table_idx.load(Ordering::Relaxed);
 
             // Update global state for web progress tracking
             if let Ok(mut progress) = crate::BACKUP_PROGRESS.lock() {
@@ -80,7 +97,11 @@ pub async fn backup_database_internal(
                     "processed": processed,
                     "total": total,
                     "message": message,
-                    "percentage": if total > 0 { processed as f64 / total as f64 * 100.0 } else { 0.0 }
+                    "percentage": pct * 100.0,
+                    "elapsed_seconds": elapsed_secs,
+                    "estimated_remaining_seconds": estimated_remaining,
+                    "current_table": table_idx,
+                    "total_tables": total_table_count,
                 }));
             }
 
@@ -298,26 +319,31 @@ pub async fn backup_database_internal(
     macro_rules! backup_table {
         ($table:expr, $model:ty, $time_col:expr, $msg:expr) => {
             if !BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                current_table_idx.fetch_add(1, Ordering::Relaxed);
+                emit_progress(processed_offset, total_records, $msg);
+
                 let count_fn = count_query($table, $time_col);
-                // We re-query count because incremental 'since' might have changed (unlikely but safer)
-                // and it allows us to skip empty tables quickly.
-                let count: (i64,) = sqlx::query_as(&count_fn).fetch_one(pool).await?;
-                if count.0 > 0 {
-                    emit_progress(processed_offset, total_records, $msg);
-                    let q_str = count_fn.replace("SELECT COUNT(*)", "SELECT *");
-                    let mut stream = sqlx::query_as::<_, $model>(&q_str).fetch(pool);
-                    while let Some(row) = stream.next().await {
-                        if BACKUP_CANCELLED.load(Ordering::Relaxed) { break; }
-                        let json = serde_json::json!({ "table": $table, "data": row? });
-                        writeln!(writer, "{}", json)?;
-                        processed_offset += 1;
-                        if processed_offset % 100 == 0 { emit_progress(processed_offset, total_records, $msg); }
-                    }
-                    // Final update for this table
-                    if !BACKUP_CANCELLED.load(Ordering::Relaxed) {
+                let q_str = count_fn.replace("SELECT COUNT(*)", "SELECT *");
+                let mut stream = sqlx::query_as::<_, $model>(&q_str).fetch(pool);
+
+                let mut batch_counter = 0;
+                while let Some(row) = stream.next().await {
+                    if BACKUP_CANCELLED.load(Ordering::Relaxed) { break; }
+                    let json = serde_json::json!({ "table": $table, "data": row? });
+                    writeln!(writer, "{}", json)?;
+                    processed_offset += 1;
+                    batch_counter += 1;
+
+                    // Update progress and yield every 100 records within a table
+                    if batch_counter % 100 == 0 {
                         emit_progress(processed_offset, total_records, $msg);
+                        tokio::task::yield_now().await;
                     }
                 }
+
+                // Final update for this table
+                emit_progress(processed_offset, total_records, $msg);
+                tokio::task::yield_now().await; // Ensure other tasks get a chance between tables
             }
         };
     }
@@ -479,12 +505,13 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
     BACKUP_CANCELLED.store(false, Ordering::Relaxed);
 
     let last_update_time = std::sync::atomic::AtomicI64::new(0);
+    let restore_start_time = std::time::Instant::now();
     let emit_progress = |progress: f64, message: &str, processed: i64, total: i64| {
         let now = chrono::Utc::now().timestamp_millis();
         let last = last_update_time.load(Ordering::Relaxed);
 
         let is_final = progress >= 100.0;
-        let should_notify = is_final || (now - last) >= 300;
+        let should_notify = is_final || (now - last) >= 150;
 
         // Log every 10% or final to tracing
         if is_final || (progress as i64) % 10 == 0 {
@@ -493,12 +520,21 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
 
         if should_notify {
             last_update_time.store(now, Ordering::Relaxed);
+            let elapsed_secs = restore_start_time.elapsed().as_secs_f64();
+            let pct = progress / 100.0;
+            let estimated_remaining = if pct > 0.01 {
+                (elapsed_secs / pct) * (1.0 - pct)
+            } else {
+                -1.0
+            };
             if let Ok(mut global_progress) = crate::BACKUP_PROGRESS.lock() {
                 *global_progress = Some(serde_json::json!({
                     "processed": processed,
                     "total": total,
                     "percentage": progress,
-                    "message": message
+                    "message": message,
+                    "elapsed_seconds": elapsed_secs,
+                    "estimated_remaining_seconds": estimated_remaining,
                 }));
             }
         }
@@ -789,16 +825,14 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
             }
 
             total_restored += 1;
-            if total_restored % 50 == 0 {
-                let current_bytes = byte_count.load(Ordering::Relaxed);
-                let pct = current_bytes as f64 / total_bytes as f64 * 100.0;
-                emit_progress(
-                    pct,
-                    "데이터 복원 중...",
-                    current_bytes as i64,
-                    total_bytes as i64,
-                );
-            }
+            let current_bytes = byte_count.load(Ordering::Relaxed);
+            let pct = current_bytes as f64 / total_bytes as f64 * 100.0;
+            emit_progress(
+                pct,
+                "데이터 복원 중...",
+                current_bytes as i64,
+                total_bytes as i64,
+            );
         }
         line.clear();
     }

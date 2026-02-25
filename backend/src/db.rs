@@ -830,7 +830,7 @@ pub struct Sensor {
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct SensorReadingRecord {
-    pub reading_id: i32,
+    pub reading_id: i64,
     pub sensor_id: i32,
     pub temperature: Option<rust_decimal::Decimal>,
     pub humidity: Option<rust_decimal::Decimal>,

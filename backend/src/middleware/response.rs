@@ -13,7 +13,17 @@ pub async fn wrap_response_middleware(req: Request, next: Next) -> Result<Respon
     let res = next.run(req).await;
 
     // Only wrap /api responses and avoid wrapping static assets or media files
-    if !path.starts_with("/api") || path.starts_with("/api/production/media/") {
+    let content_type = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+
+    if !path.starts_with("/api")
+        || path.starts_with("/api/production/media/")
+        || content_type.contains("application/pdf")
+        || content_type.contains("application/octet-stream")
+    {
         return Ok(res);
     }
 

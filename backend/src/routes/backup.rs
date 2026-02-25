@@ -48,4 +48,8 @@ pub fn router() -> Router<AppState> {
             "/api/backup/progress",
             get(commands::backup::web::get_live_progress_axum),
         )
+        .route(
+            "/api/backup/cleanup-files",
+            post(commands::backup::web::cleanup_old_backups_axum),
+        )
 }

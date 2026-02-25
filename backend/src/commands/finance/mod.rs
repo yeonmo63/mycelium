@@ -175,14 +175,18 @@ pub async fn get_purchase_list(
 
     if let Some(start) = filter.start_date {
         if !start.is_empty() {
-            query_builder.push(" AND p.purchase_date >= ");
-            query_builder.push_bind(start);
+            if let Ok(d) = NaiveDate::parse_from_str(&start, "%Y-%m-%d") {
+                query_builder.push(" AND p.purchase_date >= ");
+                query_builder.push_bind(d);
+            }
         }
     }
     if let Some(end) = filter.end_date {
         if !end.is_empty() {
-            query_builder.push(" AND p.purchase_date <= ");
-            query_builder.push_bind(end);
+            if let Ok(d) = NaiveDate::parse_from_str(&end, "%Y-%m-%d") {
+                query_builder.push(" AND p.purchase_date <= ");
+                query_builder.push_bind(d);
+            }
         }
     }
     if let Some(vid) = filter.vendor_id {
@@ -321,14 +325,18 @@ pub async fn get_expense_list(
 
     if let Some(start) = filter.start_date {
         if !start.is_empty() {
-            query_builder.push(" AND expense_date >= ");
-            query_builder.push_bind(start);
+            if let Ok(d) = NaiveDate::parse_from_str(&start, "%Y-%m-%d") {
+                query_builder.push(" AND expense_date >= ");
+                query_builder.push_bind(d);
+            }
         }
     }
     if let Some(end) = filter.end_date {
         if !end.is_empty() {
-            query_builder.push(" AND expense_date <= ");
-            query_builder.push_bind(end);
+            if let Ok(d) = NaiveDate::parse_from_str(&end, "%Y-%m-%d") {
+                query_builder.push(" AND expense_date <= ");
+                query_builder.push_bind(d);
+            }
         }
     }
     if let Some(cat) = filter.category {

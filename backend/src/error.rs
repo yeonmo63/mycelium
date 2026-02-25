@@ -61,14 +61,11 @@ impl IntoResponse for MyceliumError {
         let (status, error_message) = match self {
             MyceliumError::Database(ref e) => {
                 tracing::error!("Database Error: {:?}", e);
-                if cfg!(debug_assertions) {
-                    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-                } else {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "데이터베이스 오류가 발생했습니다. 잠시 후 다시 시도해주세요.".to_string(),
-                    )
-                }
+                // TODO: Revert to generic message after debugging
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("DB Error: {}", e),
+                )
             }
             MyceliumError::Auth(msg) => (StatusCode::UNAUTHORIZED, msg),
             MyceliumError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),

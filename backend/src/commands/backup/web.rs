@@ -191,7 +191,83 @@ pub async fn get_backup_status_axum(
 }
 
 pub async fn cancel_backup_restore_axum() -> MyceliumResult<Json<()>> {
+    crate::commands::backup::auto::cancel_backup_restore().await;
     Ok(Json(()))
+}
+
+#[derive(Deserialize)]
+pub struct CleanupBackupsPayload {
+    pub retention_days: i32,
+}
+
+pub async fn cleanup_old_backups_axum(
+    Extension(claims): Extension<Claims>,
+    Json(payload): Json<CleanupBackupsPayload>,
+) -> MyceliumResult<Json<Value>> {
+    if !claims.is_admin() {
+        return Err(MyceliumError::Validation(
+            "Admin access required".to_string(),
+        ));
+    }
+    let config_dir = get_app_config_dir()?;
+    let retention_days = payload.retention_days.max(1) as u64;
+    let cutoff = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(retention_days * 86400))
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+    let mut deleted_count: u64 = 0;
+    let mut freed_bytes: u64 = 0;
+
+    // Clean up backups dir (auto backups)
+    let backup_dir = config_dir.join("backups");
+    if backup_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if fname.starts_with("auto_backup_")
+                    && (fname.ends_with(".sql") || fname.ends_with(".gz"))
+                {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            if modified < cutoff {
+                                freed_bytes += metadata.len();
+                                let _ = std::fs::remove_file(entry.path());
+                                deleted_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean up daily_backups dir
+    let daily_dir = config_dir.join("daily_backups");
+    if daily_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&daily_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if fname.starts_with("daily_backup_")
+                    && (fname.ends_with(".sql") || fname.ends_with(".gz"))
+                {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            if modified < cutoff {
+                                freed_bytes += metadata.len();
+                                let _ = std::fs::remove_file(entry.path());
+                                deleted_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "deleted_count": deleted_count,
+        "freed_bytes": freed_bytes,
+    })))
 }
 
 pub async fn get_live_progress_axum() -> MyceliumResult<Json<Value>> {

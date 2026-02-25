@@ -18,7 +18,9 @@ import {
     Save,
     Calendar,
     ChevronRight,
-    Lock
+    Lock,
+    XCircle,
+    Archive
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -32,29 +34,31 @@ const SettingsBackup = () => {
     const [isRestoring, setIsRestoring] = useState(false);
     const [externalPath, setExternalPath] = useState('');
     const [isSavingPath, setIsSavingPath] = useState(false);
-    const [backupProgress, setBackupProgress] = useState({ progress: 0, message: '', startTime: null, currentRecord: '' });
+    const [backupProgress, setBackupProgress] = useState({ progress: 0, message: '', startTime: null, currentRecord: '', elapsedSeconds: 0, remainingSeconds: -1, currentTable: 0, totalTables: 0 });
     const [operationType, setOperationType] = useState(null); // 'backup' | 'restore'
+    const [useCompression, setUseCompression] = useState(true);
+    const [showCleanupModal, setShowCleanupModal] = useState(false);
+    const [cleanupDays, setCleanupDays] = useState(90);
+    const [isCleaning, setIsCleaning] = useState(false);
 
-    const { showAlert } = useModal();
+    const { showAlert, showConfirm } = useModal();
     const backupIntervalRef = useRef(null);
 
     // Cleanup simulation interval on unmount
     useEffect(() => {
         return () => {
             if (backupIntervalRef.current) {
-                clearInterval(backupIntervalRef.current);
+                clearTimeout(backupIntervalRef.current);
             }
         };
     }, []);
 
-    const calculateETA = (start, p) => {
-        if (!start || p <= 0 || p >= 100) return '??분 ??초';
-        const elapsed = Date.now() - start;
-        const totalEstimate = (elapsed / p) * 100;
-        const remaining = totalEstimate - elapsed;
-        const mins = Math.floor(remaining / 60000);
-        const secs = Math.floor((remaining % 60000) / 1000);
-        return `${mins}분 ${secs}초`;
+    const formatDuration = (seconds) => {
+        if (seconds < 0 || !isFinite(seconds)) return '계산 중...';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        if (mins > 0) return `${mins}분 ${secs}초`;
+        return `${secs}초`;
     };
 
     // --- Admin Guard Check ---
@@ -103,88 +107,108 @@ const SettingsBackup = () => {
         setOperationType('backup');
         setBackupProgress({ progress: 0, message: '백업 엔진 초기화 중...', startTime: Date.now(), currentRecord: 'System.Initialization' });
 
-        if (backupIntervalRef.current) clearInterval(backupIntervalRef.current);
-        backupIntervalRef.current = setInterval(async () => {
+        if (backupIntervalRef.current) clearTimeout(backupIntervalRef.current);
+        const pollProgress = async () => {
             try {
                 const live = await invoke('get_backup_progress');
-                if (live && live.total > 0) {
+                // Update even if total is 0 to show "Initializing" messages
+                if (live) {
                     setBackupProgress(prev => ({
                         ...prev,
                         progress: Number(live.percentage?.toFixed(1) || 0),
                         message: live.message || '처리 중...',
-                        currentRecord: operationType === 'restore' || live.message?.includes('파일을 읽는 중')
+                        currentRecord: live.message?.includes('파일을 읽는 중')
                             ? `${(live.processed / (1024 * 1024)).toFixed(1)}MB / ${(live.total / (1024 * 1024)).toFixed(1)}MB`
-                            : `${live.processed?.toLocaleString() || 0} / ${live.total?.toLocaleString() || 0} 건`
+                            : `${live.processed?.toLocaleString() || 0} / ${(live.total || '?')?.toLocaleString()} 건`,
+                        elapsedSeconds: live.elapsed_seconds || 0,
+                        remainingSeconds: live.estimated_remaining_seconds ?? -1,
+                        currentTable: live.current_table || 0,
+                        totalTables: live.total_tables || 0,
                     }));
                 }
             } catch (pErr) {
-                // Ignore small errors during polling
+                console.warn("Polling error:", pErr);
             }
-        }, 500);
+            // Schedule next poll only if still running
+            backupIntervalRef.current = setTimeout(pollProgress, 200);
+        };
+        backupIntervalRef.current = setTimeout(pollProgress, 200);
 
         try {
             await invoke('run_daily_custom_backup', {
                 is_incremental: isIncremental,
-                use_compression: true
+                use_compression: useCompression
             });
 
             if (backupIntervalRef.current) {
-                clearInterval(backupIntervalRef.current);
+                clearTimeout(backupIntervalRef.current);
                 backupIntervalRef.current = null;
             }
 
-            setBackupProgress(prev => ({ ...prev, progress: 100, message: '백업 완료', currentRecord: 'Success' }));
+            setBackupProgress(prev => ({ ...prev, progress: 100, message: '백업 완료', currentRecord: 'Success', remainingSeconds: 0 }));
 
             setTimeout(() => {
                 showAlert('백업 완료', `${isIncremental ? '증분' : '전체'} 백업이 성공적으로 완료되었습니다.`);
                 setIsBackingUp(false);
                 setOperationType(null);
-                setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '' });
+                setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '', elapsedSeconds: 0, remainingSeconds: -1, currentTable: 0, totalTables: 0 });
                 loadData();
             }, 800);
         } catch (err) {
             if (backupIntervalRef.current) {
-                clearInterval(backupIntervalRef.current);
+                clearTimeout(backupIntervalRef.current);
                 backupIntervalRef.current = null;
             }
             setIsBackingUp(false);
             setOperationType(null);
-            setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '' });
-            showAlert('백업 실패', `오류가 발생했습니다: ${err.message || err}`);
+            setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '', elapsedSeconds: 0, remainingSeconds: -1, currentTable: 0, totalTables: 0 });
+
+            // Do not show "Failure" alert if it was a user cancellation
+            const errMsg = err.message || err.toString();
+            if (!errMsg.includes('취소')) {
+                showAlert('백업 실패', `오류가 발생했습니다: ${errMsg}`);
+            }
         }
     };
 
     const handleRestore = async (path) => {
         if (isBackingUp || isRestoring) return;
-        const confirmed = await window.confirm("정말로 이 백업 파일로 복구하시겠습니까? 현재 데이터가 모두 삭제되고 백업 시점의 상태로 덮어씌워집니다.");
+        const confirmed = await showConfirm(
+            "데이터베이스 복구",
+            "정말로 이 백업 파일로 복구하시겠습니까?\n\n현재 데이터가 모두 삭제되고 백업 시점의 상태로 덮어씌워집니다. 이 작업은 되돌릴 수 없습니다."
+        );
         if (!confirmed) return;
 
         setIsRestoring(true);
         setOperationType('restore');
         setBackupProgress({ progress: 0, message: '복구 엔진 마운트 중...', startTime: Date.now(), currentRecord: 'Restore.Initialize' });
 
-        if (backupIntervalRef.current) clearInterval(backupIntervalRef.current);
-        backupIntervalRef.current = setInterval(async () => {
+        if (backupIntervalRef.current) clearTimeout(backupIntervalRef.current);
+        const pollRestoreProgress = async () => {
             try {
                 const live = await invoke('get_backup_progress');
-                if (live && live.total > 0) {
+                if (live && (live.total > 0 || live.percentage > 0)) {
                     setBackupProgress(prev => ({
                         ...prev,
                         progress: Number(live.percentage?.toFixed(1) || 0),
                         message: live.message || '복구 중...',
-                        currentRecord: `${(live.processed / (1024 * 1024)).toFixed(1)}MB / ${(live.total / (1024 * 1024)).toFixed(1)}MB`
+                        currentRecord: `${(live.processed / (1024 * 1024)).toFixed(1)}MB / ${(live.total / (1024 * 1024)).toFixed(1)}MB`,
+                        elapsedSeconds: live.elapsed_seconds || 0,
+                        remainingSeconds: live.estimated_remaining_seconds ?? -1,
                     }));
                 }
             } catch (pErr) { }
-        }, 500);
+            backupIntervalRef.current = setTimeout(pollRestoreProgress, 200);
+        };
+        backupIntervalRef.current = setTimeout(pollRestoreProgress, 200);
 
         try {
             await invoke('restore_database', { path });
             if (backupIntervalRef.current) {
-                clearInterval(backupIntervalRef.current);
+                clearTimeout(backupIntervalRef.current);
                 backupIntervalRef.current = null;
             }
-            setBackupProgress(prev => ({ ...prev, progress: 100, message: '복구 완료', currentRecord: 'Success' }));
+            setBackupProgress(prev => ({ ...prev, progress: 100, message: '복구 완료', currentRecord: 'Success', remainingSeconds: 0 }));
 
             setTimeout(() => {
                 showAlert('복구 완료', "데이터 복구가 성공적으로 완료되었습니다. 최상의 안정성을 위해 시스템이 재시작됩니다.");
@@ -194,13 +218,18 @@ const SettingsBackup = () => {
             }, 800);
         } catch (err) {
             if (backupIntervalRef.current) {
-                clearInterval(backupIntervalRef.current);
+                clearTimeout(backupIntervalRef.current);
                 backupIntervalRef.current = null;
             }
             setIsRestoring(false);
             setOperationType(null);
-            setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '' });
-            showAlert('복구 실패', `복구 중 오류가 발생했습니다: ${err.message || err}`);
+            setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '', elapsedSeconds: 0, remainingSeconds: -1, currentTable: 0, totalTables: 0 });
+
+            // Do not show "Failure" alert if it was a user cancellation
+            const errMsg = err.message || err.toString();
+            if (!errMsg.includes('취소')) {
+                showAlert('복구 실패', `복구 중 오류가 발생했습니다: ${errMsg}`);
+            }
         }
     };
 
@@ -217,7 +246,11 @@ const SettingsBackup = () => {
     };
 
     const handleMaintenance = async () => {
-        if (!window.confirm("데이터베이스 최적화를 수행하시겠습니까?")) return;
+        const confirmed = await showConfirm(
+            "시스템 최적화",
+            "데이터베이스 최적화를 수행하시겠습니까?\n시스템 성능 개선을 위해 불필요한 데이터를 정리합니다."
+        );
+        if (!confirmed) return;
         setIsLoading(true);
         try {
             await invoke('run_db_maintenance');
@@ -226,6 +259,39 @@ const SettingsBackup = () => {
             showAlert('수행 실패', `오류가 발생했습니다: ${err.message}`);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleCancelOperation = async () => {
+        try {
+            await invoke('cancel_backup_restore');
+            if (backupIntervalRef.current) {
+                clearTimeout(backupIntervalRef.current);
+                backupIntervalRef.current = null;
+            }
+            setBackupProgress({ progress: 0, message: '', startTime: null, currentRecord: '', elapsedSeconds: 0, remainingSeconds: -1, currentTable: 0, totalTables: 0 });
+            setIsBackingUp(false);
+            setIsRestoring(false);
+            setOperationType(null);
+            showAlert('작업 취소', '사용자 요청에 의해 작업이 취소되었습니다.');
+        } catch (err) {
+            showAlert('취소 실패', `취소 요청 중 오류가 발생했습니다: ${err.message || err}`);
+        }
+    };
+
+    const handleCleanupBackups = async () => {
+        setIsCleaning(true);
+        try {
+            const result = await invoke('cleanup_old_backups', { retention_days: cleanupDays });
+            const deletedCount = result?.deleted_count || 0;
+            const freedMB = ((result?.freed_bytes || 0) / (1024 * 1024)).toFixed(2);
+            setShowCleanupModal(false);
+            showAlert('정리 완료', `${deletedCount}개의 백업 파일이 삭제되었습니다. (${freedMB} MB 확보)`);
+            loadData();
+        } catch (err) {
+            showAlert('정리 실패', `백업 정리 중 오류가 발생했습니다: ${err.message || err}`);
+        } finally {
+            setIsCleaning(false);
         }
     };
 
@@ -310,7 +376,25 @@ const SettingsBackup = () => {
                                 </div>
                             </div>
 
-                            {/* Progress Area - Removed from Sidebar, now full-screen overlay */}
+                            {/* Gzip Compression Toggle */}
+                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 mt-2">
+                                <div className="flex items-center gap-3">
+                                    <Archive size={16} className="text-slate-400" />
+                                    <div>
+                                        <span className="text-xs font-bold text-slate-600">Gzip 압축</span>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">파일 크기를 줄여 저장합니다</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setUseCompression(!useCompression)}
+                                    className={`relative w-12 h-6 rounded-full transition-all duration-300 ${useCompression ? 'bg-emerald-500' : 'bg-slate-300'
+                                        }`}
+                                    aria-label="Gzip 압축 토글"
+                                >
+                                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${useCompression ? 'left-[26px]' : 'left-0.5'
+                                        }`} />
+                                </button>
+                            </div>
 
                             <div className="flex gap-3 mt-6">
                                 <button
@@ -379,7 +463,7 @@ const SettingsBackup = () => {
                                     데이터베이스 최적화 (VACUUM)
                                 </button>
                                 <button
-                                    onClick={() => showAlert("알림", "준비 중인 기능입니다.")}
+                                    onClick={() => setShowCleanupModal(true)}
                                     className="w-full h-11 bg-white border border-rose-100 text-rose-600 text-xs font-black rounded-xl hover:bg-rose-50 transition-all flex items-center justify-center gap-2"
                                 >
                                     <Trash2 size={14} />
@@ -537,7 +621,7 @@ const SettingsBackup = () => {
 
                             <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
                                 <div
-                                    className={`h-full ${operationType === 'backup' ? 'bg-indigo-600' : 'bg-amber-600'} transition-all duration-300 ease-out relative`}
+                                    className={`h-full ${operationType === 'backup' ? 'bg-indigo-600' : 'bg-amber-600'} transition-all duration-150 ease-out relative`}
                                     style={{ width: `${backupProgress.progress}%` }}
                                 >
                                     <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ backgroundSize: '200% 100%' }} />
@@ -545,18 +629,93 @@ const SettingsBackup = () => {
                             </div>
 
                             <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">
-                                <span>Estimated Time: {calculateETA(backupProgress.startTime, backupProgress.progress)}</span>
-                                <span className="flex items-center gap-1">
-                                    <Shield size={10} className="text-emerald-500" />
-                                    Security Verified
-                                </span>
+                                <div className="flex items-center gap-4">
+                                    <span>경과: {formatDuration(backupProgress.elapsedSeconds)}</span>
+                                    <span>남은 시간: {formatDuration(backupProgress.remainingSeconds)}</span>
+                                </div>
+                                {backupProgress.totalTables > 0 && operationType === 'backup' ? (
+                                    <span className="flex items-center gap-1">
+                                        <Database size={10} className="text-indigo-400" />
+                                        테이블 {backupProgress.currentTable}/{backupProgress.totalTables}
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1">
+                                        <Shield size={10} className="text-emerald-500" />
+                                        Security Verified
+                                    </span>
+                                )}
                             </div>
                         </div>
+
+                        {/* Cancel Button */}
+                        <button
+                            onClick={handleCancelOperation}
+                            className="flex items-center gap-3 px-8 py-4 bg-rose-50 border-2 border-rose-200 text-rose-600 rounded-2xl font-black text-sm hover:bg-rose-100 hover:border-rose-300 active:scale-95 transition-all"
+                        >
+                            <XCircle size={20} />
+                            작업 취소
+                        </button>
 
                         {/* Loading Hint */}
                         <div className="flex items-center gap-3 px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-tight">System is processing records...</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Cleanup Modal */}
+            {showCleanupModal && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowCleanupModal(false)} />
+                    <div className="relative bg-white rounded-[2.5rem] p-8 max-w-md w-full mx-4 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
+                                <Trash2 size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800">오래된 백업 파일 정리</h3>
+                                <p className="text-xs text-slate-400 font-medium">지정된 기간보다 오래된 백업 파일을 삭제합니다</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 mb-8">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">보관 기간 설정</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                {[30, 60, 90, 180].map(days => (
+                                    <button
+                                        key={days}
+                                        onClick={() => setCleanupDays(days)}
+                                        className={`py-3 rounded-xl text-xs font-black transition-all border-2 ${cleanupDays === days
+                                            ? 'bg-rose-50 border-rose-500 text-rose-600'
+                                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'
+                                            }`}
+                                    >
+                                        {days}일 이전
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-rose-400 font-bold mt-2 ml-1">
+                                ⚠ {cleanupDays}일 이전에 생성된 자동/수동 백업 파일이 모두 삭제됩니다.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowCleanupModal(false)}
+                                className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-black text-xs hover:bg-slate-200 transition-all"
+                            >
+                                취소
+                            </button>
+                            <button
+                                onClick={handleCleanupBackups}
+                                disabled={isCleaning}
+                                className="flex-1 py-3 bg-rose-500 text-white rounded-xl font-black text-xs hover:bg-rose-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isCleaning ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                {isCleaning ? '정리 중...' : '정리 실행'}
+                            </button>
                         </div>
                     </div>
                 </div>
