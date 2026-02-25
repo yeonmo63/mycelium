@@ -41,10 +41,10 @@ const MobileLogin = ({ onLoginSuccess }) => {
             const data = await invoke('verify_mobile_pin', { pin: currentPin });
 
             if (data.success) {
-                sessionStorage.setItem('username', data.username);
-                sessionStorage.setItem('userRole', data.role);
-                sessionStorage.setItem('isLoggedIn', 'true');
-                sessionStorage.setItem('pin_verified', 'true');
+                localStorage.setItem('username', data.username);
+                localStorage.setItem('userRole', data.role);
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('pin_verified', 'true');
                 if (data.token) {
                     localStorage.setItem('token', data.token);
                 }
@@ -56,6 +56,7 @@ const MobileLogin = ({ onLoginSuccess }) => {
             }
         } catch (err) {
             console.error('Login Error:', err);
+            const baseUrl = localStorage.getItem('API_BASE_URL') || '';
             const callUrl = `${baseUrl}/api/auth/verify`;
             setError(`${err.name}: ${err.message} (Target: ${callUrl})`);
         } finally {

@@ -10,21 +10,31 @@ export const useMobileDashboard = () => {
     const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
+            // Use Individual try-catches to ensure one failure doesn't block the rest
+            const fetchSafe = async (cmd) => {
+                try {
+                    return await callBridge(cmd);
+                } catch (e) {
+                    console.warn(`Dashboard partial load failed (${cmd}):`, e);
+                    return null;
+                }
+            };
+
             const [pri, sec, weekly] = await Promise.all([
-                callBridge('get_dashboard_priority_stats'),
-                callBridge('get_dashboard_secondary_stats'),
-                callBridge('get_weekly_sales_data')
+                fetchSafe('get_dashboard_priority_stats'),
+                fetchSafe('get_dashboard_secondary_stats'),
+                fetchSafe('get_weekly_sales_data')
             ]);
 
             setStats(prev => {
                 const combined = { ...(prev || {}) };
-                if (pri) Object.keys(pri).forEach(k => { if (pri[k] !== null) combined[k] = pri[k]; });
-                if (sec) Object.keys(sec).forEach(k => { if (sec[k] !== null) combined[k] = sec[k]; });
+                if (pri) Object.keys(pri).forEach(k => { if (pri[k] !== null && pri[k] !== undefined) combined[k] = pri[k]; });
+                if (sec) Object.keys(sec).forEach(k => { if (sec[k] !== null && sec[k] !== undefined) combined[k] = sec[k]; });
                 return combined;
             });
             setWeeklyData(weekly || []);
         } catch (err) {
-            console.error("Mobile Dashboard Load Error:", err);
+            console.error("Mobile Dashboard Critical Load Error:", err);
         } finally {
             setIsLoading(false);
         }

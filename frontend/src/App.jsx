@@ -88,22 +88,30 @@ const getEnvironment = () => {
   return isMobileUA || isIPad || isMobilePath;
 };
 
-// Admin Guard
+// Layout Components moved outside for stability
+const Layout = ({ isMobile }) => (
+  <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    {!isMobile && <MainLayout />}
+    <div className="flex-1 overflow-auto">
+      <Outlet />
+    </div>
+  </div>
+);
+
+// Admin Guard moved outside
 const AdminRoute = () => {
-  const userRole = sessionStorage.getItem('userRole');
+  const userRole = localStorage.getItem('userRole');
   if (userRole !== 'admin') return <Navigate to="/" replace />;
   return <Outlet />;
 };
 
-
 function AppContent() {
   const { showConfirm } = useModal();
-
   const IS_MOBILE = useMemo(() => getEnvironment(), []);
 
   const [isConfigured, setIsConfigured] = useState(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('isLoggedIn') === 'true');
-  const [isPinVerified, setIsPinVerified] = useState(() => sessionStorage.getItem('pin_verified') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
+  const [isPinVerified, setIsPinVerified] = useState(() => localStorage.getItem('pin_verified') === 'true');
   const [mobileAuthRequired, setMobileAuthRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -117,8 +125,7 @@ function AppContent() {
         const statusData = await invoke('get_auth_status');
 
         // If it's mobile, we force configured state unless we are sure it's not.
-        // But better yet, the wizard should not be visible to mobile.
-        setIsConfigured(statusData === 'Configured');
+        setIsConfigured(IS_MOBILE || statusData === 'Configured');
 
         // 2. Check Auth Status
         const authData = await invoke('check_auth');
@@ -126,29 +133,22 @@ function AppContent() {
         setMobileAuthRequired(authData.mobile_auth_required);
         if (authData.logged_in) {
           setIsLoggedIn(true);
-          sessionStorage.setItem('isLoggedIn', 'true');
+          localStorage.setItem('isLoggedIn', 'true');
 
-          if (sessionStorage.getItem('pin_verified') === 'true') {
+          if (localStorage.getItem('pin_verified') === 'true') {
             setIsPinVerified(true);
           }
 
           if (authData.user) {
-            sessionStorage.setItem('userRole', authData.user.role || 'worker');
-            sessionStorage.setItem('username', authData.user.username || 'mobile_user');
+            localStorage.setItem('userRole', authData.user.role || 'worker');
+            localStorage.setItem('username', authData.user.username || 'mobile_user');
           }
         }
       } catch (e) {
         console.error("App initialization failed", e);
-        // If it's a connection error, don't assume NotConfigured.
-        // On mobile, we still assume true for safety as before.
         if (IS_MOBILE) {
           setIsConfigured(true);
         } else {
-          // If connection failed, isConfigured remains null or we can set it to a special state.
-          // For now, let's just not set it to false if it's likely a network error.
-          // This prevents the "redirect to setup" loop if the server is just restarting.
-          // But we need to eventually show something. 
-          // Let's set a small timeout and retry once.
           setTimeout(() => {
             initApp();
           }, 2000);
@@ -165,21 +165,13 @@ function AppContent() {
     initApp();
   }, [IS_MOBILE]);
 
-  const Layout = ({ isMobile }) => (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-      {!isMobile && <MainLayout />}
-      <div className="flex-1 overflow-auto">
-        <Outlet />
-      </div>
-    </div>
-  );
-
+  // router definition remains inside as it needs auth states, but Layout is now stable
   const router = useMemo(() =>
     createBrowserRouter(
       createRoutesFromElements(
         <Route element={<Layout isMobile={IS_MOBILE} />}>
           <Route path="/" element={IS_MOBILE ? <Navigate to="/mobile-dashboard" replace /> : <Navigate to="/dashboard" replace />} />
-          <Route path="setup" element={(isConfigured && sessionStorage.getItem('userRole') !== 'admin') ? <Navigate to="/" replace /> : <SystemSetup onComplete={() => window.location.href = '/'} />} />
+          <Route path="setup" element={(isConfigured && localStorage.getItem('userRole') !== 'admin') ? <Navigate to="/" replace /> : <SystemSetup onComplete={() => window.location.href = '/'} />} />
           <Route path="login" element={isLoggedIn ? <Navigate to="/" replace /> : <Login />} />
 
           {/* Mobile Group with Swipe Layout */}
@@ -248,7 +240,7 @@ function AppContent() {
           {IS_MOBILE && <Route path="*" element={<Navigate to="/mobile-dashboard" replace />} />}
         </Route>
       )
-    ), [IS_MOBILE, isConfigured, isLoggedIn]);
+    ), [IS_MOBILE, isConfigured, isLoggedIn, mobileAuthRequired, isPinVerified]);
 
   if (isLoading || isConfigured === null) return null;
 

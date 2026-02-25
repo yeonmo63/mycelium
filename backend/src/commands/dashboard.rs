@@ -23,7 +23,9 @@ pub struct BusinessReportData {
     pub top_profitable: Vec<ProfitAnalysisResult>,
 }
 
-pub async fn get_dashboard_schedule_stats(State(state): State<AppState>) -> MyceliumResult<Json<i64>> {
+pub async fn get_dashboard_schedule_stats(
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<i64>> {
     let today = chrono::Local::now().date_naive();
     let count: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM schedules WHERE start_time < ($1 + interval '1 day')::timestamp AND end_time >= $1::timestamp"
@@ -36,7 +38,9 @@ pub async fn get_dashboard_schedule_stats(State(state): State<AppState>) -> Myce
     Ok(Json(count.0))
 }
 
-pub async fn get_dashboard_stats(State(state): State<AppState>) -> MyceliumResult<Json<DashboardStats>> {
+pub async fn get_dashboard_stats(
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<DashboardStats>> {
     let today = chrono::Local::now().date_naive();
 
     let sql = r#"
@@ -129,11 +133,17 @@ pub async fn get_dashboard_priority_stats(
             NULL::bigint as pending_consultation_count
     "#;
 
-    let stats = sqlx::query_as::<_, DashboardStats>(sql)
-        .bind(today)
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or_default();
+    let stats = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query_as::<_, DashboardStats>(sql)
+            .bind(today)
+            .fetch_one(&state.pool),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        _ => DashboardStats::default(),
+    };
 
     Ok(Json(stats))
 }
@@ -157,11 +167,17 @@ pub async fn get_dashboard_secondary_stats(
             (SELECT COUNT(*) FROM consultations WHERE status IN ('접수', '처리중')) as pending_consultation_count
     "#;
 
-    let stats = sqlx::query_as::<_, DashboardStats>(sql)
-        .bind(today)
-        .fetch_one(&state.pool)
-        .await
-        .unwrap_or_default();
+    let stats = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query_as::<_, DashboardStats>(sql)
+            .bind(today)
+            .fetch_one(&state.pool),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        _ => DashboardStats::default(),
+    };
 
     Ok(Json(stats))
 }
@@ -264,7 +280,9 @@ pub async fn get_recent_sales(State(state): State<AppState>) -> MyceliumResult<J
     Ok(Json(sales))
 }
 
-pub async fn get_weekly_sales_data(State(state): State<AppState>) -> MyceliumResult<Json<Vec<WeeklySales>>> {
+pub async fn get_weekly_sales_data(
+    State(state): State<AppState>,
+) -> MyceliumResult<Json<Vec<WeeklySales>>> {
     let sql = r#"
         SELECT 
             TO_CHAR(d, 'MM-DD') as date,
@@ -275,10 +293,15 @@ pub async fn get_weekly_sales_data(State(state): State<AppState>) -> MyceliumRes
         ORDER BY d
     "#;
 
-    let rows = sqlx::query_as::<_, WeeklySales>(sql)
-        .fetch_all(&state.pool)
-        .await
-        .unwrap_or_default();
+    let rows = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        sqlx::query_as::<_, WeeklySales>(sql).fetch_all(&state.pool),
+    )
+    .await
+    {
+        Ok(Ok(r)) => r,
+        _ => Vec::new(),
+    };
 
     Ok(Json(rows))
 }
@@ -320,7 +343,9 @@ pub async fn get_monthly_sales_by_cohort(
 ) -> MyceliumResult<Json<Vec<MonthlyCohortStats>>> {
     let year = payload.year;
     if year.len() != 4 {
-        return Err(crate::error::MyceliumError::Validation("Invalid year format".to_string()));
+        return Err(crate::error::MyceliumError::Validation(
+            "Invalid year format".to_string(),
+        ));
     }
 
     let sql = r#"

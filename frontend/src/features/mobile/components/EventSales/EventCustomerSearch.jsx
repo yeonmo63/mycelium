@@ -13,13 +13,10 @@ const EventCustomerSearch = ({
     return (
         <div className="space-y-4">
             <div className="relative">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <Search size={18} />
-                </div>
                 <input
                     type="text"
-                    placeholder="고역명 또는 이벤트명 검색"
-                    className="w-full h-12 bg-slate-50 border-none rounded-2xl pl-12 pr-24 text-sm font-black text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-indigo-500 transition-all border border-slate-100"
+                    placeholder="고객명 또는 이벤트명 검색"
+                    className="w-full h-12 bg-slate-50 border-none rounded-2xl pl-4 pr-24 text-sm font-black text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-indigo-500 transition-all border border-slate-100"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}

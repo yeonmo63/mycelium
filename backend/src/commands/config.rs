@@ -1545,12 +1545,24 @@ pub async fn verify_mobile_pin(
             .expect("valid timestamp")
             .timestamp() as usize;
 
+        // Get fallback user ID for session tracking (Foreign Key requirement)
+        let fallback_user_id: i32 = sqlx::query_scalar(
+            "SELECT id FROM users ORDER BY (role = 'admin') DESC, id ASC LIMIT 1",
+        )
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| {
+            crate::error::MyceliumError::Internal(
+                "No users found in database. Please set up the system first.".to_string(),
+            )
+        })?;
+
         // Store session in DB
         sqlx::query(
             "INSERT INTO user_sessions (session_id, user_id, token_hash, client_ip, user_agent, expires_at) VALUES ($1, $2, $3, $4, $5, $6)"
         )
         .bind(uuid::Uuid::parse_str(&sid).unwrap())
-        .bind(0) // Dummy mobile user ID
+        .bind(fallback_user_id)
         .bind("HashedMobileToken")
         .bind(client_ip)
         .bind(user_agent)
@@ -1560,7 +1572,7 @@ pub async fn verify_mobile_pin(
 
         let claims = crate::middleware::auth::Claims {
             sub: "mobile_user".to_string(),
-            user_id: Some(0),
+            user_id: Some(fallback_user_id),
             username: Some("mobile_user".to_string()),
             role: Some("worker".to_string()),
             ui_mode: Some("mobile".to_string()),
