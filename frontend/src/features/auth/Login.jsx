@@ -50,11 +50,11 @@ const Login = ({ onLoginSuccess }) => {
             });
 
             if (response.success) {
-                sessionStorage.setItem('isLoggedIn', 'true');
-                sessionStorage.setItem('userId', response.user_id.toString());
-                sessionStorage.setItem('username', response.username);
-                sessionStorage.setItem('userRole', response.role);
-                sessionStorage.setItem('uiMode', response.ui_mode || 'pro');
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('userId', response.user_id.toString());
+                localStorage.setItem('username', response.username);
+                localStorage.setItem('userRole', response.role);
+                localStorage.setItem('uiMode', response.ui_mode || 'pro');
                 if (response.token) {
                     localStorage.setItem('token', response.token);
                 }

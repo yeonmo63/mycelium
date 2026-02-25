@@ -120,7 +120,7 @@ const DashboardActionBar = ({
                 </div>
                 <div className="flex flex-col mr-6">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] leading-none mb-1">마이셀리움</span>
-                    <span className="text-sm font-black text-slate-800 tracking-tight">{sessionStorage.getItem('username') || '관리자'}님</span>
+                    <span className="text-sm font-black text-slate-800 tracking-tight">{localStorage.getItem('username') || '관리자'}님</span>
                 </div>
                 <button
                     onClick={() => setShowLogoutModal(true)}

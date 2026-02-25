@@ -42,7 +42,7 @@ const DashboardLite = ({
             <div className="flex justify-between items-center mb-10">
                 <div>
                     <h1 className="text-3xl font-black text-slate-800 tracking-tight mb-2">
-                        안녕하세요, <span className="text-indigo-600">{sessionStorage.getItem('username') || '관리자'}</span>님
+                        안녕하세요, <span className="text-indigo-600">{localStorage.getItem('username') || '관리자'}</span>님
                     </h1>
                     <p className="text-slate-400 font-medium">오늘 농장 경영의 핵심 지표입니다.</p>
                 </div>

@@ -89,7 +89,7 @@ export const useDashboard = (showAlert) => {
         });
 
         // 6. 보안 상태 점검 (관리자 전용)
-        const userRole = sessionStorage.getItem('userRole');
+        const userRole = localStorage.getItem('userRole');
         if (userRole === 'admin') {
             callBridge('get_security_status').then(res => {
                 if (res) setSecurityStatus(res);

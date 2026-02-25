@@ -28,6 +28,9 @@ const LogoutModal = ({ onClose }) => {
                                     console.error("Logout API failed", e);
                                 }
                                 localStorage.removeItem('token');
+                                localStorage.removeItem('userRole');
+                                localStorage.removeItem('isLoggedIn');
+                                localStorage.removeItem('pin_verified');
                                 sessionStorage.clear();
                                 window.location.reload();
                             }}

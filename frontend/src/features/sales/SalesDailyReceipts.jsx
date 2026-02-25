@@ -463,17 +463,7 @@ const SalesDailyReceipts = () => {
                 {/* Footer (Actions moved to top) */}
             </div>
 
-            {/* Footer Actions */}
-            <div className="px-6 lg:px-8 min-[2000px]:px-12 pb-6 lg:pb-8 min-[2000px]:pb-12 flex justify-end gap-2 animate-in slide-in-from-bottom-2 duration-500 delay-100 no-print">
-                <button onClick={() => setPrintModalOpen(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all">
-                    <span className="material-symbols-rounded text-lg">print</span>
-                    인쇄 미리보기
-                </button>
-                <button onClick={handleExportCsv} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs hover:bg-teal-700 shadow-sm shadow-teal-200 transition-all">
-                    <span className="material-symbols-rounded text-lg">download</span>
-                    CSV 저장
-                </button>
-            </div>
+
 
             {/* Print Preview Modal - Directly Visible Version */}
             {printModalOpen && (

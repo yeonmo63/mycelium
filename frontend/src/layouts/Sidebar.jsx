@@ -72,7 +72,7 @@ const Sidebar = () => {
     const [companyName, setCompanyName] = useState('마이셀리움');
     const location = useLocation();
 
-    const uiMode = sessionStorage.getItem('uiMode') || 'pro';
+    const uiMode = localStorage.getItem('uiMode') || 'pro';
     const isLite = uiMode === 'lite';
 
     useEffect(() => {
@@ -186,7 +186,7 @@ const Sidebar = () => {
 
                     <MenuItem to="/schedule" icon="calendar_month" label="일정 관리" />
 
-                    {sessionStorage.getItem('userRole') === 'admin' && (
+                    {localStorage.getItem('userRole') === 'admin' && (
                         <>
                             <MenuGroup id="base_data" icon="database" label="기본 데이터 관리" expanded={isExpanded('base_data')} onToggle={toggleMenu} currentPath={location.pathname}>
                                 <SubMenuItem to="/settings/company-info" icon="business" label="업체 정보 관리" />

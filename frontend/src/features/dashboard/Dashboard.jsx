@@ -28,7 +28,7 @@ import { useDashboard } from './hooks/useDashboard';
 const Dashboard = () => {
     const { showAlert, showConfirm } = useModal();
     const navigate = useNavigate();
-    const isLite = sessionStorage.getItem('uiMode') === 'lite';
+    const isLite = localStorage.getItem('uiMode') === 'lite';
 
     // Custom Hook for Data
     const {

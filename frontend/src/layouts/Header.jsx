@@ -5,16 +5,17 @@ import { useModal } from '../contexts/ModalContext';
 const Header = () => {
     const navigate = useNavigate();
     const { showConfirm } = useModal();
-    const username = sessionStorage.getItem('username') || '관리자';
+    const username = localStorage.getItem('username') || '관리자';
 
     const handleLogout = async () => {
         const confirmed = await showConfirm('로그아웃', '정말 로그아웃 하시겠습니까?');
         if (confirmed) {
             // Clear login state
-            sessionStorage.removeItem('isLoggedIn');
-            sessionStorage.removeItem('userId');
-            sessionStorage.removeItem('username');
-            sessionStorage.removeItem('userRole');
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('username');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('uiMode');
 
             // Instant logout via event dispatch (App.jsx listens for this)
             window.dispatchEvent(new CustomEvent('app-logout'));

@@ -28,7 +28,7 @@ const MobileWorkLog = () => {
         batch_id: null,
         space_id: null,
         log_date: dayjs().format('YYYY-MM-DD'),
-        worker_name: sessionStorage.getItem('username') || '',
+        worker_name: localStorage.getItem('username') || '',
         work_type: '일반작업',
         work_content: '',
         input_materials: null,
