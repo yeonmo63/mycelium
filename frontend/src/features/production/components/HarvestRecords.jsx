@@ -40,7 +40,7 @@ const HarvestRecords = () => {
     const [printJob, setPrintJob] = useState(null);
 
     // Continuous Scanner Mode States
-    const [isScannerMode, setIsScannerMode] = useState(false);
+    const [isScannerMode, setIsScannerMode] = useState(false); // eslint-disable-line no-unused-vars
     const [scannerSubMode, setScannerSubMode] = useState('live'); // 'live' or 'batch'
     const [scanConfig, setScanConfig] = useState({
         batch_id: '',
@@ -246,6 +246,7 @@ const HarvestRecords = () => {
         }
     };
 
+    /* eslint-disable no-unused-vars */
     const handleBatchProcess = async () => {
         const lines = batchInput.split('\n').map(l => l.trim()).filter(l => l);
         if (lines.length === 0) return;
@@ -551,8 +552,9 @@ const HarvestRecords = () => {
                         </div>
                         <div className="px-8 py-6 space-y-4">
                             <div className="space-y-1 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확 대상 배치</label>
+                                <label htmlFor="batch_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확 대상 배치</label>
                                 <select
+                                    id="batch_id"
                                     value={formData.batch_id || ''}
                                     onChange={e => setFormData({ ...formData, batch_id: e.target.value })}
                                     className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100 focus:ring-indigo-100 transition-all outline-none"
@@ -568,12 +570,12 @@ const HarvestRecords = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확일</label>
-                                    <input type="date" value={formData.harvest_date} onChange={e => setFormData({ ...formData, harvest_date: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
+                                    <label htmlFor="harvest_date" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확일</label>
+                                    <input id="harvest_date" type="date" value={formData.harvest_date} onChange={e => setFormData({ ...formData, harvest_date: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
                                 </div>
                                 <div className="space-y-1 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">품질 등급</label>
-                                    <select value={formData.grade} onChange={e => setFormData({ ...formData, grade: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100">
+                                    <label htmlFor="grade" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">품질 등급</label>
+                                    <select id="grade" value={formData.grade} onChange={e => setFormData({ ...formData, grade: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100">
                                         <option value="A">A등급 (특상)</option>
                                         <option value="B">B등급 (보통)</option>
                                         <option value="C">C등급 (하)</option>
@@ -603,12 +605,12 @@ const HarvestRecords = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">정품 수확량 (입고량)</label>
-                                    <input type="number" step="0.1" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-black text-sm ring-1 ring-indigo-100 text-indigo-600 text-right" />
+                                    <label htmlFor="quantity" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">정품 수확량 (입고량)</label>
+                                    <input id="quantity" type="number" step="0.1" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-black text-sm ring-1 ring-indigo-100 text-indigo-600 text-right" />
                                 </div>
                                 <div className="space-y-1 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">중량 단위</label>
-                                    <input type="text" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
+                                    <label htmlFor="unit" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">중량 단위</label>
+                                    <input id="unit" type="text" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} className="w-full h-11 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
                                 </div>
                             </div>
 
@@ -644,8 +646,9 @@ const HarvestRecords = () => {
                             )}
 
                             <div className="space-y-1 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">비고/메모</label>
+                                <label htmlFor="memo" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">비고/메모</label>
                                 <textarea
+                                    id="memo"
                                     value={formData.memo}
                                     onChange={e => setFormData({ ...formData, memo: e.target.value })}
                                     className="w-full h-20 p-4 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100 resize-none outline-none"

@@ -453,10 +453,12 @@ const ScheduleMgmt = () => {
                             )}
 
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Title</label>
+                                <label htmlFor="title" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Title</label>
                                 <div className="group relative">
                                     <input
                                         type="text"
+                                        id="title"
+                                        name="title"
                                         value={formData.title}
                                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                         placeholder="일정 제목을 입력하세요"
@@ -472,10 +474,12 @@ const ScheduleMgmt = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Start At</label>
+                                    <label htmlFor="startTime" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Start At</label>
                                     <div className="relative">
                                         <input
                                             type="datetime-local"
+                                            id="startTime"
+                                            name="startTime"
                                             value={formData.startTime}
                                             onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                                             disabled={editingSchedule?.related_type === 'EXPERIENCE'}
@@ -488,10 +492,12 @@ const ScheduleMgmt = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">End At</label>
+                                    <label htmlFor="endTime" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">End At</label>
                                     <div className="relative">
                                         <input
                                             type="datetime-local"
+                                            id="endTime"
+                                            name="endTime"
                                             value={formData.endTime}
                                             onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                                             disabled={editingSchedule?.related_type === 'EXPERIENCE'}
@@ -541,8 +547,10 @@ const ScheduleMgmt = () => {
                             </div>
 
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Description</label>
+                                <label htmlFor="description" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">Description</label>
                                 <textarea
+                                    id="description"
+                                    name="description"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="상세 내용을 입력하세요 (장소, 준비물 등)"

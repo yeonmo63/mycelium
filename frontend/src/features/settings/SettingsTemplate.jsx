@@ -237,7 +237,7 @@ const SettingsTemplate = () => {
                                     onClick={handleAddTemplate}
                                     className="h-10 px-5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl font-black text-[11px] flex items-center gap-2 transition-all active:scale-[0.95]"
                                 >
-                                    <Plus size={16} /> 문구 추가
+                                    <Plus size={16} aria-hidden="true" /> 문구 추가
                                 </button>
                             </div>
 
@@ -248,8 +248,9 @@ const SettingsTemplate = () => {
                                             <button
                                                 onClick={() => handleRemoveTemplate(index)}
                                                 className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-rose-500 text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center hover:bg-rose-600 transform hover:scale-110 active:scale-90 z-10"
+                                                aria-label="삭제"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={14} aria-hidden="true" />
                                             </button>
 
                                             <div className="relative">

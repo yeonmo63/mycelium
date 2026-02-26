@@ -10,8 +10,8 @@ const AuditTrail = ({ logs, hideAutoLogs, setHideAutoLogs, logSearchQuery, setLo
                 : log.created_at;
             const d = new Date(isoStr);
             if (isNaN(d.getTime())) {
-                const parts = log.created_at.split(' ');
-                const fallbackDate = parts[0];
+                const parts = (typeof log.created_at === 'string') ? log.created_at.split(' ') : [];
+                const fallbackDate = parts[0] || 'Unknown';
                 if (!groups[fallbackDate]) groups[fallbackDate] = [];
                 groups[fallbackDate].push({ ...log, _localTime: parts[1]?.substring(0, 5) || '' });
                 return;

@@ -29,7 +29,7 @@ describe('CustomerRegister Component', () => {
             </ModalProvider>
         );
 
-        expect(screen.getByText(/고객 등록/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /고객 등록/i })).toBeInTheDocument();
         expect(screen.getByPlaceholderText(/이름 입력/i)).toBeInTheDocument();
     });
 
@@ -148,10 +148,10 @@ describe('CustomerRegister Component', () => {
         await user.click(submitBtn);
 
         // Should show duplicate modal
-        expect(await screen.findByText(/중복 등록 항목 발견/i)).toBeInTheDocument();
+        expect(await screen.findByText(/중복 확인/i)).toBeInTheDocument();
 
-        // Find "그래도 등록하기" (Register anyway) button in modal
-        const registerAnywayBtn = screen.getByRole('button', { name: /그래도 등록하기/i });
+        // Find "무시하고 계속 진행" button in modal
+        const registerAnywayBtn = screen.getByRole('button', { name: /무시하고 계속 진행/i });
         await user.click(registerAnywayBtn);
 
         // Second confirmation

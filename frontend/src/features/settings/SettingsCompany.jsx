@@ -172,7 +172,6 @@ const SettingsCompany = () => {
                                         onChange={e => setFormData({ ...formData, company_name: e.target.value })}
                                         className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-200"
                                         placeholder="업체명을 입력하세요"
-                                        required
                                     />
                                 </div>
 

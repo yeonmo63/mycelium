@@ -249,7 +249,7 @@ const EventMgmt = () => {
                                 <div>
                                     <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
                                         <span className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shadow-sm">
-                                            <span className="material-symbols-rounded text-2xl">{form.id ? 'edit_calendar' : 'add_circle'}</span>
+                                            <span className="material-symbols-rounded text-2xl" aria-hidden="true">{form.id ? 'edit_calendar' : 'add_circle'}</span>
                                         </span>
                                         {form.id ? '행사 정보 수정' : '새 행사 등록'}
                                     </h3>
@@ -272,8 +272,9 @@ const EventMgmt = () => {
                                             </div>
 
                                             <div>
-                                                <label className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">행사명 <span className="text-red-500">*</span></label>
+                                                <label htmlFor="event-name" className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">행사명 <span className="text-red-500">*</span></label>
                                                 <input
+                                                    id="event-name"
                                                     value={form.name}
                                                     onChange={e => setForm({ ...form, name: e.target.value })}
                                                     className="w-full h-12 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-800 px-4 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-sm shadow-inner"
@@ -284,8 +285,9 @@ const EventMgmt = () => {
 
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">주최/주관사</label>
+                                                    <label htmlFor="event-organizer" className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">주최/주관사</label>
                                                     <input
+                                                        id="event-organizer"
                                                         value={form.organizer}
                                                         onChange={e => setForm({ ...form, organizer: e.target.value })}
                                                         className="w-full h-11 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all px-4 text-sm"
@@ -293,8 +295,9 @@ const EventMgmt = () => {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">현장 담당자</label>
+                                                    <label htmlFor="event-manager" className="text-[11px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">현장 담당자</label>
                                                     <input
+                                                        id="event-manager"
                                                         value={form.manager}
                                                         onChange={e => setForm({ ...form, manager: e.target.value })}
                                                         className="w-full h-11 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all px-4 text-sm"
@@ -382,7 +385,7 @@ const EventMgmt = () => {
                                             onClick={handleSave}
                                             className="h-12 px-10 rounded-2xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:scale-105 active:scale-95 text-sm flex items-center gap-2"
                                         >
-                                            <span className="material-symbols-rounded">save</span>
+                                            <span className="material-symbols-rounded" aria-hidden="true">save</span>
                                             {form.id ? '수정 사항 저장' : '새 행사 등록하기'}
                                         </button>
                                     </div>

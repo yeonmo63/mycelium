@@ -303,15 +303,15 @@ const ProductionBatches = () => {
                         <div className="p-8 space-y-6">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">배치 코드</label>
+                                    <label htmlFor="batch_code" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">배치 코드</label>
                                     <div className="flex gap-2">
-                                        <input type="text" value={formData.batch_code} onChange={e => setFormData({ ...formData, batch_code: e.target.value })} className="flex-1 h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm ring-1 ring-slate-100" />
+                                        <input id="batch_code" type="text" value={formData.batch_code} onChange={e => setFormData({ ...formData, batch_code: e.target.value })} className="flex-1 h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm ring-1 ring-slate-100" />
                                         <button onClick={generateCode} className="px-3 bg-slate-100 rounded-xl text-slate-500 hover:text-indigo-600"><Tag size={16} /></button>
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상태</label>
-                                    <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm ring-1 ring-slate-100">
+                                    <label htmlFor="status" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상태</label>
+                                    <select id="status" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} className="w-full h-11 px-4 bg-slate-50 border-none rounded-xl font-bold text-sm ring-1 ring-slate-100">
                                         <option value="growing">성장 중 (Active)</option>
                                         <option value="completed">완료 (Done)</option>
                                         <option value="failed">폐기 (Failed)</option>
@@ -320,8 +320,9 @@ const ProductionBatches = () => {
                             </div>
 
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확 목표 원물 (농산물)</label>
+                                <label htmlFor="product_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">수확 목표 원물 (농산물)</label>
                                 <select
+                                    id="product_id"
                                     value={formData.product_id || ''}
                                     onChange={e => setFormData({ ...formData, product_id: e.target.value })}
                                     className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100"
@@ -339,8 +340,9 @@ const ProductionBatches = () => {
                             </div>
 
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">배정 시설</label>
+                                <label htmlFor="space_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">배정 시설</label>
                                 <select
+                                    id="space_id"
                                     value={formData.space_id || ''}
                                     onChange={e => setFormData({ ...formData, space_id: e.target.value || null })}
                                     className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100"
@@ -412,7 +414,7 @@ const QuickLogModal = ({ isOpen, batch, onClose, showAlert }) => {
                 photos: []
             });
         }
-    }, [isOpen, batch]);
+    }, [isOpen, batch, setQuickLogData]);
 
     if (!isOpen) return null;
 

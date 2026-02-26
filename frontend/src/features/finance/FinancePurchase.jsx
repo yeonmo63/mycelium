@@ -310,15 +310,15 @@ const FinancePurchase = () => {
 
                         <div className="flex flex-col gap-3 relative z-10 overflow-y-auto flex-1 px-1 custom-scrollbar">
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">매입 일자</label>
-                                <input type="date" name="date" value={formState.date} onChange={handleFormChange}
+                                <label htmlFor="purchase-date" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">매입 일자</label>
+                                <input id="purchase-date" type="date" name="date" value={formState.date} onChange={handleFormChange}
                                     className="w-full h-10 rounded-xl bg-slate-50 border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">공급처 (거래처)</label>
+                                <label htmlFor="purchase-vendor" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">공급처 (거래처)</label>
                                 <div className="relative">
-                                    <select name="vendorId" value={formState.vendorId} onChange={handleFormChange}
+                                    <select id="purchase-vendor" name="vendorId" value={formState.vendorId} onChange={handleFormChange}
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3 appearance-none">
                                         <option value="">거래처 선택</option>
                                         {vendors.map(v => <option key={v.vendor_id} value={v.vendor_id}>{v.vendor_name}</option>)}
@@ -328,26 +328,26 @@ const FinancePurchase = () => {
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">품목명 (지출 항목)</label>
-                                <input type="text" name="itemName" value={formState.itemName} onChange={handleFormChange} placeholder="예: 택배 박스 5kg용"
+                                <label htmlFor="purchase-item-name" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">품목명 (지출 항목)</label>
+                                <input id="purchase-item-name" type="text" name="itemName" value={formState.itemName} onChange={handleFormChange} placeholder="예: 택배 박스 5kg용"
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">규격 (선택)</label>
-                                <input type="text" name="spec" value={formState.spec} onChange={handleFormChange}
+                                <label htmlFor="purchase-spec" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">규격 (선택)</label>
+                                <input id="purchase-spec" type="text" name="spec" value={formState.spec} onChange={handleFormChange}
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">수량</label>
-                                    <input type="text" name="qty" value={formatCurrency(formState.qty)} onChange={handleFormChange}
+                                    <label htmlFor="purchase-qty" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">수량</label>
+                                    <input id="purchase-qty" type="text" name="qty" value={formatCurrency(formState.qty)} onChange={handleFormChange}
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold text-right focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                                 </div>
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">단가</label>
-                                    <input type="text" name="price" value={formatCurrency(formState.price)} onChange={handleFormChange}
+                                    <label htmlFor="purchase-price" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">단가</label>
+                                    <input id="purchase-price" type="text" name="price" value={formatCurrency(formState.price)} onChange={handleFormChange}
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold text-right focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                                 </div>
                             </div>
@@ -359,8 +359,8 @@ const FinancePurchase = () => {
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">결제 상태</label>
-                                <select name="paymentStatus" value={formState.paymentStatus} onChange={handleFormChange}
+                                <label htmlFor="purchase-payment-status" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">결제 상태</label>
+                                <select id="purchase-payment-status" name="paymentStatus" value={formState.paymentStatus} onChange={handleFormChange}
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3">
                                     <option value="계좌이체">계좌이체</option>
                                     <option value="미지급">미지급(외상)</option>
@@ -434,8 +434,8 @@ const FinancePurchase = () => {
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
-                                <textarea name="memo" value={formState.memo} onChange={handleFormChange}
+                                <label htmlFor="purchase-memo" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
+                                <textarea id="purchase-memo" name="memo" value={formState.memo} onChange={handleFormChange}
                                     className="w-full h-20 rounded-xl bg-white border-slate-200 text-slate-800 text-sm p-3 focus:ring-2 focus:ring-violet-500 transition-all resize-none"></textarea>
                             </div>
 

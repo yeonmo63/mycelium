@@ -218,8 +218,9 @@ const FinanceTaxReport = () => {
 
                 <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
                     <div className="flex items-center gap-2 px-3 border-r border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">시작</span>
+                        <label htmlFor="tax-start-date" className="text-[10px] font-bold text-slate-400 uppercase">시작</label>
                         <input
+                            id="tax-start-date"
                             type="date"
                             value={startDate}
                             onChange={e => setStartDate(e.target.value)}
@@ -227,8 +228,9 @@ const FinanceTaxReport = () => {
                         />
                     </div>
                     <div className="flex items-center gap-2 px-3 border-r border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">종료</span>
+                        <label htmlFor="tax-end-date" className="text-[10px] font-bold text-slate-400 uppercase">종료</label>
                         <input
+                            id="tax-end-date"
                             type="date"
                             value={endDate}
                             onChange={e => setEndDate(e.target.value)}

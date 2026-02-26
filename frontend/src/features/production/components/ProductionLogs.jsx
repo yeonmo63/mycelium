@@ -22,7 +22,7 @@ const ProductionLogs = () => {
     const [uploadType, setUploadType] = useState('photo');
     const baseUrl = localStorage.getItem('API_BASE_URL') || '';
 
-    const resolveImageUrl = (path, displayPath) => {
+    const resolveImageUrl = (path) => {
         if (!path) return '';
         // If it's already a full URL or blob, return as is
         if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('data:')) return path;
@@ -33,7 +33,7 @@ const ProductionLogs = () => {
             cleanPath = path.replace(/https?:\/\/asset\.localhost\//, '').replace(/asset\.localhost\//, '');
         }
 
-        try { cleanPath = decodeURIComponent(cleanPath); } catch (e) { }
+        try { cleanPath = decodeURIComponent(cleanPath); } catch (e) { console.warn("URI decode failed", e); }
 
         const filename = cleanPath.split(/[\\/]/).pop();
 
@@ -348,12 +348,12 @@ const ProductionLogs = () => {
 
                         <div className="p-8 grid grid-cols-2 gap-6 overflow-y-auto max-h-[70vh] custom-scrollbar">
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업 날짜</label>
-                                <input type="date" value={formData.log_date} onChange={e => setFormData({ ...formData, log_date: e.target.value })} className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
+                                <label htmlFor="log_date" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업 날짜</label>
+                                <input id="log_date" type="date" value={formData.log_date} onChange={e => setFormData({ ...formData, log_date: e.target.value })} className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
                             </div>
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업자</label>
-                                <input type="text" value={formData.worker_name} onChange={e => setFormData({ ...formData, worker_name: e.target.value })} placeholder="성함 입력" className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
+                                <label htmlFor="worker_name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업자</label>
+                                <input id="worker_name" type="text" value={formData.worker_name} onChange={e => setFormData({ ...formData, worker_name: e.target.value })} placeholder="성함 입력" className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100" />
                             </div>
 
                             <div className="space-y-2 text-left col-span-2">
@@ -378,8 +378,9 @@ const ProductionLogs = () => {
                             </div>
 
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업 구획</label>
+                                <label htmlFor="space_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">작업 구획</label>
                                 <select
+                                    id="space_id"
                                     value={formData.space_id || ''}
                                     onChange={e => setFormData({ ...formData, space_id: e.target.value || null })}
                                     className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100"
@@ -389,8 +390,9 @@ const ProductionLogs = () => {
                                 </select>
                             </div>
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Batch Code (선택)</label>
+                                <label htmlFor="batch_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Batch Code (선택)</label>
                                 <select
+                                    id="batch_id"
                                     value={formData.batch_id || ''}
                                     onChange={e => setFormData({ ...formData, batch_id: e.target.value || null })}
                                     className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm ring-1 ring-slate-100"
@@ -401,8 +403,9 @@ const ProductionLogs = () => {
                             </div>
 
                             <div className="space-y-2 text-left col-span-2">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상세 작업 내용</label>
+                                <label htmlFor="work_content" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">상세 작업 내용</label>
                                 <textarea
+                                    id="work_content"
                                     value={formData.work_content}
                                     onChange={e => setFormData({ ...formData, work_content: e.target.value })}
                                     className="w-full h-24 p-5 bg-slate-50 border-none rounded-[2rem] font-bold text-sm ring-1 ring-slate-100 resize-none"

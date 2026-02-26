@@ -537,8 +537,8 @@ const CustomerRegister = () => {
                                 </div>
                             </div>
                             <div className="lg:col-span-2 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">회원 등급</label>
-                                <select name="level" value={formData.level} onChange={handleChange}
+                                <label htmlFor="reg-level" className="text-[11px] font-black text-slate-400 uppercase ml-1">회원 등급</label>
+                                <select id="reg-level" name="level" value={formData.level} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 transition-all appearance-none shadow-sm">
                                     <option value="일반">일반</option>
                                     <option value="VIP">VIP</option>
@@ -547,8 +547,8 @@ const CustomerRegister = () => {
                                 </select>
                             </div>
                             <div className="lg:col-span-5 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">이메일 주소</label>
-                                <input type="email" name="email" ref={emailInputRef} value={formData.email} onChange={handleChange}
+                                <label htmlFor="reg-email" className="text-[11px] font-black text-slate-400 uppercase ml-1">이메일 주소</label>
+                                <input id="reg-email" type="email" name="email" ref={emailInputRef} value={formData.email} onChange={handleChange}
                                     onKeyDown={(e) => handleKeyDown(e, phoneInputRef)}
                                     placeholder="example@mail.com"
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" />
@@ -557,20 +557,20 @@ const CustomerRegister = () => {
 
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-y-2 gap-x-4 mt-3">
                             <div className="lg:col-span-2 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">우편번호</label>
-                                <input type="text" name="zip" value={formData.zip} readOnly onClick={handleAddressSearch}
+                                <label htmlFor="reg-zip" className="text-[11px] font-black text-slate-400 uppercase ml-1">우편번호</label>
+                                <input id="reg-zip" type="text" name="zip" value={formData.zip} readOnly onClick={handleAddressSearch}
                                     placeholder="검색"
                                     className="w-full h-10 bg-slate-50 border-slate-200 border rounded-xl font-bold text-slate-700 px-4 cursor-pointer hover:bg-slate-100 transition-all text-center" />
                             </div>
                             <div className="lg:col-span-5 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">기본 주소</label>
-                                <input type="text" name="addr1" value={formData.addr1} onClick={handleAddressSearch}
+                                <label htmlFor="reg-addr1" className="text-[11px] font-black text-slate-400 uppercase ml-1">기본 주소</label>
+                                <input id="reg-addr1" type="text" name="addr1" value={formData.addr1} onClick={handleAddressSearch}
                                     placeholder="클릭하여 주소 검색" readOnly
                                     className="w-full h-10 bg-slate-50 border-slate-200 border rounded-xl font-bold text-slate-700 px-4 cursor-pointer hover:bg-slate-100 transition-all" />
                             </div>
                             <div className="lg:col-span-5 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">상세 주소</label>
-                                <input type="text" name="addr2" ref={addr2InputRef} value={formData.addr2} onChange={handleChange}
+                                <label htmlFor="reg-addr2" className="text-[11px] font-black text-slate-400 uppercase ml-1">상세 주소</label>
+                                <input id="reg-addr2" type="text" name="addr2" ref={addr2InputRef} value={formData.addr2} onChange={handleChange}
                                     placeholder="아파트 동/호수 등 상세 입력"
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" />
                             </div>
@@ -578,16 +578,16 @@ const CustomerRegister = () => {
 
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-y-2 gap-x-4 mt-3">
                             <div className="lg:col-span-3 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">일반 전화</label>
-                                <input type="tel" name="phone" ref={phoneInputRef} value={formData.phone} onChange={handleChange}
+                                <label htmlFor="reg-phone" className="text-[11px] font-black text-slate-400 uppercase ml-1">일반 전화</label>
+                                <input type="tel" id="reg-phone" name="phone" ref={phoneInputRef} value={formData.phone} onChange={handleChange}
                                     onKeyDown={(e) => handleKeyDown(e, mobileInputRef)}
                                     placeholder="02-000-0000"
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" />
                             </div>
                             <div className="lg:col-span-3 space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">휴대 전화</label>
+                                <label htmlFor="reg-mobile" className="text-[11px] font-black text-slate-400 uppercase ml-1">휴대 전화</label>
                                 <div className="relative">
-                                    <input type="tel" name="mobile" ref={mobileInputRef} value={formData.mobile} onChange={handleChange}
+                                    <input type="tel" id="reg-mobile" name="mobile" ref={mobileInputRef} value={formData.mobile} onChange={handleChange}
                                         onFocus={() => setIsMobileFocused(true)}
                                         onBlur={() => setTimeout(() => setIsMobileFocused(false), 200)}
                                         onKeyDown={(e) => handleKeyDown(e, emailInputRef)}
@@ -635,9 +635,9 @@ const CustomerRegister = () => {
                                 </div>
                             </div>
                             <div className="lg:col-span-6 flex items-end pb-1">
-                                <label className="flex items-center gap-3 bg-slate-50 border border-slate-200 px-6 py-3 rounded-2xl cursor-pointer hover:bg-indigo-50 transition-all w-full group/check">
+                                <label htmlFor="reg-marketingConsent" className="flex items-center gap-3 bg-slate-50 border border-slate-200 px-6 py-3 rounded-2xl cursor-pointer hover:bg-indigo-50 transition-all w-full group/check">
                                     <div className="relative flex items-center">
-                                        <input type="checkbox" name="marketingConsent" checked={formData.marketingConsent} onChange={handleChange}
+                                        <input id="reg-marketingConsent" type="checkbox" name="marketingConsent" checked={formData.marketingConsent} onChange={handleChange}
                                             className="w-5 h-5 rounded-lg border-2 border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer" />
                                     </div>
                                     <span className="text-sm font-black text-slate-600 group-hover/check:text-indigo-700">마케팅 정보 수신 동의</span>
@@ -660,13 +660,13 @@ const CustomerRegister = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-2 gap-x-4">
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">주요 기념일</label>
-                                <input type="date" name="anniversaryDate" value={formData.anniversaryDate} onChange={handleChange}
+                                <label htmlFor="reg-anniversaryDate" className="text-[11px] font-black text-slate-400 uppercase ml-1">주요 기념일</label>
+                                <input id="reg-anniversaryDate" type="date" name="anniversaryDate" value={formData.anniversaryDate} onChange={handleChange}
                                     className="w-full h-10 bg-slate-50 border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 transition-all" />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">기념일 종류</label>
-                                <select name="anniversaryType" value={formData.anniversaryType} onChange={handleChange}
+                                <label htmlFor="reg-anniversaryType" className="text-[11px] font-black text-slate-400 uppercase ml-1">기념일 종류</label>
+                                <select id="reg-anniversaryType" name="anniversaryType" value={formData.anniversaryType} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 appearance-none shadow-sm focus:ring-2 focus:ring-indigo-500">
                                     <option value="">선택 안함</option>
                                     <option value="생일">생일</option>
@@ -675,8 +675,8 @@ const CustomerRegister = () => {
                                 </select>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">유입 경로</label>
-                                <select name="acquisition" value={formData.acquisition} onChange={handleChange}
+                                <label htmlFor="reg-acquisition" className="text-[11px] font-black text-slate-400 uppercase ml-1">유입 경로</label>
+                                <select id="reg-acquisition" name="acquisition" value={formData.acquisition} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 appearance-none shadow-sm focus:ring-2 focus:ring-indigo-500">
                                     <option value="">선택 하세요</option>
                                     <option value="SNS(인스타/페이스북)">SNS</option>
@@ -688,8 +688,8 @@ const CustomerRegister = () => {
                                 </select>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">구매 주기</label>
-                                <select name="purchaseCycle" value={formData.purchaseCycle} onChange={handleChange}
+                                <label htmlFor="reg-purchaseCycle" className="text-[11px] font-black text-slate-400 uppercase ml-1">구매 주기</label>
+                                <select id="reg-purchaseCycle" name="purchaseCycle" value={formData.purchaseCycle} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 appearance-none shadow-sm focus:ring-2 focus:ring-indigo-500">
                                     <option value="">선택 하세요</option>
                                     <option value="매달 정기적">매달 정기적</option>
@@ -702,8 +702,8 @@ const CustomerRegister = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-2 gap-x-4 mt-3">
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">선호 상품군</label>
-                                <select name="prefProduct" value={formData.prefProduct} onChange={handleChange}
+                                <label htmlFor="reg-prefProduct" className="text-[11px] font-black text-slate-400 uppercase ml-1">선호 상품군</label>
+                                <select id="reg-prefProduct" name="prefProduct" value={formData.prefProduct} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 appearance-none shadow-sm focus:ring-2 focus:ring-indigo-500">
                                     <option value="">선택 하세요</option>
                                     <option value="생버섯">생버섯</option>
@@ -713,8 +713,8 @@ const CustomerRegister = () => {
                                 </select>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">선호 포장</label>
-                                <select name="prefPackage" value={formData.prefPackage} onChange={handleChange}
+                                <label htmlFor="reg-prefPackage" className="text-[11px] font-black text-slate-400 uppercase ml-1">선호 포장</label>
+                                <select id="reg-prefPackage" name="prefPackage" value={formData.prefPackage} onChange={handleChange}
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 appearance-none shadow-sm focus:ring-2 focus:ring-indigo-500">
                                     <option value="">선택 하세요</option>
                                     <option value="실속형(가정용)">실속형</option>
@@ -722,8 +722,8 @@ const CustomerRegister = () => {
                                 </select>
                             </div>
                             <div className="lg:col-span-2 flex items-end pb-1">
-                                <label className="flex items-center gap-3 bg-white border border-indigo-100 px-6 py-3 rounded-2xl cursor-pointer hover:bg-indigo-50 transition-all w-full group/check">
-                                    <input type="checkbox" name="subInterest" checked={formData.subInterest} onChange={handleChange}
+                                <label htmlFor="reg-subInterest" className="flex items-center gap-3 bg-white border border-indigo-100 px-6 py-3 rounded-2xl cursor-pointer hover:bg-indigo-50 transition-all w-full group/check">
+                                    <input id="reg-subInterest" type="checkbox" name="subInterest" checked={formData.subInterest} onChange={handleChange}
                                         className="w-5 h-5 rounded-lg border-2 border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                                     <span className="text-sm font-black text-slate-600 group-hover/check:text-indigo-700">정기 배송(구독형) 서비스 관심</span>
                                 </label>
@@ -732,14 +732,14 @@ const CustomerRegister = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 mt-3">
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">가족 구성 특징</label>
-                                <input type="text" name="familyType" value={formData.familyType} onChange={handleChange}
+                                <label htmlFor="reg-familyType" className="text-[11px] font-black text-slate-400 uppercase ml-1">가족 구성 특징</label>
+                                <input id="reg-familyType" type="text" name="familyType" value={formData.familyType} onChange={handleChange}
                                     placeholder="예: 자녀 있음, 부모님 선물용 위주 등"
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 shadow-sm" />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[11px] font-black text-slate-400 uppercase ml-1">건강 관심사</label>
-                                <input type="text" name="healthConcern" value={formData.healthConcern} onChange={handleChange}
+                                <label htmlFor="reg-healthConcern" className="text-[11px] font-black text-slate-400 uppercase ml-1">건강 관심사</label>
+                                <input id="reg-healthConcern" type="text" name="healthConcern" value={formData.healthConcern} onChange={handleChange}
                                     placeholder="예: 당뇨관리, 면역력 등"
                                     className="w-full h-10 bg-white border-slate-200 border rounded-xl font-bold text-slate-700 px-4 focus:ring-2 focus:ring-indigo-500 shadow-sm" />
                             </div>
@@ -748,8 +748,8 @@ const CustomerRegister = () => {
 
                     {/* Section 3: Memo */}
                     <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 mb-2">
-                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1 mb-1 block">고객 상세 메모</label>
-                        <textarea name="memo" value={formData.memo} onChange={handleChange} rows="3"
+                        <label htmlFor="reg-memo" className="text-[11px] font-black text-slate-400 uppercase ml-1 mb-1 block">고객 상세 메모</label>
+                        <textarea id="reg-memo" name="memo" value={formData.memo} onChange={handleChange} rows="3"
                             placeholder="특이사항이나 상담 메모를 남겨주세요."
                             className="w-full bg-slate-50 border-slate-200 border rounded-xl font-bold text-slate-700 p-3 focus:ring-2 focus:ring-indigo-500 transition-all resize-none" />
                     </div>
@@ -898,13 +898,10 @@ const CustomerRegister = () => {
                                 <span className="material-symbols-rounded">close</span> 취소 (재입력)
                             </button>
                             <button
-                                onClick={() => {
+                                onClick={async () => {
                                     setIsDuplicateModalOpen(false);
-                                    if (!formData.mobile) {
-                                        mobileInputRef.current?.focus();
-                                    } else if (!formData.addr2) {
-                                        addr2InputRef.current?.focus();
-                                    }
+                                    if (!await showConfirm('확인', selectedCustomerId ? '고객 정보를 수정하시겠습니까?' : '고객을 등록하시겠습니까?')) return;
+                                    await submitRegistration();
                                 }}
                                 className="flex-1 h-12 rounded-2xl bg-indigo-600 text-white font-black hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
                             >

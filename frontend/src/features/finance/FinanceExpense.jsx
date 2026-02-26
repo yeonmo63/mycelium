@@ -155,15 +155,15 @@ const FinanceExpense = () => {
 
                         <div className="flex flex-col gap-3 relative z-10 overflow-y-auto flex-1 px-1 custom-scrollbar">
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 일자</label>
-                                <input type="date" name="date" value={form.date} onChange={handleFormChange}
+                                <label htmlFor="expense-date" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 일자</label>
+                                <input id="expense-date" type="date" name="date" value={form.date} onChange={handleFormChange}
                                     className="w-full h-10 rounded-xl bg-slate-50 border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">카테고리</label>
+                                <label htmlFor="expense-category" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">카테고리</label>
                                 <div className="relative">
-                                    <select name="category" value={form.category} onChange={handleFormChange}
+                                    <select id="expense-category" name="category" value={form.category} onChange={handleFormChange}
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3 appearance-none">
                                         <option>운영비</option>
                                         <option>인건비</option>
@@ -182,16 +182,16 @@ const FinanceExpense = () => {
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 금액</label>
-                                <input type="text" name="amount" value={formatCurrency(form.amount)} onChange={handleAmountChange}
+                                <label htmlFor="expense-amount" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 금액</label>
+                                <input id="expense-amount" type="text" name="amount" value={formatCurrency(form.amount)} onChange={handleAmountChange}
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold text-right focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
 
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">결제 수단</label>
-                                <select name="method" value={form.method} onChange={handleFormChange}
+                                <label htmlFor="expense-method" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">결제 수단</label>
+                                <select id="expense-method" name="method" value={form.method} onChange={handleFormChange}
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3">
                                     <option>계좌이체</option>
                                     <option>현금</option>
@@ -201,8 +201,8 @@ const FinanceExpense = () => {
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 내역/메모</label>
-                                <textarea name="memo" value={form.memo} onChange={handleFormChange}
+                                <label htmlFor="expense-memo" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">지출 내역/메모</label>
+                                <textarea id="expense-memo" name="memo" value={form.memo} onChange={handleFormChange}
                                     className="w-full h-32 rounded-xl bg-white border-slate-200 text-slate-800 text-sm p-3 focus:ring-2 focus:ring-violet-500 transition-all resize-none" placeholder="상세 내용을 입력하세요"></textarea>
                             </div>
 

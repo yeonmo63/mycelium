@@ -188,51 +188,51 @@ const FinanceVendor = () => {
 
                         <div className="flex flex-col gap-3 relative z-10 overflow-y-auto flex-1 px-1 custom-scrollbar">
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">거래처명 (업체명) <span className="text-violet-500">*</span></label>
-                                <input name="name" value={form.name} onChange={handleFormChange} placeholder="예: OO농산" autoFocus
+                                <label htmlFor="vendor-name" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">거래처명 (업체명) <span className="text-violet-500">*</span></label>
+                                <input id="vendor-name" name="name" value={form.name} onChange={handleFormChange} placeholder="예: OO농산" autoFocus
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">대표자</label>
-                                    <input name="rep" value={form.rep} onChange={handleFormChange} placeholder="홍길동"
+                                    <label htmlFor="vendor-rep" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">대표자</label>
+                                    <input id="vendor-rep" name="rep" value={form.rep} onChange={handleFormChange} placeholder="홍길동"
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                                 </div>
                                 <div>
-                                    <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">사업자번호</label>
-                                    <input name="bizNum" value={form.bizNum} onChange={handleFormChange} placeholder="000-00-00000"
+                                    <label htmlFor="vendor-biznum" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">사업자번호</label>
+                                    <input id="vendor-biznum" name="bizNum" value={form.bizNum} onChange={handleFormChange} placeholder="000-00-00000"
                                         className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                                 </div>
                             </div>
 
                             <div className="w-1/2 pr-1.5">
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">연락처</label>
-                                <input name="mobile" value={form.mobile} onChange={handleFormChange} placeholder="010.."
+                                <label htmlFor="vendor-mobile" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">연락처</label>
+                                <input id="vendor-mobile" name="mobile" value={form.mobile} onChange={handleFormChange} placeholder="010.."
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">이메일</label>
-                                <input type="email" name="email" value={form.email} onChange={handleFormChange} placeholder="email@example.com"
+                                <label htmlFor="vendor-email" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">이메일</label>
+                                <input id="vendor-email" type="email" name="email" value={form.email} onChange={handleFormChange} placeholder="email@example.com"
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주소</label>
-                                <input name="address" value={form.address} onChange={handleFormChange} placeholder="사업장 주소 입력"
+                                <label htmlFor="vendor-address" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주소</label>
+                                <input id="vendor-address" name="address" value={form.address} onChange={handleFormChange} placeholder="사업장 주소 입력"
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주요 취급 품목</label>
-                                <input name="items" value={form.items} onChange={handleFormChange} placeholder="예: 박스, 라벨지, 버섯종균 등"
+                                <label htmlFor="vendor-items" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">주요 취급 품목</label>
+                                <input id="vendor-items" name="items" value={form.items} onChange={handleFormChange} placeholder="예: 박스, 라벨지, 버섯종균 등"
                                     className="w-full h-10 rounded-xl bg-white border-slate-200 text-slate-800 font-bold focus:ring-2 focus:ring-violet-500 transition-all px-3" />
                             </div>
 
                             <div>
-                                <label className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
-                                <textarea name="memo" value={form.memo} onChange={handleFormChange}
+                                <label htmlFor="vendor-memo" className="text-[11px] font-bold text-slate-500 uppercase ml-1 mb-1 block">메모</label>
+                                <textarea id="vendor-memo" name="memo" value={form.memo} onChange={handleFormChange}
                                     className="w-full h-24 rounded-xl bg-white border-slate-200 text-slate-800 text-sm p-3 focus:ring-2 focus:ring-violet-500 transition-all resize-none" placeholder="거래 특이사항을 입력하세요"></textarea>
                             </div>
 

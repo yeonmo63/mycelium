@@ -470,9 +470,9 @@ const FinanceAnalysis = () => {
                     <div className="w-full xl:w-[320px] flex flex-col gap-4">
                         {/* Year Select & Control */}
                         <div className="bg-white rounded-[1.5rem] p-5 border border-slate-200 shadow-sm">
-                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">분석 연도 (Fiscal Year)</label>
+                            <label htmlFor="analysis-year" className="text-xs font-bold text-slate-500 uppercase mb-2 block">분석 연도 (Fiscal Year)</label>
                             <div className="flex gap-2">
-                                <select value={year} onChange={e => setYear(Number(e.target.value))}
+                                <select id="analysis-year" value={year} onChange={e => setYear(Number(e.target.value))}
                                     className="flex-1 h-11 rounded-xl bg-slate-50 border-slate-200 text-slate-700 font-bold focus:ring-2 focus:ring-violet-500 px-3 outline-none transition-all">
                                     {years.map(y => <option key={y} value={y}>{y}년</option>)}
                                 </select>

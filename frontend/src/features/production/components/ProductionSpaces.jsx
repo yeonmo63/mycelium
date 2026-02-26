@@ -175,8 +175,9 @@ const ProductionSpaces = () => {
                         </div>
                         <div className="p-8 space-y-6">
                             <div className="space-y-2 text-left">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">시설/필지 이름</label>
+                                <label htmlFor="space_name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">시설/필지 이름</label>
                                 <input
+                                    id="space_name"
                                     type="text"
                                     value={formData.space_name}
                                     onChange={e => setFormData({ ...formData, space_name: e.target.value })}
@@ -187,8 +188,9 @@ const ProductionSpaces = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">유형</label>
+                                    <label htmlFor="space_type" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">유형</label>
                                     <select
+                                        id="space_type"
                                         value={formData.space_type}
                                         onChange={e => setFormData({ ...formData, space_type: e.target.value })}
                                         className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-100"
@@ -217,9 +219,10 @@ const ProductionSpaces = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">면적/규모</label>
+                                    <label htmlFor="area_size" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">면적/규모</label>
                                     <div className="relative">
                                         <input
+                                            id="area_size"
                                             type="number"
                                             value={formData.area_size}
                                             onChange={e => setFormData({ ...formData, area_size: e.target.value })}
@@ -229,8 +232,9 @@ const ProductionSpaces = () => {
                                     </div>
                                 </div>
                                 <div className="space-y-2 text-left">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">면적 단위</label>
+                                    <label htmlFor="area_unit" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">면적 단위</label>
                                     <select
+                                        id="area_unit"
                                         value={formData.area_unit}
                                         onChange={e => setFormData({ ...formData, area_unit: e.target.value })}
                                         className="w-full h-12 px-5 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 focus:bg-white transition-all ring-1 ring-inset ring-slate-100"

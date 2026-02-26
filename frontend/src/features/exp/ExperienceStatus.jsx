@@ -338,14 +338,15 @@ const ExperienceStatus = () => {
     };
 
     const handleEditChange = (e) => {
-        const { id, value } = e.target;
+        const { id, name, value } = e.target;
+        const key = name || id;
         setEditingRes(prev => {
-            const next = { ...prev, [id]: value };
+            const next = { ...prev, [key]: value };
 
             // Auto-calc amount if program or count changes
-            if (id === 'program_id' || id === 'participant_count') {
-                const progId = id === 'program_id' ? parseInt(value) : parseInt(prev.program_id);
-                const count = id === 'participant_count' ? parseInt(value) : parseInt(prev.participant_count);
+            if (key === 'program_id' || key === 'participant_count') {
+                const progId = key === 'program_id' ? parseInt(value) : parseInt(prev.program_id);
+                const count = key === 'participant_count' ? parseInt(value) : parseInt(prev.participant_count);
                 const prog = programs.find(p => p.program_id === progId);
                 if (prog) {
                     next.total_amount = prog.price_per_person * (count || 0);
@@ -415,6 +416,7 @@ const ExperienceStatus = () => {
                                     <input
                                         type="date"
                                         id="startDate"
+                                        name="startDate"
                                         value={filters.startDate}
                                         onChange={handleFilterChange}
                                         className="w-40 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-xs text-slate-800 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
@@ -423,6 +425,7 @@ const ExperienceStatus = () => {
                                     <input
                                         type="date"
                                         id="endDate"
+                                        name="endDate"
                                         value={filters.endDate}
                                         onChange={handleFilterChange}
                                         className="w-40 h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-xs text-slate-800 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
@@ -678,9 +681,10 @@ const ExperienceStatus = () => {
                                         <h4 className="font-bold text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">예약 프로그램 정보</h4>
 
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">프로그램 선택</label>
+                                            <label htmlFor="edit_program_id" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">프로그램 선택</label>
                                             <select
-                                                id="program_id"
+                                                id="edit_program_id"
+                                                name="program_id"
                                                 value={editingRes.program_id}
                                                 onChange={handleEditChange}
                                                 className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500"
@@ -693,19 +697,19 @@ const ExperienceStatus = () => {
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 날짜</label>
-                                                <input type="date" id="reservation_date" value={editingRes.reservation_date} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
+                                                <label htmlFor="edit_reservation_date" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 날짜</label>
+                                                <input type="date" id="edit_reservation_date" name="reservation_date" value={editingRes.reservation_date} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 시간</label>
-                                                <input type="time" id="reservation_time" value={editingRes.reservation_time} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
+                                                <label htmlFor="edit_reservation_time" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 시간</label>
+                                                <input type="time" id="edit_reservation_time" name="reservation_time" value={editingRes.reservation_time} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">참가 인원</label>
-                                                <input type="number" id="participant_count" value={editingRes.participant_count} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-right outline-none focus:border-indigo-500" />
+                                                <label htmlFor="edit_participant_count" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">참가 인원</label>
+                                                <input type="number" id="edit_participant_count" name="participant_count" value={editingRes.participant_count} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-right outline-none focus:border-indigo-500" />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">총 결제금액</label>
@@ -718,18 +722,18 @@ const ExperienceStatus = () => {
                                         <h4 className="font-bold text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 pb-2 mb-4">고객 및 상태 관리</h4>
 
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약자 성함</label>
-                                            <input type="text" id="guest_name" value={editingRes.guest_name} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
+                                            <label htmlFor="edit_guest_name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약자 성함</label>
+                                            <input type="text" id="edit_guest_name" name="guest_name" value={editingRes.guest_name} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">연락처</label>
-                                            <input type="text" id="guest_contact" value={editingRes.guest_contact} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
+                                            <label htmlFor="edit_guest_contact" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">연락처</label>
+                                            <input type="text" id="edit_guest_contact" name="guest_contact" value={editingRes.guest_contact} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-indigo-500" />
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 상태</label>
-                                                <select id="status" value={editingRes.status} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500">
+                                                <label htmlFor="edit_status" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">예약 상태</label>
+                                                <select id="edit_status" name="status" value={editingRes.status} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500">
                                                     <option value="예약대기">예약대기</option>
                                                     <option value="예약완료">예약완료</option>
                                                     <option value="체험완료">체험완료</option>
@@ -737,8 +741,8 @@ const ExperienceStatus = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">결제 상태</label>
-                                                <select id="payment_status" value={editingRes.payment_status} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500">
+                                                <label htmlFor="edit_payment_status" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">결제 상태</label>
+                                                <select id="edit_payment_status" name="payment_status" value={editingRes.payment_status} onChange={handleEditChange} className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500">
                                                     <option value="미결제">미결제</option>
                                                     <option value="결제완료">결제완료</option>
                                                     <option value="일부결제">일부결제</option>
@@ -750,8 +754,8 @@ const ExperienceStatus = () => {
                                 </div>
 
                                 <div className="mt-4">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">비고 / 특이사항</label>
-                                    <textarea id="memo" rows="3" value={editingRes.memo || ''} onChange={handleEditChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 resize-none"></textarea>
+                                    <label htmlFor="edit_memo" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">비고 / 특이사항</label>
+                                    <textarea id="edit_memo" name="memo" rows="3" value={editingRes.memo || ''} onChange={handleEditChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none focus:border-indigo-500 resize-none"></textarea>
                                 </div>
 
                                 <div className="mt-8 pt-6 border-t border-slate-100 overflow-x-auto pb-2">

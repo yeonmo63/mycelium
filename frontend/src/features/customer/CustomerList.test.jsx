@@ -67,7 +67,7 @@ describe('CustomerList Component', () => {
             expect(apiBridge.invoke).toHaveBeenCalledWith('search_customers_by_name', { query: '홍길동' });
         });
 
-        expect(await screen.findByDisplayValue('홍길동')).toBeInTheDocument();
+        expect(await screen.findByRole('textbox', { name: /성함/i })).toHaveValue('홍길동');
         expect(screen.getByDisplayValue('010-1234-5678')).toBeInTheDocument();
         expect(screen.getByDisplayValue('VIP')).toBeInTheDocument();
     });
@@ -100,7 +100,7 @@ describe('CustomerList Component', () => {
         // Select one
         await user.click(screen.getByText('홍길동1'));
         expect(screen.queryByText(/검색 결과 선택/i)).not.toBeInTheDocument();
-        expect(await screen.findByDisplayValue('홍길동1')).toBeInTheDocument();
+        expect(await screen.findByRole('textbox', { name: /성함/i })).toHaveValue('홍길동1');
     });
 
     it('switches to edit mode and updates customer info', async () => {
@@ -119,14 +119,14 @@ describe('CustomerList Component', () => {
         );
 
         await user.type(screen.getByPlaceholderText(/이름 또는 전화번호 입력/i), '홍길동{enter}');
-        await screen.findByDisplayValue('홍길동');
+        await screen.findByRole('textbox', { name: /성함/i });
 
         const editBtn = screen.getByRole('button', { name: /고객 수정 모드/i });
         await user.click(editBtn);
 
         expect(screen.getByText(/수정 모드/i)).toBeInTheDocument();
 
-        const nameInput = screen.getByDisplayValue('홍길동');
+        const nameInput = screen.getByRole('textbox', { name: /성함/i });
         await user.clear(nameInput);
         await user.type(nameInput, '홍길동 수정');
 
@@ -163,7 +163,8 @@ describe('CustomerList Component', () => {
         );
 
         await user.type(screen.getByPlaceholderText(/이름 또는 전화번호 입력/i), '홍길동{enter}');
-        await screen.findByText(/휴면 고객/i);
+        // Match the badge specifically by using $ to ensure it's the end of text or more specific selector
+        expect(await screen.findByText(/휴면 고객$/)).toBeInTheDocument();
 
         const reactivateBtn = screen.getByRole('button', { name: /정상 고객 복구/i });
         await user.click(reactivateBtn);

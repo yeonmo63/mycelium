@@ -324,20 +324,20 @@ const CustomerList = () => {
                         </h3>
                         <div className="grid grid-cols-12 gap-2.5">
                             <div className="col-span-2 space-y-0.5">
-                                <label className="text-xs font-black text-slate-500 uppercase ml-1">성함</label>
-                                <input name="name" value={formData.name || ''} onChange={handleChange} readOnly={mode === 'view'}
-                                    className={`w-full h-11 rounded-lg font-bold px-3 text-sm transition-all border text-black bg-white ${mode === 'view' ? 'border-slate-300' : 'border-slate-400 focus:ring-2 focus:ring-indigo-500 shadow-sm'}`} />
+                                <label htmlFor="list-name" className="text-xs font-black text-slate-500 uppercase ml-1">성함</label>
+                                <input id="list-name" name="name" value={formData.name || ''} onChange={handleChange} readOnly={mode === 'view'}
+                                    className={`w-full h-11 rounded-lg font-bold px-3 text-sm transition-all border ${mode === 'view' ? 'text-black bg-white border-slate-300' : 'text-indigo-600 bg-indigo-50 border-indigo-400 focus:ring-4 focus:ring-indigo-500/20'}`} />
                             </div>
                             <div className="col-span-2 space-y-0.5">
-                                <label className="text-xs font-black text-slate-500 uppercase ml-1">회원 등급</label>
-                                <select name="level" value={formData.level || '일반'} onChange={handleChange} disabled={mode === 'view'}
-                                    className={`w-full h-11 rounded-lg font-bold px-3 text-sm border text-black bg-white ${mode === 'view' ? 'border-slate-300' : 'border-slate-400 focus:ring-2 focus:ring-indigo-500 shadow-sm'}`}>
+                                <label htmlFor="list-level" className="text-xs font-black text-slate-500 uppercase ml-1">회원 등급</label>
+                                <select id="list-level" name="level" value={formData.level || '일반'} onChange={handleChange} disabled={mode === 'view'}
+                                    className={`w-full h-11 rounded-lg font-bold px-3 text-sm border text-black bg-white ${mode === 'view' ? 'border-slate-300' : 'border-slate-400'}`}>
                                     <option value="일반">일반</option><option value="VIP">VIP</option><option value="VVIP">VVIP</option><option value="법인/단체">법인/단체</option>
                                 </select>
                             </div>
                             <div className="col-span-6 space-y-0.5">
-                                <label className="text-xs font-black text-slate-500 uppercase ml-1">이메일</label>
-                                <input type="email" name="email" value={formData.email || ''} onChange={handleChange} readOnly={mode === 'view'}
+                                <label htmlFor="list-email" className="text-xs font-black text-slate-500 uppercase ml-1">이메일</label>
+                                <input id="list-email" type="email" name="email" value={formData.email || ''} onChange={handleChange} readOnly={mode === 'view'}
                                     className={`w-full h-11 rounded-lg font-bold px-3 text-sm border text-black bg-white ${mode === 'view' ? 'border-slate-300' : 'border-slate-400'}`} />
                             </div>
                             <div className="col-span-2 flex items-end">

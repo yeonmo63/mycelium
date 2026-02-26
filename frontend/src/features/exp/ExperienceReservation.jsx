@@ -174,7 +174,7 @@ const ExperienceReservation = () => {
 
                                                 <div className="space-y-4">
                                                     <div>
-                                                        <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">프로그램 선택 <span className="text-rose-500">*</span></label>
+                                                        <label htmlFor="program_id" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">프로그램 선택 <span className="text-rose-500">*</span></label>
                                                         <select
                                                             id="program_id"
                                                             value={formData.program_id}
@@ -193,7 +193,7 @@ const ExperienceReservation = () => {
 
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
-                                                            <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 날짜</label>
+                                                            <label htmlFor="reservation_date" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 날짜</label>
                                                             <input
                                                                 type="date"
                                                                 id="reservation_date"
@@ -204,7 +204,7 @@ const ExperienceReservation = () => {
                                                             />
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 시간</label>
+                                                            <label htmlFor="reservation_time" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 시간</label>
                                                             <input
                                                                 type="time"
                                                                 id="reservation_time"
@@ -218,7 +218,7 @@ const ExperienceReservation = () => {
 
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
-                                                            <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">참가 인원</label>
+                                                            <label htmlFor="participant_count" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">참가 인원</label>
                                                             <input
                                                                 type="number"
                                                                 id="participant_count"
@@ -260,7 +260,7 @@ const ExperienceReservation = () => {
 
                                                 <div className="space-y-4">
                                                     <div>
-                                                        <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">성명 / 단체명 <span className="text-rose-500">*</span></label>
+                                                        <label htmlFor="guest_name" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">성명 / 단체명 <span className="text-rose-500">*</span></label>
                                                         <input
                                                             type="text"
                                                             id="guest_name"
@@ -272,7 +272,7 @@ const ExperienceReservation = () => {
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">연락처 <span className="text-rose-500">*</span></label>
+                                                        <label htmlFor="guest_contact" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">연락처 <span className="text-rose-500">*</span></label>
                                                         <input
                                                             type="text"
                                                             id="guest_contact"
@@ -286,7 +286,7 @@ const ExperienceReservation = () => {
 
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
-                                                            <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 상태</label>
+                                                            <label htmlFor="status" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">예약 상태</label>
                                                             <select
                                                                 id="status"
                                                                 value={formData.status}
@@ -298,7 +298,7 @@ const ExperienceReservation = () => {
                                                             </select>
                                                         </div>
                                                         <div>
-                                                            <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">결제 상태</label>
+                                                            <label htmlFor="payment_status" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">결제 상태</label>
                                                             <select
                                                                 id="payment_status"
                                                                 value={formData.payment_status}
@@ -318,7 +318,7 @@ const ExperienceReservation = () => {
 
                                     {/* Full Width Memo Style Sync */}
                                     <div className="mt-6">
-                                        <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">비고 / 특이사항</label>
+                                        <label htmlFor="memo" className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">비고 / 특이사항</label>
                                         <textarea
                                             id="memo"
                                             value={formData.memo}

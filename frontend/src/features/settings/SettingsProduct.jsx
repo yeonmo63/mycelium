@@ -979,8 +979,9 @@ const SettingsProduct = () => {
                                     {formData.type === 'product' ? (
                                         <>
                                             <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">원가 (Cost Price)</label>
+                                                <label htmlFor="cost-input" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-2">원가 (Cost Price)</label>
                                                 <input
+                                                    id="cost-input"
                                                     type="text"
                                                     value={formData.cost.toLocaleString()}
                                                     onChange={(e) => {
@@ -993,9 +994,10 @@ const SettingsProduct = () => {
                                             </div>
                                             <div>
                                                 <div className="flex justify-between items-center mb-1.5 ml-2">
-                                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">판매 가격</label>
+                                                    <label htmlFor="price-input" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">판매 가격</label>
                                                 </div>
                                                 <input
+                                                    id="price-input"
                                                     type="text"
                                                     value={formData.price.toLocaleString()}
                                                     onChange={(e) => {
@@ -1141,6 +1143,7 @@ const SettingsProduct = () => {
                                                     <div key={bom.key} className="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200">
                                                         <div className="flex-1">
                                                             <select
+                                                                aria-label="원재료 선택"
                                                                 value={bom.materialId}
                                                                 onChange={e => handleBomChange(bom.key, 'materialId', e.target.value)}
                                                                 className="w-full h-10 px-3 bg-white border-none rounded-xl font-bold text-xs focus:ring-2 focus:ring-emerald-500 transition-all ring-1 ring-inset ring-emerald-200 disabled:opacity-70"

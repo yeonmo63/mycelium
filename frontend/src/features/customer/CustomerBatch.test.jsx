@@ -83,7 +83,7 @@ describe('CustomerBatch Component', () => {
         const searchInput = screen.getByPlaceholderText(/이름 또는 연락처 검색/i);
         await user.type(searchInput, '고객1');
 
-        const searchBtn = screen.getByRole('button', { name: /^조회$/ });
+        const searchBtn = screen.getAllByRole('button', { name: /^조회$/ })[0];
         await user.click(searchBtn);
 
         await waitFor(() => {
@@ -106,13 +106,8 @@ describe('CustomerBatch Component', () => {
             </ModalProvider>
         );
 
-        const dormantBtn = screen.getByRole('button', { name: /조회/i, description: '' });
-        // Note: There are multiple "조회" buttons. Let's find the one near '년 이상'
-        const dormantYearsInput = screen.getByDisplayValue('3');
-        const dormantSearchRow = dormantYearsInput.closest('div');
-        const dormantSubBtn = dormantSearchRow.querySelector('button');
-
-        await user.click(dormantSubBtn);
+        const dormantSearchBtn = screen.getAllByRole('button', { name: /^조회$/ })[1];
+        await user.click(dormantSearchBtn);
 
         await waitFor(() => {
             expect(apiBridge.invoke).toHaveBeenCalledWith('search_dormant_customers', expect.any(Object));

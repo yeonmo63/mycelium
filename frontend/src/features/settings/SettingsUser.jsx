@@ -352,6 +352,7 @@ const SettingsUser = () => {
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
                                                             onClick={() => handleEdit(u)}
+                                                            aria-label="수정"
                                                             className={`w-10 h-10 rounded-xl transition-all shadow-sm flex items-center justify-center
                                                                 ${editingUser?.id === u.id
                                                                     ? 'bg-indigo-600 text-white shadow-indigo-300'
@@ -363,6 +364,7 @@ const SettingsUser = () => {
                                                         <button
                                                             onClick={() => handleDelete(u)}
                                                             disabled={u.username === 'admin'}
+                                                            aria-label="삭제"
                                                             className={`w-10 h-10 rounded-xl transition-all shadow-sm flex items-center justify-center
                                                                 ${u.username === 'admin' ? 'bg-slate-50/50 text-slate-200 cursor-not-allowed' : 'bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600'}
                                                             `}
