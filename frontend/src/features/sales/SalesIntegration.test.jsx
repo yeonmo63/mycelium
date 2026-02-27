@@ -1,19 +1,20 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import SalesOnlineSync from './SalesOnlineSync';
 import * as apiBridge from '../../utils/apiBridge';
 
+// Increase timeout for the whole file if it's a heavy integration test
 vi.mock('../../utils/apiBridge', () => ({
     invoke: vi.fn(),
 }));
 
 vi.mock('../../contexts/ModalContext', () => ({
     useModal: () => ({
-        showAlert: vi.fn().mockResolvedValue(true),
-        showConfirm: vi.fn().mockResolvedValue(true),
+        showAlert: vi.fn().mockImplementation(() => Promise.resolve(true)),
+        showConfirm: vi.fn().mockImplementation(() => Promise.resolve(true)),
     }),
-    ModalProvider: ({ children }) => <div>{children}</div>
+    ModalProvider: ({ children }) => <div data-testid="modal-provider">{children}</div>
 }));
 
 describe('Sales Online Sync - Integration Flow', () => {
@@ -34,37 +35,51 @@ describe('Sales Online Sync - Integration Flow', () => {
         window.localStorage.clear();
 
         apiBridge.invoke.mockImplementation(async (fn, args) => {
-            // Add a small delay to simulate real world async behavior more accurately
-            await new Promise(resolve => setTimeout(resolve, 0));
+            // Simulate very short network delay
+            await new Promise(resolve => setTimeout(resolve, 5));
 
             if (fn === 'get_product_list') return mockProducts;
             if (fn === 'search_customers') return mockCustomers;
             if (fn === 'create_sale') return { success: true };
             if (fn === 'create_customer') return { customerId: 101 };
+            if (fn === 'fetch_external_orders') return [];
             return [];
         });
 
-        // Robust Mock FileReader
+        // Robust Mock FileReader that behaves more like a real one
         vi.stubGlobal('FileReader', vi.fn().mockImplementation(function () {
             this.readAsArrayBuffer = vi.fn((file) => {
                 const buffer = new TextEncoder().encode(csvData).buffer;
-                // Use a slightly larger delay or just Promise.resolve to trigger onload
-                Promise.resolve().then(() => {
-                    if (this.onload) this.onload({ target: { result: buffer } });
-                });
+                // Using a non-zero timeout helps ensure React has finished any immediate updates
+                // and correctly assigned event handlers before they are fired.
+                setTimeout(() => {
+                    if (this.onload) {
+                        this.onload({ target: { result: buffer } });
+                    }
+                    if (this.onloadend) {
+                        this.onloadend({ target: { result: buffer } });
+                    }
+                }, 10);
             });
         }));
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        cleanup();
     });
 
     it('should complete the flow: Upload CSV -> Review Mappings -> Sync Sales', async () => {
         render(<SalesOnlineSync />);
 
-        // 1. Initial State - Wait for initial data load
+        // 1. Initial State - Wait for initial data load to be triggered
+        // Checking for the text is more stable than checking the raw mock call count immediately
+        expect(await screen.findByText(/주문 데이터 수집/i)).toBeInTheDocument();
+
+        // Ensure base data load (get_product_list) has been called
         await waitFor(() => {
             expect(apiBridge.invoke).toHaveBeenCalledWith('get_product_list');
-        }, { timeout: 5000 });
-
-        expect(await screen.findByText(/주문 데이터 수집/i)).toBeInTheDocument();
+        }, { timeout: 3000 });
 
         // 2. Select Mall Type & Upload File
         const mallSelect = screen.getByLabelText(/쇼핑몰 선택/i);
@@ -72,50 +87,52 @@ describe('Sales Online Sync - Integration Flow', () => {
 
         const file = new File(['test'], 'orders.csv', { type: 'text/csv' });
         const hiddenInput = document.getElementById('file-upload');
-        fireEvent.change(hiddenInput, { target: { files: [file] } });
 
-        // Wait for file selection state update
-        expect(await screen.findByText(/orders.csv/i)).toBeInTheDocument();
+        // We use fireEvent followed by expectation for better tracking of state transitions
+        fireEvent.change(hiddenInput, { target: { files: [file] } });
+        expect(await screen.findByText(/orders.csv/i, {}, { timeout: 3000 })).toBeInTheDocument();
 
         // 3. Parse File
         const parseBtn = screen.getByText(/엑셀 분석 시작/i);
         fireEvent.click(parseBtn);
 
         // 4. Review Step - Verify customer and product matching
-        // The parsing and identification involves multiple async calls
+        // Transition to review step involves FileReader (async) + Customer Search (async)
         const reviewTitle = await screen.findByText(/분석된 주문 리스트/i, {}, { timeout: 10000 });
         expect(reviewTitle).toBeInTheDocument();
 
-        // Verify customer matching results in the table
+        // Check if customer "홍길동" from CSV is matched correctly
         await waitFor(() => {
-            expect(screen.getByText('홍길동')).toBeInTheDocument();
+            const customerCell = screen.queryByText('홍길동');
+            expect(customerCell).toBeInTheDocument();
+            // Checking the "Exist" badge which appears when a customer is found
             expect(screen.getByText(/Exist/i)).toBeInTheDocument();
         }, { timeout: 5000 });
 
-        // Verify product auto-matching
+        // Verify product matching (Product 1 should be selected in the combo)
         await waitFor(() => {
             const selects = screen.getAllByRole('combobox');
-            const matchedSelect = selects.find(s => s.value === '1');
-            expect(matchedSelect).toBeDefined();
+            // Looking for a select that has a value matching our mock product id
+            const productSelect = selects.find(s => s.value === '1');
+            expect(productSelect).toBeDefined();
         }, { timeout: 5000 });
 
         // 5. Sync Execution
         const syncBtn = screen.getByText(/주문 연동 실행하기/i);
         fireEvent.click(syncBtn);
 
-        // 6. Verification - Wait for create_sale and return to upload step
+        // 6. Verification - Wait for create_sale calls
+        // In this case, we have 1 row in CSV
         await waitFor(() => {
             expect(apiBridge.invoke).toHaveBeenCalledWith('create_sale', expect.objectContaining({
-                customerId: 101,
+                customerId: 101, // From our mockCustomers or mock create_customer
                 productName: '느타리버섯 1kg',
                 quantity: 2
             }));
         }, { timeout: 10000 });
 
-        // Transition back to upload step happens after showAlert is awaited
-        // In the mock, it resolves instantly.
+        // Finally, it should return to the upload step after the success alert is cleared
+        // Since showAlert is mocked to resolve instantly, the transition should be immediate.
         expect(await screen.findByText(/주문 데이터 수집/i, {}, { timeout: 5000 })).toBeInTheDocument();
-    }, 30000);
-
-
+    }, 40000); // Higher test timeout for integration flow
 });

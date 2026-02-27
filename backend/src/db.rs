@@ -10,6 +10,18 @@ use crate::error::{MyceliumError, MyceliumResult};
 
 pub type DbPool = Pool<Postgres>;
 
+pub async fn set_db_user_context<'a, E>(executor: E, username: &str) -> MyceliumResult<()>
+where
+    E: sqlx::Executor<'a, Database = Postgres>,
+{
+    // Use set_config(name, value, is_local) to avoid potential grammar errors with SET LOCAL in some pg versions
+    sqlx::query("SELECT set_config('mycelium.current_user', $1, true)")
+        .bind(username)
+        .execute(executor)
+        .await?;
+    Ok(())
+}
+
 pub async fn init_pool_with_options(opts: PgConnectOptions) -> MyceliumResult<DbPool> {
     // connect_lazy_with returns the pool immediately. It does not validate connection.
     Ok(PgPoolOptions::new()

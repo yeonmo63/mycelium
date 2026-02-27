@@ -315,11 +315,8 @@ pub async fn update_customer(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    // 1. Get Old Data for logging
-    let old: Customer = sqlx::query_as("SELECT * FROM customers WHERE customer_id = $1")
-        .bind(&customerId)
-        .fetch_one(&mut *tx)
-        .await?;
+    // Enable Audit Context (Tauri context uses "Admin" by default)
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
 
     let a_date = if let Some(ref d) = anniversaryDate {
         if d.is_empty() {
@@ -331,7 +328,7 @@ pub async fn update_customer(
         None
     };
 
-    // 2. Perform Update
+    // 2. Perform Update - Trigger trg_log_customer_changes will handle audit logging
     sqlx::query(
         "UPDATE customers SET 
             customer_name = $1, mobile_number = $2, membership_level = $3, phone_number = $4, email = $5, 
@@ -365,35 +362,6 @@ pub async fn update_customer(
     .execute(&mut *tx)
     .await?;
 
-    // 3. Log Changes (Selective)
-    let mut changes = Vec::new();
-    if old.customer_name != customerName {
-        changes.push(("customer_name", old.customer_name, customerName));
-    }
-    if old.mobile_number != mobileNumber {
-        changes.push(("mobile_number", old.mobile_number, mobileNumber));
-    }
-    if old.membership_level.as_deref().unwrap_or("") != membershipLevel.as_deref().unwrap_or("일반")
-    {
-        changes.push((
-            "membership_level",
-            old.membership_level.unwrap_or_default(),
-            membershipLevel.unwrap_or_else(|| "일반".to_string()),
-        ));
-    }
-
-    for (field, old_v, new_v) in changes {
-        sqlx::query(
-            "INSERT INTO customer_logs (customer_id, field_name, old_value, new_value) VALUES ($1, $2, $3, $4)"
-        )
-        .bind(&customerId)
-        .bind(field)
-        .bind(old_v)
-        .bind(new_v)
-        .execute(&mut *tx)
-        .await?;
-    }
-
     tx.commit().await?;
     Ok(())
 }
@@ -412,10 +380,16 @@ pub async fn get_customer_logs(
 
 pub async fn delete_customer(state: State<'_, DbPool>, customerId: String) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+
     sqlx::query("UPDATE customers SET status = '말소' WHERE customer_id = $1")
         .bind(customerId)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -424,10 +398,16 @@ pub async fn reactivate_customer(
     customerId: String,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = $1")
         .bind(customerId)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -439,6 +419,8 @@ pub async fn delete_customers_batch(
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
 
     if permanent {
         if also_delete_sales {
@@ -467,10 +449,16 @@ pub async fn reactivate_customers_batch(
     ids: Vec<String>,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = ANY($1)")
         .bind(&ids)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -762,19 +750,25 @@ pub async fn update_customer_memo_batch(
     append: bool,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+
+    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+
     if append {
         sqlx::query("UPDATE customers SET memo = COALESCE(memo, '') || '\n' || $1 WHERE customer_id = ANY($2)")
             .bind(newMemo)
             .bind(&customerIds)
-            .execute(&*state)
+            .execute(&mut *tx)
             .await?;
     } else {
         sqlx::query("UPDATE customers SET memo = $1 WHERE customer_id = ANY($2)")
             .bind(newMemo)
             .bind(&customerIds)
-            .execute(&*state)
+            .execute(&mut *tx)
             .await?;
     }
+
+    tx.commit().await?;
     Ok(())
 }
 

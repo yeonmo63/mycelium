@@ -1,15 +1,25 @@
 #[cfg(test)]
 mod tests {
-    use crate::commands::production::harvest::get_harvest_records;
+    use crate::commands::production::batch::save_production_batch;
+    use crate::commands::production::harvest::{get_harvest_records, save_harvest_record};
     use crate::commands::sales::order::create_sale_internal;
-    use crate::db::{self, DbPool};
+    use crate::db::{self, DbPool, HarvestRecord, ProductionBatch};
+    use crate::error::MyceliumResult;
+    use rust_decimal::Decimal;
 
     async fn setup_test_db() -> DbPool {
         dotenvy::dotenv().ok();
         let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        db::init_pool(&database_url)
+        let pool = db::init_pool(&database_url)
             .await
-            .expect("Failed to create pool")
+            .expect("Failed to create pool");
+
+        // Run migrations to ensure triggers are updated
+        db::init_database(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        pool
     }
 
     #[tokio::test]
@@ -19,7 +29,7 @@ mod tests {
         let product_name = "테스트 품목 (Integration Test)".to_string();
         let order_date = "2023-11-01".to_string();
 
-        let result = create_sale_internal(
+        let result: MyceliumResult<String> = create_sale_internal(
             &pool,
             None,
             product_name.clone(),
@@ -86,7 +96,7 @@ mod tests {
         let product_name = "테스트 품목 (Delete Test)".to_string();
         let order_date = "2023-11-02".to_string();
 
-        let create_res = create_sale_internal(
+        let create_res: MyceliumResult<String> = create_sale_internal(
             &pool,
             None,
             product_name.clone(),
@@ -370,5 +380,216 @@ mod tests {
             .bind(mat_pid)
             .execute(&pool)
             .await;
+    }
+
+    #[tokio::test]
+    async fn test_deletion_log_automation_integration() {
+        let pool = setup_test_db().await;
+
+        // 1. Create a dummy sale
+        let sale_id = format!(
+            "S-DEL-LOG-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
+        );
+        sqlx::query("INSERT INTO sales (sales_id, product_name, quantity, unit_price, total_amount, order_date) VALUES ($1, 'Delete Log Test', 1, 1000, 1000, CURRENT_DATE)")
+            .bind(&sale_id)
+            .execute(&pool)
+            .await.unwrap();
+
+        // 2. Delete the sale within a transaction with user context
+        let mut tx = pool.begin().await.unwrap();
+        db::set_db_user_context(&mut *tx, "TestUser").await.unwrap();
+        sqlx::query("DELETE FROM sales WHERE sales_id = $1")
+            .bind(&sale_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // 3. Verify entry in deletion_log
+        let log: Option<(String, String, Option<String>)> = sqlx::query_as("SELECT table_name, record_id, deleted_by FROM deletion_log WHERE table_name = 'sales' AND record_id = $1")
+            .bind(&sale_id)
+            .fetch_optional(&pool)
+            .await.unwrap();
+
+        assert!(
+            log.is_some(),
+            "Deletion log entry missing for sales_id: {}",
+            sale_id
+        );
+        let (table_name, record_id, deleted_by) = log.unwrap();
+        assert_eq!(table_name, "sales");
+        assert_eq!(record_id, sale_id);
+        assert_eq!(deleted_by.as_deref(), Some("TestUser"));
+
+        println!(
+            "SUCCESS: Deletion log correctly recorded for sales_id={} with user=TestUser",
+            sale_id
+        );
+    }
+
+    #[tokio::test]
+    async fn test_customer_soft_delete_logging_integration() {
+        let pool = setup_test_db().await;
+
+        // 1. Create a dummy customer
+        let customer_id = format!(
+            "C-LOG-{}",
+            uuid::Uuid::new_v4().to_string()[..8].to_uppercase()
+        );
+        sqlx::query("INSERT INTO customers (customer_id, customer_name, mobile_number, status) VALUES ($1, 'Soft Delete Test', '010-0000-0000', '정상')")
+            .bind(&customer_id)
+            .execute(&pool)
+            .await.unwrap();
+
+        // 2. Perform Soft Delete within a transaction with user context
+        let mut tx = pool.begin().await.unwrap();
+        db::set_db_user_context(&mut *tx, "AuditUser")
+            .await
+            .unwrap();
+        sqlx::query("UPDATE customers SET status = '말소' WHERE customer_id = $1")
+            .bind(&customer_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // 3. Verify entry in BOTH customer_logs AND deletion_log
+        // Case A: customer_logs
+        let log: Option<(String, String, String, Option<String>)> = sqlx::query_as("SELECT field_name, old_value, new_value, changed_by FROM customer_logs WHERE customer_id = $1 AND field_name = 'status'")
+            .bind(&customer_id)
+            .fetch_optional(&pool)
+            .await.unwrap();
+
+        assert!(
+            log.is_some(),
+            "Customer log entry missing for status change"
+        );
+        let (field, old_v, new_v, changed_by) = log.unwrap();
+        assert_eq!(field, "status");
+        assert_eq!(old_v, "정상");
+        assert_eq!(new_v, "말소");
+        assert_eq!(changed_by.as_deref(), Some("AuditUser"));
+
+        // Case B: deletion_log (Trigger should also record it here for unified audit)
+        let del_log: Option<(String, Option<String>)> = sqlx::query_as("SELECT table_name, deleted_by FROM deletion_log WHERE table_name = 'customers' AND record_id = $1")
+            .bind(&customer_id)
+            .fetch_optional(&pool)
+            .await.unwrap();
+
+        assert!(
+            del_log.is_some(),
+            "Deletion log entry missing for soft deleted customer"
+        );
+        let (tbl, del_by) = del_log.unwrap();
+        assert_eq!(tbl, "customers");
+        assert_eq!(del_by.as_deref(), Some("AuditUser"));
+
+        println!("SUCCESS: Soft delete correctly logged in both customer_logs and deletion_log with user=AuditUser");
+    }
+
+    #[tokio::test]
+    async fn test_harvest_and_stock_update_integration() {
+        let pool = setup_test_db().await;
+
+        // 1. Setup - Create a test product
+        // Product name must match what the harvest logic expects
+        let u_str = uuid::Uuid::new_v4().to_string();
+        let product_name = format!("Harvest Test Product - {}", &u_str[..8]);
+        let product_id: (i32,) = sqlx::query_as("INSERT INTO products (product_name, specification, unit_price, stock_quantity, iteM_type) VALUES ($1, 'Test Spec', 1000, 0, 'product') RETURNING product_id")
+            .bind(&product_name)
+            .fetch_one(&pool)
+            .await.unwrap();
+        let p_id = product_id.0;
+
+        // 2. Setup - Create a production batch
+        let b_uuid = uuid::Uuid::new_v4().to_string();
+        let batch_code = format!("BATCH-{}", &b_uuid[..8]);
+        let batch = ProductionBatch {
+            batch_id: 0,
+            batch_code: batch_code.clone(),
+            product_id: Some(p_id),
+            space_id: None,
+            start_date: chrono::Local::now().date_naive(), // Not Option
+            end_date: None,
+            expected_harvest_date: None,
+            status: Some("running".to_string()),
+            initial_quantity: Some(Decimal::from(100)),
+            unit: Some("kg".to_string()),
+            created_at: None,
+            updated_at: None,
+        };
+        save_production_batch(crate::stubs::State::from(&pool), batch)
+            .await
+            .expect("Failed to create production batch");
+
+        // Fetch the generated batch_id
+        let db_batch: (i32,) =
+            sqlx::query_as("SELECT batch_id FROM production_batches WHERE batch_code = $1")
+                .bind(&batch_code)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let b_id = db_batch.0;
+
+        // 3. Record a Harvest
+        let harvest_qty = Decimal::from(50);
+        let record = HarvestRecord {
+            harvest_id: 0,
+            batch_id: Some(b_id), // Now Option
+            harvest_date: chrono::Local::now().date_naive(),
+            quantity: harvest_qty,
+            defective_quantity: Some(Decimal::from(5)),
+            loss_quantity: Some(Decimal::from(2)),
+            unit: "kg".to_string(),
+            grade: Some("First Class".to_string()),
+            traceability_code: Some("TR_001".to_string()),
+            lot_number: Some("LOT_001".to_string()), // Added
+            package_count: None,
+            weight_per_package: None,
+            package_unit: None,
+            memo: Some("Test Harvest".to_string()),
+            created_at: None,
+            updated_at: None,
+        };
+
+        // Use a transaction scope if needed, but save_harvest_record starts its own
+        save_harvest_record(crate::stubs::State::from(&pool), record, Some(true))
+            .await
+            .expect("Failed to record harvest");
+
+        // 4. Verify Results
+        // Verify Stock Increase
+        let stock_row: (i32,) =
+            sqlx::query_as("SELECT stock_quantity FROM products WHERE product_id = $1")
+                .bind(p_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            stock_row.0, 50,
+            "Product stock should have increased by harvested quantity"
+        );
+
+        // Verify Inventory Log
+        let log_row: (String, i32) = sqlx::query_as("SELECT change_type, change_quantity FROM inventory_logs WHERE product_id = $1 AND memo LIKE '%수확%'")
+            .bind(p_id)
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(log_row.0, "입고");
+        assert_eq!(log_row.1, 50);
+
+        // Verify Batch Status Update
+        let batch_status: (String,) =
+            sqlx::query_as("SELECT status FROM production_batches WHERE batch_id = $1")
+                .bind(b_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            batch_status.0, "completed",
+            "Batch status should be updated to 'completed'"
+        );
+
+        println!("SUCCESS: Production harvest flow verified. Stock increased and batch completed.");
     }
 }
