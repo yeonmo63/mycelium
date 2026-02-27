@@ -191,4 +191,29 @@ describe('SalesShipping Component', () => {
 
         expect(printUtils.handlePrintRaw).toHaveBeenCalled();
     });
+
+    it('handles delete action', async () => {
+        render(
+            <ModalProvider>
+                <SalesShipping />
+            </ModalProvider>
+        );
+
+        const rows = await screen.findAllByText('홍길동');
+        const s1Row = rows.find(el => el.closest('tr'));
+        await user.click(s1Row);
+
+        const deleteBtn = await screen.findByRole('button', { name: /삭제/i });
+        await user.click(deleteBtn);
+
+        // Confirmation modal
+        const modalConfirmBtn = await screen.findByRole('button', { name: /^확인$/ });
+        await user.click(modalConfirmBtn);
+
+        await waitFor(() => {
+            expect(apiBridge.callBridge).toHaveBeenCalledWith('delete_sale', expect.objectContaining({
+                salesId: 'S1'
+            }));
+        });
+    });
 });

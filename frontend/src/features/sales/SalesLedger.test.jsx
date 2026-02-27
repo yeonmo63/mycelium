@@ -139,4 +139,21 @@ describe('SalesLedger Component', () => {
         expect(screen.getByText('김농부')).toBeInTheDocument();
         expect(screen.queryByText('이농부')).not.toBeInTheDocument();
     });
+
+    it('deletes a ledger entry', async () => {
+        render(<SalesLedger />);
+
+        // Select customer
+        const customer = await screen.findByText('김농부');
+        await user.click(customer);
+        await screen.findByText('생표고 1kg x2');
+
+        // Click delete button on the first row
+        const deleteBtns = screen.getAllByRole('button').filter(btn => btn.innerHTML.includes('delete'));
+        await user.click(deleteBtns[0]);
+
+        await waitFor(() => {
+            expect(apiBridge.invoke).toHaveBeenCalledWith('delete_ledger_entry', { ledgerId: 102 });
+        });
+    });
 });

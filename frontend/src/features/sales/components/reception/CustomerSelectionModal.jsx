@@ -27,7 +27,7 @@ const CustomerSelectionModal = ({ isOpen, onClose, searchResults, selectCustomer
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {searchResults.map(c => (
-                                    <tr key={c.customer_id} onClick={() => { selectCustomer(c); onClose(); }} className="hover:bg-slate-50/80 group transition-colors cursor-pointer border-b border-slate-50 last:border-0">
+                                    <tr key={c.customer_id} data-testid="customer-row" onClick={() => { selectCustomer(c); onClose(); }} className="hover:bg-slate-50/80 group transition-colors cursor-pointer border-b border-slate-50 last:border-0">
                                         <td className="py-3 px-2 font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">{c.customer_name}</td>
                                         <td className="py-3 px-2 text-slate-600 font-medium">{c.mobile_number}</td>
                                         <td className="py-3 px-2 text-slate-400 text-xs truncate max-w-[180px]">{c.address_primary}</td>

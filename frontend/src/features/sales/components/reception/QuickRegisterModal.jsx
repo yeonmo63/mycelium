@@ -6,18 +6,19 @@ const QuickRegisterModal = ({ isOpen, onClose, quickRegisterName, fileInputRef, 
 
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose}></div>
-            <form onSubmit={(e) => {
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={onClose} aria-label="modal-background"></div>
+            <form aria-label="quick-register-form" onSubmit={(e) => {
                 e.preventDefault();
+                const el = e.target.elements;
                 const data = {
-                    name: e.target.name.value,
-                    mobile: e.target.mobile.value,
-                    phone: e.target.phone.value,
-                    level: e.target.level.value,
-                    zip: e.target.zip.value,
-                    addr1: e.target.addr1.value,
-                    addr2: e.target.addr2.value,
-                    memo: e.target.memo.value
+                    name: el.name.value,
+                    mobile: el.mobile.value,
+                    phone: el.phone.value,
+                    level: el.level.value,
+                    zip: el.zip.value,
+                    addr1: el.addr1.value,
+                    addr2: el.addr2.value,
+                    memo: el.memo.value
                 };
                 handleQuickRegister(data);
             }} className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 text-slate-900 text-left">
@@ -38,12 +39,12 @@ const QuickRegisterModal = ({ isOpen, onClose, quickRegisterName, fileInputRef, 
                 <div className="p-6 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">고객명</label>
-                            <input name="name" defaultValue={quickRegisterName} required className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" placeholder="이름 입력" />
+                            <label htmlFor="quick-name" className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">고객명</label>
+                            <input id="quick-name" name="name" defaultValue={quickRegisterName} required className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" placeholder="이름 입력" />
                         </div>
                         <div className="col-span-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">회원 등급</label>
-                            <select name="level" className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px] appearance-none">
+                            <label htmlFor="quick-level" className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">회원 등급</label>
+                            <select id="quick-level" name="level" className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px] appearance-none">
                                 <option value="일반">일반 고객</option>
                                 <option value="VIP">VIP 고객</option>
                                 <option value="법인/단체">법인/단체</option>
@@ -53,12 +54,12 @@ const QuickRegisterModal = ({ isOpen, onClose, quickRegisterName, fileInputRef, 
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">휴대전화</label>
-                            <input name="mobile" required placeholder="010-0000-0000" onChange={(e) => e.target.value = formatPhoneNumber(e.target.value)} className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" />
+                            <label htmlFor="quick-mobile" className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">휴대전화</label>
+                            <input id="quick-mobile" name="mobile" required placeholder="010-0000-0000" onChange={(e) => e.target.value = formatPhoneNumber(e.target.value)} className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" />
                         </div>
                         <div className="col-span-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">일반전화</label>
-                            <input name="phone" placeholder="전화번호" onChange={(e) => e.target.value = formatPhoneNumber(e.target.value)} className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" />
+                            <label htmlFor="quick-phone" className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-1">일반전화</label>
+                            <input id="quick-phone" name="phone" placeholder="전화번호" onChange={(e) => e.target.value = formatPhoneNumber(e.target.value)} className="w-full h-11 px-4 rounded-xl bg-slate-100 border-none focus:ring-4 focus:ring-indigo-600/20 font-black text-[14px]" />
                         </div>
                     </div>
 

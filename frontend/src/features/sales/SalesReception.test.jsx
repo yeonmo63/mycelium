@@ -71,4 +71,31 @@ describe('SalesReception - Final', () => {
         await user.click(screen.getByText(/인쇄 \/ PDF 저장/i));
         expect(printUtils.handlePrintRaw).toHaveBeenCalled();
     });
+
+    it('초안 복구(Draft Recovery) 기능 테스트', async () => {
+        apiBridge.callBridge.mockImplementation((cmd) => {
+            if (cmd === 'get_product_list') return Promise.resolve([]);
+            if (cmd === 'get_company_info') return Promise.resolve({ company_name: '농장' });
+            return Promise.resolve([]);
+        });
+
+        const draftData = {
+            customer: { customer_id: 'C999', customer_name: '초안고객' },
+            salesRows: [{ tempId: 123, product: '느타리버섯', qty: 5, price: 10000, amount: 50000, isDirty: true }]
+        };
+        localStorage.setItem('mycelium_draft_reception', JSON.stringify(draftData));
+
+        render(<ModalProvider><SalesReception /></ModalProvider>);
+
+        // Draft recovery modal should pop up
+        await screen.findByText(/저장되지 않은 데이터가 있습니다/i);
+        const restoreBtn = screen.getByRole('button', { name: /데이터 복구하기/i });
+        await user.click(restoreBtn);
+
+        // Verify restored data
+        await waitFor(() => {
+            expect(screen.getByText('초안고객')).toBeInTheDocument();
+            expect(screen.getByText('느타리버섯')).toBeInTheDocument();
+        });
+    });
 });

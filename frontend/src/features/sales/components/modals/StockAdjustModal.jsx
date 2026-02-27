@@ -31,7 +31,7 @@ const StockAdjustModal = ({ isOpen, onClose, product, val, setVal, reason, setRe
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">조정 수량 (+입고, -출고)</label>
                             <div className="relative">
-                                <input type="number" className="w-full h-14 rounded-2xl border-2 border-slate-200 bg-white text-center font-black text-2xl text-slate-700 outline-none focus:border-orange-500 transition-all placeholder:text-slate-200" value={val} onChange={e => setVal(e.target.value)} placeholder="0" autoFocus />
+                                <input type="number" className="w-full h-14 rounded-2xl border-2 border-slate-200 bg-white text-center font-black text-2xl text-slate-700 outline-none focus:border-orange-500 transition-all placeholder:text-slate-200" value={val} onChange={e => setVal(e.target.value)} placeholder="0" autoFocus inputMode="numeric" />
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{product?.specification || '단위'}</div>
                             </div>
                         </div>

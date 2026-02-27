@@ -14,9 +14,9 @@ const SalesInputPanel = ({
 
             <div className="grid grid-cols-12 gap-3 mb-4 mt-4">
                 <div className="col-span-3">
-                    <label className="text-[10.5px] font-bold text-slate-600 uppercase mb-1 block">상품명</label>
+                    <label htmlFor="product-select" className="text-[10.5px] font-bold text-slate-600 uppercase mb-1 block">상품명</label>
                     <div className="relative">
-                        <select name="product" value={inputState.product} onChange={handleInputChange} ref={prodSelectRef}
+                        <select id="product-select" name="product" value={inputState.product} onChange={handleInputChange} ref={prodSelectRef}
                             className="w-full h-10 rounded-xl bg-white border-slate-200 text-[14px] font-bold focus:ring-2 focus:ring-indigo-600 transition-all appearance-none px-4">
                             <option value="">상품 선택</option>
                             {products.map(p => <option key={p.product_id} value={p.product_name}>{p.product_name}</option>)}
@@ -29,20 +29,20 @@ const SalesInputPanel = ({
                     <input name="spec" value={inputState.spec} readOnly className="w-full h-10 rounded-xl bg-slate-100 border-none text-[14px] text-center font-bold text-slate-500 shadow-inner" />
                 </div>
                 <div className="col-span-1">
-                    <label className="text-[10.5px] font-bold text-slate-600 uppercase text-center mb-1 block">수량</label>
-                    <input type="number" name="qty" value={inputState.qty} onChange={handleInputChange} className="w-full h-10 rounded-xl bg-white border-slate-200 text-center font-black focus:ring-2 focus:ring-indigo-600 transition-all text-[14px]" />
+                    <label htmlFor="qty-input" className="text-[10.5px] font-bold text-slate-600 uppercase text-center mb-1 block">수량</label>
+                    <input id="qty-input" type="number" name="qty" value={inputState.qty} onChange={handleInputChange} inputMode="numeric" className="w-full h-10 rounded-xl bg-white border-slate-200 text-center font-black focus:ring-2 focus:ring-indigo-600 transition-all text-[14px]" />
                 </div>
                 <div className="col-span-1">
-                    <label className="text-[10.5px] font-bold text-slate-600 uppercase text-right pr-2 mb-1 block">단가</label>
-                    <input name="price" value={formatCurrency(inputState.price)} onChange={handleInputChange} className="w-full h-10 rounded-xl bg-white border-slate-200 text-right font-black pr-3 focus:ring-2 focus:ring-indigo-600 transition-all text-[14px]" />
+                    <label htmlFor="price-input" className="text-[10.5px] font-bold text-slate-600 uppercase text-right pr-2 mb-1 block">단가</label>
+                    <input id="price-input" name="price" value={formatCurrency(inputState.price)} onChange={handleInputChange} inputMode="numeric" className="w-full h-10 rounded-xl bg-white border-slate-200 text-right font-black pr-3 focus:ring-2 focus:ring-indigo-600 transition-all text-[14px]" />
                 </div>
                 <div className="col-span-1">
                     <label className="text-[10.5px] font-bold text-slate-600 uppercase text-center mb-1 block">할인(%)</label>
-                    <input type="number" name="discountRate" value={inputState.discountRate} onChange={handleInputChange} className="w-full h-10 rounded-xl bg-white border-slate-200 text-center font-black focus:ring-2 focus:ring-indigo-600 transition-all text-[14px] text-indigo-600 px-0" />
+                    <input type="number" name="discountRate" value={inputState.discountRate} onChange={handleInputChange} inputMode="numeric" className="w-full h-10 rounded-xl bg-white border-slate-200 text-center font-black focus:ring-2 focus:ring-indigo-600 transition-all text-[14px] text-indigo-600 px-0" />
                 </div>
                 <div className="col-span-1">
-                    <label className="text-[10.5px] font-bold text-indigo-600 uppercase text-right pr-2 mb-1 block">금액</label>
-                    <input value={formatCurrency(inputState.amount)} readOnly
+                    <label htmlFor="amount-input" className="text-[10.5px] font-bold text-indigo-600 uppercase text-right pr-2 mb-1 block">금액</label>
+                    <input id="amount-input" value={formatCurrency(inputState.amount)} readOnly
                         className="w-full h-10 rounded-xl bg-slate-100 border-none text-slate-900 text-right font-black text-[14px] px-4 shadow-inner" />
                 </div>
             </div>
@@ -75,8 +75,8 @@ const SalesInputPanel = ({
                             <input name="shipZip" value={inputState.shipZip} readOnly onClick={() => handleAddressSearch('input')} className="w-full h-9 rounded-lg border-slate-100 text-[14px] font-black text-slate-900 text-center bg-slate-100 shadow-sm cursor-pointer" />
                         </div>
                         <div className="col-span-5">
-                            <label className="text-[10.5px] font-bold text-slate-600 uppercase block mb-1 ml-1">기본 배송 주소 (클릭하여 검색)</label>
-                            <input name="shipAddr1" value={inputState.shipAddr1} readOnly onClick={() => handleAddressSearch('input')} className="w-full h-9 rounded-lg border-slate-100 text-[14px] font-bold text-slate-900 bg-slate-100 px-2 shadow-sm cursor-pointer" />
+                            <label htmlFor="ship-addr-input" className="text-[10.5px] font-bold text-slate-600 uppercase block mb-1 ml-1">기본 배송 주소 (클릭하여 검색)</label>
+                            <input id="ship-addr-input" name="shipAddr1" value={inputState.shipAddr1} readOnly onClick={() => handleAddressSearch('input')} className="w-full h-9 rounded-lg border-slate-100 text-[14px] font-bold text-slate-900 bg-slate-100 px-2 shadow-sm cursor-pointer" />
                         </div>
                         <div className="col-span-6">
                             <label className="text-[10.5px] font-bold text-slate-600 uppercase block mb-1 ml-1">상세 주소 입력</label>
@@ -92,7 +92,7 @@ const SalesInputPanel = ({
                     </div>
                     <div className="col-span-2">
                         <label className="text-[10.5px] font-bold text-slate-600 uppercase block mb-1 ml-1">연락처</label>
-                        <input name="shipMobile" value={inputState.shipMobile} onChange={handleInputChange} placeholder="010-0000-0000" className="w-full h-10 rounded-lg border-slate-200 bg-slate-100 text-[14px] font-black text-slate-900 px-3 focus:ring-2 focus:ring-indigo-600 text-center" />
+                        <input name="shipMobile" value={inputState.shipMobile} onChange={handleInputChange} placeholder="010-0000-0000" inputMode="tel" className="w-full h-10 rounded-lg border-slate-200 bg-slate-100 text-[14px] font-black text-slate-900 px-3 focus:ring-2 focus:ring-indigo-600 text-center" />
                     </div>
                     <div className="col-span-4">
                         <label className="text-[10.5px] font-bold text-indigo-600 uppercase block mb-1 ml-1">배송 메모</label>

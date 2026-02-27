@@ -46,4 +46,36 @@ mod tests {
         let expected_deduct_2 = (convert_qty_2 as f64 * ratio_2).ceil() as i32;
         assert_eq!(expected_deduct_2, 9);
     }
+
+    #[test]
+    fn test_date_parsing() {
+        use crate::commands::sales::utils::parse_date_safe;
+        use chrono::NaiveDate;
+
+        assert_eq!(
+            parse_date_safe("2023-10-27"),
+            Some(NaiveDate::from_ymd_opt(2023, 10, 27).unwrap())
+        );
+        assert_eq!(
+            parse_date_safe("20231027"),
+            Some(NaiveDate::from_ymd_opt(2023, 10, 27).unwrap())
+        );
+        assert_eq!(parse_date_safe("invalid"), None);
+        assert_eq!(parse_date_safe(""), None);
+    }
+
+    #[test]
+    fn test_tax_calculation() {
+        use crate::commands::sales::utils::calculate_tax_from_total;
+
+        // 11000 -> 10000 supply, 1000 VAT
+        let (supply, vat) = calculate_tax_from_total(11000);
+        assert_eq!(supply, 10000);
+        assert_eq!(vat, 1000);
+
+        // 10000 -> 9091 supply, 909 VAT (10000 / 1.1 = 9090.9 -> 9091)
+        let (supply, vat) = calculate_tax_from_total(10000);
+        assert_eq!(supply, 9091);
+        assert_eq!(vat, 909);
+    }
 }

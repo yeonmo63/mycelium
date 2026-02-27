@@ -56,3 +56,9 @@ pub fn parse_date_safe(date_str: &str) -> Option<NaiveDate> {
         .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y%m%d"))
         .ok()
 }
+pub fn calculate_tax_from_total(total_amount: i32) -> (i32, i32) {
+    let total = total_amount as f64;
+    let supply = (total / 1.1).round() as i32;
+    let vat = total_amount - supply;
+    (supply, vat)
+}

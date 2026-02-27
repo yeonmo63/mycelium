@@ -47,12 +47,12 @@ const AuditTrail = ({ logs, hideAutoLogs, setHideAutoLogs, logSearchQuery, setLo
                 <div className="space-y-3">
                     <div className="relative group">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 material-symbols-rounded text-lg group-focus-within:text-orange-500 transition-colors">search</span>
-                        <input value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)} className="pl-10 pr-4 h-9 w-full bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-300 transition-all placeholder:text-slate-400" placeholder="로그 내역 검색..." />
+                        <input id="log-search-input" value={logSearchQuery} onChange={e => setLogSearchQuery(e.target.value)} className="pl-10 pr-4 h-9 w-full bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-300 transition-all placeholder:text-slate-400" placeholder="로그 내역 검색..." />
                     </div>
                     <div className="flex justify-between items-center">
-                        <label className="flex items-center gap-2 cursor-pointer group">
+                        <label htmlFor="hide-auto-logs-check" className="flex items-center gap-2 cursor-pointer group">
                             <div className={`w-8 h-4 rounded-full relative transition-colors ${hideAutoLogs ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                                <input type="checkbox" className="hidden" checked={hideAutoLogs} onChange={e => setHideAutoLogs(e.target.checked)} />
+                                <input id="hide-auto-logs-check" type="checkbox" className="hidden" checked={hideAutoLogs} onChange={e => setHideAutoLogs(e.target.checked)} />
                                 <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${hideAutoLogs ? 'left-[18px]' : 'left-0.5'}`} />
                             </div>
                             <span className="text-[10px] font-black text-slate-500 group-hover:text-indigo-600 tracking-tighter uppercase transition-colors">시스템 자동로그 숨김</span>

@@ -26,6 +26,7 @@ mod stubs_macros;
 mod bridge;
 mod business_logic_tests;
 mod embedded_db;
+mod integration_tests;
 pub mod middleware;
 mod routes;
 

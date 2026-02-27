@@ -60,6 +60,7 @@ where
             post(sales::complete_shipment_bridge),
         )
         .route("/api/sales/sync-courier", post(sales::sync_courier_bridge))
+        .route("/api/sales/delete", post(sales::delete_sale_bridge))
         // Sales Claims
         .route("/api/sales/claims", get(sales::get_sales_claims_bridge))
         .route(

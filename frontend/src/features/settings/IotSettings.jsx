@@ -175,8 +175,9 @@ const IotSettings = () => {
 
                             <form onSubmit={handleSave} className="p-8 space-y-6">
                                 <div className="space-y-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">장비 이름</label>
+                                    <label htmlFor="sensor-name-input" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">장비 이름</label>
                                     <input
+                                        id="sensor-name-input"
                                         type="text"
                                         value={formData.sensor_name}
                                         onChange={e => setFormData({ ...formData, sensor_name: e.target.value })}
@@ -187,8 +188,9 @@ const IotSettings = () => {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">설치 구획</label>
+                                    <label htmlFor="space-select" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-left">설치 구획</label>
                                     <select
+                                        id="space-select"
                                         value={formData.space_id || ''}
                                         onChange={e => setFormData({ ...formData, space_id: e.target.value || null })}
                                         className="w-full h-12 px-5 bg-slate-50 border-none rounded-xl font-bold text-sm ring-1 ring-slate-200"

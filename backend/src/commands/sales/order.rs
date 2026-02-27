@@ -5,7 +5,7 @@ use crate::DB_MODIFIED;
 use chrono::Local;
 use std::sync::atomic::Ordering;
 
-use super::utils::{calculate_bom_tax_distribution, parse_date_safe};
+use super::utils::{calculate_bom_tax_distribution, calculate_tax_from_total, parse_date_safe};
 
 pub async fn create_sale(
     state: State<'_, DbPool>,
@@ -101,17 +101,15 @@ pub async fn create_sale_internal(
                 "과세".to_string()
             };
         } else if tax_type == "과세" {
-            let total = total_amount as f64;
-            let supply = (total / 1.1).round() as i32;
-            vat_amount = total_amount - supply;
-            supply_value = supply;
+            let (s, v) = calculate_tax_from_total(total_amount);
+            supply_value = s;
+            vat_amount = v;
             tax_exempt_value = 0;
         }
     } else if tax_type == "과세" {
-        let total = total_amount as f64;
-        let supply = (total / 1.1).round() as i32;
-        vat_amount = total_amount - supply;
-        supply_value = supply;
+        let (s, v) = calculate_tax_from_total(total_amount);
+        supply_value = s;
+        vat_amount = v;
         tax_exempt_value = 0;
     }
 
@@ -316,18 +314,16 @@ pub async fn update_sale(
                 "과세".to_string()
             };
         } else if tax_type == "과세" {
-            let total = total_amount as f64;
-            let supply = (total / 1.1).round() as i32;
-            vat_amount = total_amount - supply;
-            supply_value = supply;
+            let (s, v) = calculate_tax_from_total(total_amount);
+            supply_value = s;
+            vat_amount = v;
             tax_exempt_value = 0;
             actual_tax_type = "과세".to_string();
         }
     } else if tax_type == "과세" {
-        let total = total_amount as f64;
-        let supply = (total / 1.1).round() as i32;
-        vat_amount = total_amount - supply;
-        supply_value = supply;
+        let (s, v) = calculate_tax_from_total(total_amount);
+        supply_value = s;
+        vat_amount = v;
         tax_exempt_value = 0;
         actual_tax_type = "과세".to_string();
     }

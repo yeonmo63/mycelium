@@ -168,6 +168,7 @@ const MobileSettings = () => {
                                     <div
                                         key={activeUrl} // Force re-render when URL changes
                                         className="relative p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-50 ring-1 ring-slate-100 group-hover/qr:translate-y-[-4px] transition-transform duration-500 cursor-pointer"
+                                        data-testid="qr-container"
                                         onClick={() => {
                                             navigator.clipboard.writeText(activeUrl);
                                             showAlert("주소 복사됨", "연동 주소가 클립보드에 복사되었습니다.");

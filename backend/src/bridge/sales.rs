@@ -349,3 +349,21 @@ pub async fn save_special_sales_batch_bridge(
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
 }
+
+pub async fn delete_sale_bridge(
+    State((pool, _)): State<(DbPool, std::path::PathBuf)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let sales_id = payload
+        .get("salesId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if sales_id.is_empty() {
+        return Json(json!({ "success": false, "error": "Missing salesId" }));
+    }
+
+    match crate::commands::sales::order::delete_sale(&pool, sales_id.to_string()).await {
+        Ok(_) => Json(json!({ "success": true })),
+        Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
+    }
+}

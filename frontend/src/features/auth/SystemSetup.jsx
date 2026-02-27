@@ -229,9 +229,10 @@ const SystemSetup = ({ onComplete }) => {
 
                                     <div className="space-y-4">
                                         <div className="p-6 bg-[#020617] rounded-3xl border border-slate-700/50">
-                                            <label className="text-xs font-bold text-slate-500 mb-3 block">JWT Authentication Secret</label>
+                                            <label htmlFor="jwt-secret" className="text-xs font-bold text-slate-500 mb-3 block">JWT Authentication Secret</label>
                                             <div className="flex gap-3">
                                                 <input
+                                                    id="jwt-secret"
                                                     type="text"
                                                     value={jwtSecret}
                                                     onChange={e => setJwtSecret(e.target.value)}

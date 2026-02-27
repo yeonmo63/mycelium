@@ -58,7 +58,7 @@ const EventQrScannerUI = ({
 
             <div className="mt-10 text-center text-white space-y-6 w-full max-w-sm relative z-10">
                 <div className="space-y-2">
-                    <h3 className="text-2xl font-black tracking-tight bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent">특판 품목 스캔</h3>
+                    <h3 className="text-2xl font-black tracking-tight bg-gradient-to-br from-white to-slate-400 bg-clip-text text-transparent">특판 품목 스캔 중</h3>
                     <p className="text-xs text-slate-500 font-bold uppercase tracking-[0.2em]">Ready to analyze QR codes</p>
                 </div>
 

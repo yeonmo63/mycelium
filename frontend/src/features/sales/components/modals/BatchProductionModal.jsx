@@ -118,17 +118,36 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity" onClick={onClose}></div>
-            <div className="bg-white rounded-[2.5rem] w-full max-w-[850px] shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-                <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 p-8 text-white relative">
+            <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] w-full max-w-[850px] shadow-[0_32px_64px_-16px_rgba(30,41,59,0.25)] relative overflow-hidden animate-in zoom-in-95 fade-in duration-300 flex flex-col max-h-[90vh] border border-white">
+                <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-10 text-white relative overflow-hidden shrink-0">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                     <div className="flex justify-between items-start relative z-10">
-                        <div><div className="flex items-center gap-3 mb-2"><div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner"><span className="material-symbols-rounded text-3xl">inventory_2</span></div><div><h3 className="text-2xl font-black tracking-tight" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>통합 상품화 처리</h3></div></div></div>
-                        <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors group"><span className="material-symbols-rounded text-white/50 group-hover:text-white">close</span></button>
+                        <div>
+                            <div className="flex items-center gap-4 mb-3">
+                                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-xl">
+                                    <span className="material-symbols-rounded text-3xl">inventory_2</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black tracking-tight leading-tight" style={{ fontFamily: '"Noto Sans KR", sans-serif' }}>통합 상품화 처리</h3>
+                                    <p className="text-white/60 text-xs font-bold uppercase tracking-widest mt-1">Batch Production Processing</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="w-12 h-12 rounded-full hover:bg-white/10 flex items-center justify-center transition-all group active:scale-95">
+                            <span className="material-symbols-rounded text-white/50 group-hover:text-white text-2xl">close</span>
+                        </button>
                     </div>
-                    <div className="flex gap-4 mt-6">
-                        <div className="px-4 py-2 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-sm"><p className="text-[10px] font-black text-indigo-200 uppercase mb-0.5">생산 대상</p><p className="text-lg font-black">{convertModal.targets.filter(t => t.productId).length}종류</p></div>
-                        <div className="px-4 py-2 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-sm"><p className="text-[10px] font-black text-indigo-200 uppercase mb-0.5">사용 자재</p><p className="text-lg font-black">{convertModal.deductions.length}종류</p></div>
+                    <div className="flex gap-4 mt-8">
+                        <div className="px-5 py-3 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-md shadow-inner flex flex-col">
+                            <p className="text-[10px] font-black text-indigo-200 uppercase mb-0.5 tracking-wider">생산 대상</p>
+                            <p className="text-xl font-black">{convertModal.targets.filter(t => t.productId).length} <span className="text-xs font-bold text-white/40">종류</span></p>
+                        </div>
+                        <div className="px-5 py-3 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-md shadow-inner flex flex-col">
+                            <p className="text-[10px] font-black text-indigo-200 uppercase mb-0.5 tracking-wider">사용 자재</p>
+                            <p className="text-xl font-black">{convertModal.deductions.length} <span className="text-xs font-bold text-white/40">종류</span></p>
+                        </div>
                     </div>
-                    <span className="material-symbols-rounded absolute -right-12 -top-12 text-[240px] text-white/5 pointer-events-none rotate-12">conveyor_belt</span>
+                    <span className="material-symbols-rounded absolute -right-20 -bottom-20 text-[320px] text-white/5 pointer-events-none rotate-12 select-none">conveyor_belt</span>
                 </div>
                 <div className="flex-1 overflow-hidden flex flex-col bg-slate-50/50">
                     <div className="flex-1 overflow-y-auto stylish-scrollbar p-8">
@@ -137,11 +156,11 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                                 <div className="mb-10"><h4 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4"><span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs">01</span> 생산 상품명</h4>
                                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 stylish-scrollbar">
                                         {convertModal.targets.map((target) => (
-                                            <div key={target.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm relative group animate-in slide-in-from-left-4 duration-300">
+                                            <div key={target.id} data-testid={`product-target-item-${target.id}`} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm relative group animate-in slide-in-from-left-4 duration-300">
                                                 <div className="grid grid-cols-12 gap-4 items-end">
-                                                    <div className="col-span-7"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">생산 품목 선택</label>
+                                                    <div className="col-span-7"><label htmlFor={`product-select-${target.id}`} className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">생산 품목 선택</label>
                                                         <div className="relative">
-                                                            <select className="w-full h-11 pl-3 pr-8 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-300 appearance-none transition-all" value={target.productId} onChange={e => updateConvertTarget(target.id, 'productId', e.target.value)}>
+                                                            <select id={`product-select-${target.id}`} className="w-full h-11 pl-3 pr-8 rounded-xl border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-300 appearance-none transition-all" value={target.productId} onChange={e => updateConvertTarget(target.id, 'productId', e.target.value)}>
                                                                 <option value="">-- 생산 품목 선택 --</option>
                                                                 {products.filter(p => (!p.item_type || p.item_type === 'product') && p.status !== '단종상품').map(p => {
                                                                     const isRecommended = convertModal.primaryMaterialId && (p.product_name.includes(products.find(x => x.product_id === Number(convertModal.primaryMaterialId))?.product_name?.split(' ')[0]));
@@ -151,8 +170,8 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                                                             <span className="material-symbols-rounded absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
                                                         </div>
                                                     </div>
-                                                    <div className="col-span-4"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">생산 수량</label>
-                                                        <div className="relative group/field"><input type="number" className="w-full h-11 rounded-xl border-2 border-indigo-200 bg-white text-right font-black text-lg text-indigo-700 pr-10 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 transition-all shadow-sm" value={target.qty} onChange={e => updateConvertTarget(target.id, 'qty', e.target.value)} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{products.find(p => p.product_id === Number(target.productId))?.specification?.replace(/\d/g, '').replace('g', '') || '개'}</span></div>
+                                                    <div className="col-span-4"><label htmlFor={`product-qty-${target.id}`} className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">생산 수량</label>
+                                                        <div className="relative group/field"><input id={`product-qty-${target.id}`} type="number" className="w-full h-11 rounded-xl border-2 border-indigo-200 bg-white text-right font-black text-lg text-indigo-700 pr-10 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-400 transition-all shadow-sm" value={target.qty} onChange={e => updateConvertTarget(target.id, 'qty', e.target.value)} inputMode="numeric" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{products.find(p => p.product_id === Number(target.productId))?.specification?.replace(/\d/g, '').replace('g', '') || '개'}</span></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -167,9 +186,9 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                                                 const specStr = products.find(p => p.product_id === d.materialId)?.specification || 'kg';
                                                 const unit = specStr.replace(/[0-9.]/g, '').trim();
                                                 return (
-                                                    <div key={d.id} className={`p-4 rounded-2xl border transition-all shadow-sm flex items-center gap-4 ${isPrimary ? 'bg-emerald-50/30 border-emerald-200 ring-1 ring-emerald-100' : 'bg-white border-slate-200'}`}>
+                                                    <div key={d.id} data-testid={`raw-material-item-${d.id}`} className={`p-4 rounded-2xl border transition-all shadow-sm flex items-center gap-4 ${isPrimary ? 'bg-emerald-50/30 border-emerald-200 ring-1 ring-emerald-100' : 'bg-white border-slate-200'}`}>
                                                         <div className="flex-1 min-w-0"><div className="flex items-center gap-2 mb-1"><span className={`material-symbols-rounded text-lg ${isPrimary ? 'text-emerald-500' : 'text-slate-400'}`}>{isPrimary ? 'stars' : 'spa'}</span><span className="text-xs font-black text-slate-700 truncate">{d.name}</span>{isPrimary && <span className="text-[9px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter">기준</span>}</div><div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-400 italic">재고: {d.stock?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{unit}</span><span className="text-[10px] font-bold text-emerald-600/60 transition-opacity">, 레시피 비율: {d.ratio?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{unit}<span className="ml-1 opacity-60">(총 필요량: {d.tQty?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{unit})</span></span></div></div>
-                                                        <div className="w-32 relative shrink-0"><input type="number" className={`w-full h-11 rounded-xl border-2 text-right font-black text-lg pr-10 outline-none transition-all shadow-sm ${isPrimary ? 'border-emerald-400 bg-white text-emerald-700 focus:ring-4 focus:ring-emerald-100' : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-300'}`} value={d.rQty} onChange={e => handleDeductionQtyChange(d.id, e.target.value)} /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{unit}</span></div>
+                                                        <div className="w-32 relative shrink-0"><input id={`deduction-qty-${d.id}`} type="number" className={`w-full h-11 rounded-xl border-2 text-right font-black text-lg pr-10 outline-none transition-all shadow-sm ${isPrimary ? 'border-emerald-400 bg-white text-emerald-700 focus:ring-4 focus:ring-emerald-100' : 'border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-300'}`} value={d.rQty} onChange={e => handleDeductionQtyChange(d.id, e.target.value)} inputMode="numeric" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{unit}</span></div>
                                                         {!isPrimary && (<button onClick={() => setConvertModal(prev => ({ ...prev, primaryMaterialId: String(d.materialId) }))} className="h-11 px-3 rounded-xl border border-slate-200 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all active:scale-95" title="기준 품목으로 설정"><span className="material-symbols-rounded text-lg">star_rate</span></button>)}
                                                     </div>
                                                 );
@@ -178,7 +197,7 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                                     </div>
                                     {convertModal.deductions.some(d => d.type === 'raw') && (<div className="mt-3 text-[10px] font-bold text-slate-400 ml-1 flex items-center gap-1.5"><span className="material-symbols-rounded text-sm text-emerald-500">info</span>기준 품목의 수량을 변경하면 생산 상품과 나머지 자재 수량이 연동됩니다. (레시피 기준)</div>)}
                                 </div>
-                                <div className="mt-8"><label className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4"><span className="w-6 h-6 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center text-xs">03</span> 일지 및 비고 (Memo)</label><textarea className="w-full h-24 p-4 rounded-[1.5rem] border border-slate-200 bg-white shadow-sm text-sm font-medium text-slate-600 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-300 transition-all resize-none placeholder:text-slate-300" placeholder="상세 내용을 기록하세요." value={convertModal.memo} onChange={e => setConvertModal(prev => ({ ...prev, memo: e.target.value }))} /></div>
+                                <div className="mt-8"><label htmlFor="memo-textarea" className="text-sm font-black text-slate-800 flex items-center gap-2 mb-4"><span className="w-6 h-6 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center text-xs">03</span> 일지 및 비고 (Memo)</label><textarea id="memo-textarea" className="w-full h-24 p-4 rounded-[1.5rem] border border-slate-200 bg-white shadow-sm text-sm font-medium text-slate-600 outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-300 transition-all resize-none placeholder:text-slate-300" placeholder="상세 내용을 기록하세요." value={convertModal.memo} onChange={e => setConvertModal(prev => ({ ...prev, memo: e.target.value }))} /></div>
                             </div>
                             <div className="col-span-12 lg:col-span-5 border-l border-slate-200 pl-4 lg:pl-10">
                                 <div className="flex justify-between items-center mb-6"><div><h4 className="text-sm font-black text-slate-800 flex items-center gap-2"><span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center text-xs">04</span> 기타 자재 차감 요약</h4><p className="text-[10px] text-slate-400 mt-1 font-bold">부자재 소모량입니다.</p></div>{convertModal.loading && <span className="text-[10px] text-indigo-500 animate-pulse font-black uppercase tracking-tighter">Recalculating...</span>}</div>
@@ -188,7 +207,7 @@ const BatchProductionModal = ({ isOpen, onClose, convertModal, setConvertModal, 
                                             {convertModal.deductions.filter(d => d.type !== 'raw').map((d) => {
                                                 const isShort = d.stock < d.rQty;
                                                 return (
-                                                    <div key={d.id} className={`flex items-center justify-between p-3 rounded-2xl border bg-white shadow-sm hover:border-indigo-200 transition-all ${isShort ? 'border-rose-200 bg-rose-50/30' : 'border-slate-100'}`}>
+                                                    <div key={d.id} data-testid={`other-material-item-${d.id}`} className={`flex items-center justify-between p-3 rounded-2xl border bg-white shadow-sm hover:border-indigo-200 transition-all ${isShort ? 'border-rose-200 bg-rose-50/30' : 'border-slate-100'}`}>
                                                         <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center ${d.type === 'aux' ? 'bg-orange-50 text-orange-500' : d.type === 'prod' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'}`}><span className="material-symbols-rounded text-base">{d.type === 'aux' ? 'package_2' : d.type === 'prod' ? 'box' : 'spa'}</span></div><div><p className="text-[11px] font-black text-slate-700">{d.name}</p><p className={`text-[9px] font-bold ${isShort ? 'text-rose-500' : 'text-slate-400'}`}>재고: {formatCurrency(d.stock)} {isShort && '(부족)'}</p></div></div>
                                                         <div className="text-right"><span className="text-sm font-black text-slate-600">-{formatCurrency(d.rQty)}</span></div>
                                                     </div>

@@ -87,20 +87,23 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
             <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
 
                 {/* Header */}
-                <div className="bg-slate-900 px-6 py-4 flex justify-between items-center relative overflow-hidden">
-                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-teal-400 via-slate-900 to-slate-900 pointer-events-none"></div>
+                <div className="bg-slate-950 px-8 py-6 flex justify-between items-center relative overflow-hidden shrink-0 border-b border-white/5">
+                    <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-teal-500 via-slate-950 to-slate-950 pointer-events-none"></div>
+                    <div className="absolute -right-16 -top-16 w-64 h-64 bg-teal-500/10 rounded-full blur-[80px]"></div>
 
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
-                            <span className="text-[10px] font-black text-teal-400 tracking-[0.2em] uppercase">Bill of Materials</span>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.6)] animate-pulse"></div>
+                            <span className="text-[10px] font-black text-teal-400 tracking-[0.3em] uppercase">Inventory Architecture</span>
                         </div>
-                        <h3 className="text-white font-bold text-xl flex items-center gap-2">
-                            구성 자재 관리 <span className="text-slate-500 font-light text-base">| {product.product_name}</span>
+                        <h3 className="text-white font-black text-2xl flex items-center gap-3 tracking-tight">
+                            구성 자재 관리
+                            <span className="w-1 h-6 bg-slate-800 rounded-full"></span>
+                            <span className="text-slate-400 font-bold text-lg">{product.product_name}</span>
                         </h3>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-slate-400 hover:bg-white/20 hover:text-white transition-all">
-                        <span className="material-symbols-rounded">close</span>
+                    <button onClick={onClose} className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-all active:scale-90 relative z-10 group">
+                        <span className="material-symbols-rounded text-2xl group-hover:rotate-90 transition-transform duration-300">close</span>
                     </button>
                 </div>
 
@@ -118,8 +121,9 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
 
                         <div className="flex gap-3 items-end">
                             <div className="flex-1">
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">자재 선택</label>
+                                <label htmlFor="material-select" className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">자재 선택</label>
                                 <select
+                                    id="material-select"
                                     className="w-full h-11 px-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50"
                                     value={selectedMaterial}
                                     onChange={e => setSelectedMaterial(e.target.value)}
@@ -133,9 +137,10 @@ const BomManagementModal = ({ isOpen, onClose, product, allProducts }) => {
                                 </select>
                             </div>
                             <div className="w-32">
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">소요 수량</label>
+                                <label htmlFor="ratio-input" className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">소요 수량</label>
                                 <div className="relative">
                                     <input
+                                        id="ratio-input"
                                         type="number"
                                         step="0.1"
                                         className="w-full h-11 pl-3 pr-8 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-right text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-500/50"

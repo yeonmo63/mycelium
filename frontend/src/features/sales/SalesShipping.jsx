@@ -225,9 +225,17 @@ const SalesShipping = () => {
             }
 
         } else if (actionType === 'delete') {
-            if (await showConfirm('삭제', `선택한 ${targets.length}건을 정말 삭제하시겠습니까?`)) {
-                // TODO: 삭제 API 구현 필요
-                showAlert('알림', '삭제 기능은 아직 구현되지 않았습니다.');
+            if (await showConfirm('삭제', `선택한 ${targets.length}건을 정말 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                try {
+                    for (const item of targets) {
+                        await callBridge('delete_sale', { salesId: String(item.sales_id) });
+                    }
+                    showAlert('성공', '삭제되었습니다.');
+                    loadData();
+                    setSelectedIds(new Set());
+                } catch (e) {
+                    showAlert('오류', `삭제 중 오류: ${e}`);
+                }
             }
         } else if (actionType === 'complete_delivery') {
             if (await showConfirm('배송 완료 확정', `선택한 ${targets.length}건을 '배송완료' 처리하시겠습니까?\n고객이 상품을 수령한 경우에만 처리해주세요.`)) {
@@ -529,6 +537,9 @@ const SalesShipping = () => {
                                             <span className="material-symbols-rounded text-base">task_alt</span> 배송완료
                                         </button>
                                     )}
+                                    <button onClick={() => handleAction('delete')} className="h-8 px-3 rounded-lg bg-white border border-rose-100 text-rose-500 hover:bg-rose-50 font-bold text-xs flex items-center gap-1 transition-all">
+                                        <span className="material-symbols-rounded text-base">delete</span> 삭제
+                                    </button>
                                 </div>
                             );
                         })()}

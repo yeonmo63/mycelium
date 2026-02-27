@@ -62,7 +62,7 @@ const HarvestEntryModal = ({ isOpen, onClose, harvestModal, setHarvestModal, pro
                                         <div className="flex-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1 text-right">수량</label>
                                             <div className="relative">
-                                                <input type="number" min="0" step="any" className="w-full h-11 rounded-xl border border-slate-200 bg-white text-right font-black text-lg text-emerald-600 pr-8 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 transition-all placeholder:text-slate-200" value={item.qty} onChange={e => updateHarvestItem(item.id, 'qty', e.target.value)} placeholder="0" />
+                                                <input type="number" min="0" step="any" className="w-full h-11 rounded-xl border border-slate-200 bg-white text-right font-black text-lg text-emerald-600 pr-8 outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 transition-all placeholder:text-slate-200" value={item.qty} onChange={e => updateHarvestItem(item.id, 'qty', e.target.value)} placeholder="0" inputMode="decimal" />
                                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">kg</span>
                                             </div>
                                         </div>

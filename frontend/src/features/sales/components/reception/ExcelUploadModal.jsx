@@ -94,10 +94,11 @@ const ExcelUploadModal = ({ isOpen, onClose, fileData, onImport }) => {
                     <div className="grid grid-cols-3 gap-6">
                         {fields.map(f => (
                             <div key={f.key}>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                                <label htmlFor={`mapping-select-${f.key}`} className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
                                     {f.label} {f.required && <span className="text-rose-500">*</span>}
                                 </label>
                                 <select
+                                    id={`mapping-select-${f.key}`}
                                     value={mapping[f.key]}
                                     onChange={(e) => setMapping(prev => ({ ...prev, [f.key]: parseInt(e.target.value) }))}
                                     className="w-full h-11 bg-slate-100 border-none rounded-2xl px-4 font-bold text-slate-700 focus:ring-4 focus:ring-indigo-500/10 transition-all text-sm"
@@ -117,6 +118,7 @@ const ExcelUploadModal = ({ isOpen, onClose, fileData, onImport }) => {
                             <span className="text-xs font-black uppercase tracking-widest opacity-80">데이터 미리보기 (상위 5건)</span>
                             <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">총 {rows.length}개 행 감지됨</span>
                         </div>
+
                         <div className="flex-1 overflow-auto bg-slate-50">
                             <table className="w-full text-xs text-left border-collapse">
                                 <thead className="sticky top-0 bg-slate-100/90 backdrop-blur z-10">

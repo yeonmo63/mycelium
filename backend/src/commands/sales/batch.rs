@@ -370,54 +370,6 @@ pub async fn save_special_sales_batch(
                  .execute(&mut *tx).await?;
             }
 
-            // 2. Restore BOM / Aux
-            let bom_items: Vec<(i32, f64)> =
-                sqlx::query_as("SELECT material_id, ratio FROM product_bom WHERE product_id = $1")
-                    .bind(pid)
-                    .fetch_all(&mut *tx)
-                    .await?;
-
-            if !bom_items.is_empty() {
-                for (mat_id, ratio) in bom_items {
-                    let add_qty = (qty as f64 * ratio).ceil() as i32;
-                    sqlx::query("UPDATE products SET stock_quantity = COALESCE(stock_quantity,0) + $1 WHERE product_id = $2").bind(add_qty).bind(mat_id).execute(&mut *tx).await?;
-
-                    let m_info: Option<(String, Option<String>)> = sqlx::query_as(
-                        "SELECT product_name, specification FROM products WHERE product_id = $1",
-                    )
-                    .bind(mat_id)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-                    if let Some((m_name, m_spec)) = m_info {
-                        sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, '입고', $4, (SELECT stock_quantity FROM products WHERE product_id=$1), $5, 'SALES_RESTORE_BOM')")
-                                .bind(mat_id).bind(&m_name).bind(&m_spec).bind(add_qty).bind(format!("판매 취소 복구(BOM): {}", del_id))
-                                .execute(&mut *tx).await?;
-                    }
-                }
-            } else {
-                let simple_bom: Option<(Option<i32>, Option<f64>)> = 
-                    sqlx::query_as("SELECT aux_material_id, aux_material_ratio FROM products WHERE product_id = $1")
-                    .bind(pid)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-
-                if let Some((Some(aid), Some(ar))) = simple_bom {
-                    let add_qty = (qty as f64 * ar).ceil() as i32;
-                    sqlx::query("UPDATE products SET stock_quantity = COALESCE(stock_quantity,0) + $1 WHERE product_id = $2").bind(add_qty).bind(aid).execute(&mut *tx).await?;
-
-                    let a_info: Option<(String, Option<String>)> = sqlx::query_as(
-                        "SELECT product_name, specification FROM products WHERE product_id = $1",
-                    )
-                    .bind(aid)
-                    .fetch_optional(&mut *tx)
-                    .await?;
-                    if let Some((a_name, a_spec)) = a_info {
-                        sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, '입고', $4, (SELECT stock_quantity FROM products WHERE product_id=$1), $5, 'SALES_RESTORE_AUX')")
-                            .bind(aid).bind(&a_name).bind(&a_spec).bind(add_qty).bind(format!("판매 취소 복구(부자재): {}", del_id))
-                            .execute(&mut *tx).await?;
-                    }
-                }
-            }
         }
 
         sqlx::query("DELETE FROM sales WHERE sales_id = $1")
@@ -596,40 +548,6 @@ pub async fn save_general_sales_batch_internal(
     let mut tx = pool.begin().await?;
 
     for del_id in deleted_ids {
-        // [AUTO-STOCK] Restore Stock on Delete
-        let old: Option<(Option<i32>, i32)> =
-            sqlx::query_as("SELECT product_id, quantity FROM sales WHERE sales_id = $1")
-                .bind(&del_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-
-        if let Some((Some(pid), qty)) = old {
-            // BOM/Aux Restore (Main product restore is handled by DB Trigger)
-            let simple_bom: Option<(Option<i32>, Option<f64>)> = sqlx::query_as(
-                "SELECT aux_material_id, aux_material_ratio FROM products WHERE product_id = $1",
-            )
-            .bind(pid)
-            .fetch_optional(&mut *tx)
-            .await?;
-
-            if let Some((Some(aid), Some(ar))) = simple_bom {
-                let add_qty = (qty as f64 * ar).ceil() as i32;
-                sqlx::query("UPDATE products SET stock_quantity = COALESCE(stock_quantity,0) + $1 WHERE product_id = $2").bind(add_qty).bind(aid).execute(&mut *tx).await?;
-                // Log for Aux Material restore
-                let a_info: Option<(String, Option<String>)> = sqlx::query_as(
-                    "SELECT product_name, specification FROM products WHERE product_id = $1",
-                )
-                .bind(aid)
-                .fetch_optional(&mut *tx)
-                .await?;
-                if let Some((a_name, a_spec)) = a_info {
-                    sqlx::query("INSERT INTO inventory_logs (product_id, product_name, specification, change_type, change_quantity, current_stock, memo, reference_id) VALUES ($1, $2, $3, '입고', $4, (SELECT stock_quantity FROM products WHERE product_id=$1), $5, 'SALES_RESTORE_AUX')")
-                        .bind(aid).bind(&a_name).bind(&a_spec).bind(add_qty).bind(format!("판매 취소 복구(부자재): {}", del_id))
-                        .execute(&mut *tx).await?;
-                }
-            }
-        }
-
         sqlx::query("DELETE FROM sales WHERE sales_id = $1")
             .bind(del_id)
             .execute(&mut *tx)
