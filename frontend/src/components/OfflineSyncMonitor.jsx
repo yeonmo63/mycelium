@@ -80,12 +80,15 @@ const OfflineSyncMonitor = () => {
 
     if (!isOnline) {
         return (
-            <div className="fixed bottom-4 left-4 z-[100] animate-in slide-in-from-bottom duration-300">
-                <div className="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700">
-                    <WifiOff size={18} className="text-orange-500" />
+            <div className="fixed bottom-24 left-4 z-[100] animate-in slide-in-from-left fade-in duration-500">
+                <div className="bg-slate-950/80 backdrop-blur-xl text-white px-5 py-3.5 rounded-[1.5rem] shadow-[0_8px_32px_rgba(0,0,0,0.3)] flex items-center gap-4 border border-white/10 relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.6)]"></div>
+                    <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30 animate-pulse">
+                        <WifiOff size={20} className="text-orange-500" />
+                    </div>
                     <div className="flex flex-col">
-                        <span className="text-xs font-black tracking-tight">오프라인 모드</span>
-                        <span className="text-[10px] text-slate-400 font-medium">데이터는 로컬에 안전하게 보관됩니다.</span>
+                        <span className="text-sm font-black tracking-tight text-white leading-tight">오프라인 모드</span>
+                        <span className="text-[10px] text-slate-400 font-bold tracking-tighter uppercase mt-0.5">LOCAL PERSISTENCE ACTIVE</span>
                     </div>
                 </div>
             </div>
@@ -94,35 +97,40 @@ const OfflineSyncMonitor = () => {
 
     if (pendingCount > 0 || isSyncing || lastSyncResult) {
         return (
-            <div className="fixed bottom-4 left-4 z-[100] animate-in slide-in-from-bottom duration-300">
-                <div className="bg-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-slate-100 min-w-[200px]">
-                    {isSyncing ? (
-                        <RefreshCw size={20} className="text-indigo-600 animate-spin" />
-                    ) : lastSyncResult === 'success' ? (
-                        <CheckCircle size={20} className="text-emerald-500" />
-                    ) : (
-                        <Wifi size={20} className="text-indigo-600" />
-                    )}
+            <div className="fixed bottom-24 left-4 z-[100] animate-in slide-in-from-left fade-in duration-500">
+                <div className="bg-white/80 backdrop-blur-xl px-5 py-3.5 rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.08)] flex items-center gap-4 border border-white/40 min-w-[240px] group transition-all">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${isSyncing ? 'bg-indigo-50 border-indigo-100' :
+                            lastSyncResult === 'success' ? 'bg-emerald-50 border-emerald-100' :
+                                'bg-slate-50 border-slate-100'
+                        }`}>
+                        {isSyncing ? (
+                            <RefreshCw size={24} className="text-indigo-600 animate-spin" />
+                        ) : lastSyncResult === 'success' ? (
+                            <CheckCircle size={24} className="text-emerald-500 animate-in zoom-in-50 duration-300" />
+                        ) : (
+                            <Wifi size={24} className="text-indigo-600" />
+                        )}
+                    </div>
 
                     <div className="flex flex-col flex-1">
-                        <span className="text-xs font-black text-slate-800">
-                            {isSyncing ? '데이터 동기화 중...' :
+                        <span className="text-sm font-black text-slate-800 leading-tight">
+                            {isSyncing ? '데이터 동기화 중' :
                                 lastSyncResult === 'success' ? '동기화 완료' :
-                                    `대기 중인 데이터 (${pendingCount})`}
+                                    `대기 데이터: ${pendingCount}건`}
                         </span>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                            {isSyncing ? '서버로 전송하고 있습니다.' :
-                                lastSyncResult === 'success' ? '모든 기록이 저장되었습니다.' :
-                                    '온라인 상태입니다.'}
+                        <p className="text-[10px] text-slate-400 font-bold tracking-tighter uppercase mt-0.5">
+                            {isSyncing ? 'SYCHRONIZING WITH SERVER' :
+                                lastSyncResult === 'success' ? 'LEDGER UPDATED SUCCESSFULLY' :
+                                    'ONLINE & READY TO SYNC'}
                         </p>
                     </div>
 
                     {!isSyncing && pendingCount > 0 && (
                         <button
                             onClick={triggerSync}
-                            className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors"
+                            className="w-10 h-10 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 flex items-center justify-center hover:bg-indigo-700 active:scale-90 transition-all"
                         >
-                            <RefreshCw size={14} />
+                            <RefreshCw size={18} />
                         </button>
                     )}
                 </div>

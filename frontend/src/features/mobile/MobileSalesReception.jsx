@@ -55,12 +55,21 @@ const MobileSalesReception = () => {
 
     const [isSearching, setIsSearching] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [isContinuousScan, setIsContinuousScan] = useState(false);
     const [scannerValue, setScannerValue] = useState('');
     const scannerInputRef = useRef(null);
     const html5QrCodeRef = useRef(null);
     const fileInputRef = useRef(null);
     const qtyInputRef = useRef(null);
     const [cameraError, setCameraError] = useState(null);
+
+    // Feedback for continuous scan
+    const triggerScanFeedback = () => {
+        if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(100);
+        }
+    };
+
 
     useEffect(() => {
         let isInstanceMounted = true;
@@ -263,35 +272,54 @@ const MobileSalesReception = () => {
         }
 
         if (foundProduct) {
-            handleInputChange({
-                target: {
-                    name: 'product',
-                    value: foundProduct.product_name
-                }
-            });
+            triggerScanFeedback();
 
-            if (html5QrCodeRef.current) {
-                try {
-                    const state = html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : 0;
-                    if (state === 2 || html5QrCodeRef.current.isScanning) {
-                        await html5QrCodeRef.current.stop();
+            if (isContinuousScan) {
+                // In continuous mode, add directly to rows if customer is selected
+                if (customer && products.length > 0) {
+                    handleAddRow({
+                        product: foundProduct.product_name,
+                        qty: 1,
+                        price: foundProduct.unit_price,
+                        amount: foundProduct.unit_price
+                    });
+                    setScannerValue('');
+                } else {
+                    showAlert("알림", "고객 선택 후 연속 스캔을 사용하면 즉시 품목이 추가됩니다.");
+                    handleInputChange({
+                        target: { name: 'product', value: foundProduct.product_name }
+                    });
+                    setIsScannerOpen(false);
+                }
+            } else {
+                handleInputChange({
+                    target: { name: 'product', value: foundProduct.product_name }
+                });
+
+                if (html5QrCodeRef.current) {
+                    try {
+                        const state = html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : 0;
+                        if (state === 2 || html5QrCodeRef.current.isScanning) {
+                            await html5QrCodeRef.current.stop();
+                        }
+                    } catch (e) {
+                        console.warn("Stop on success failed", e);
                     }
-                } catch (e) {
-                    console.warn("Stop on success failed", e);
                 }
+
+                showAlert("인식 완료", `[${foundProduct.product_name}] 상품이 선택되었습니다.`);
+                setIsScannerOpen(false);
+
+                setTimeout(() => {
+                    qtyInputRef.current?.focus();
+                    qtyInputRef.current?.select();
+                }, 300);
             }
-
-            showAlert("인식 완료", `[${foundProduct.product_name}] 상품이 선택되었습니다.`);
-            setIsScannerOpen(false);
-
-            setTimeout(() => {
-                qtyInputRef.current?.focus();
-                qtyInputRef.current?.select();
-            }, 300);
         } else {
             showAlert("인식 실패", "상품을 찾을 수 없습니다.");
         }
     };
+
 
     return (
         <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden">
@@ -753,9 +781,21 @@ const MobileSalesReception = () => {
                             <div className="absolute bottom-8 right-8 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-lg" />
                         </div>
                     </div>
-                    <div className="mt-6 text-center text-white space-y-4 w-full">
+                    <div className="mt-6 text-center text-white space-y-4 w-full px-6">
+                        <div className="flex justify-center mb-2">
+                            <button
+                                onClick={() => setIsContinuousScan(!isContinuousScan)}
+                                className={`h-11 px-6 rounded-2xl flex items-center gap-2 transition-all duration-300 ${isContinuousScan ? 'bg-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.4)]' : 'bg-white/10'}`}
+                            >
+                                <div className={`w-2 h-2 rounded-full ${isContinuousScan ? 'bg-white animate-pulse' : 'bg-slate-500'}`}></div>
+                                <span className="text-[11px] font-black uppercase tracking-widest">
+                                    {isContinuousScan ? 'Continuous Mode ON' : 'Single Scan Mode'}
+                                </span>
+                            </button>
+                        </div>
                         <h3 className="text-xl font-black">QR 코드 스캔 중</h3>
-                        <p className="text-sm text-slate-400">사각형 안에 QR 코드를 맞춰주세요.</p>
+                        <p className="text-xs text-slate-400">사각형 안에 QR 코드를 맞춰주세요.</p>
+
                         <div className="max-w-xs mx-auto pt-2 space-y-2">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">직접 코드 입력 (인식 불가 시)</label>
                             <div className="relative opacity-60 focus-within:opacity-100 transition-opacity">

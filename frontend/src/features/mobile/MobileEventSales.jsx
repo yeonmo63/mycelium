@@ -55,6 +55,7 @@ const MobileEventSales = () => {
     const [discountRate, setDiscountRate] = useState(0);
     const [isScanning, setIsScanning] = useState(false);
     const [isScannerOpen, setIsScannerOpen] = useState(false);
+    const [isContinuousScan, setIsContinuousScan] = useState(false);
     const [scannerValue, setScannerValue] = useState('');
     const [inputState, setInputState] = useState({ product: '', price: 0, qty: 1, amount: 0 });
     const [showInputSection, setShowInputSection] = useState(false);
@@ -63,6 +64,13 @@ const MobileEventSales = () => {
     const fileInputRef = useRef(null);
     const qtyInputRef = useRef(null);
     const [cameraError, setCameraError] = useState(null);
+
+    // Feedback for continuous scan
+    const triggerScanFeedback = () => {
+        if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(100);
+        }
+    };
 
     useEffect(() => {
         let isInstanceMounted = true;
@@ -339,7 +347,8 @@ const MobileEventSales = () => {
         const rawCode = code.trim();
         setIsScanning(true);
 
-        if (html5QrCodeRef.current) {
+        // If not in continuous mode, we stop the scanner
+        if (!isContinuousScan && html5QrCodeRef.current) {
             try {
                 const state = html5QrCodeRef.current.getState ? html5QrCodeRef.current.getState() : 0;
                 if (state === 2 || html5QrCodeRef.current.isScanning) {
@@ -401,16 +410,43 @@ const MobileEventSales = () => {
 
         setIsScanning(false);
         if (foundProduct) {
-            handleInputChange({ target: { name: 'product', value: foundProduct.product_name } });
-            setIsScannerOpen(false);
-            setTimeout(() => {
-                qtyInputRef.current?.focus();
-                qtyInputRef.current?.select();
-            }, 300);
+            triggerScanFeedback();
+
+            if (isContinuousScan) {
+                // In continuous mode, add directly to cart if event is selected
+                if (!selectedEventId) {
+                    showAlert("행사 미선택", "행사를 먼저 선택해야 스캔 즉시 장바구니에 담깁니다.");
+                    setScannerValue('');
+                    return;
+                }
+
+                setCart(prev => {
+                    const existing = prev.find(item => item.product_id === foundProduct.product_id);
+                    if (existing) {
+                        return prev.map(item =>
+                            item.product_id === foundProduct.product_id
+                                ? { ...item, quantity: item.quantity + 1 }
+                                : item
+                        );
+                    } else {
+                        return [...prev, { ...foundProduct, quantity: 1, unit_price: foundProduct.unit_price }];
+                    }
+                });
+                setScannerValue('');
+                // Keep scanner open
+            } else {
+                handleInputChange({ target: { name: 'product', value: foundProduct.product_name } });
+                setIsScannerOpen(false);
+                setTimeout(() => {
+                    qtyInputRef.current?.focus();
+                    qtyInputRef.current?.select();
+                }, 300);
+            }
         } else {
             showAlert("인식 실패", `[${rawCode}] 상품을 찾을 수 없습니다.`);
         }
     };
+
 
     const updateQuantity = (productId, delta) => {
         setCart(cart.map(item => {
@@ -625,6 +661,8 @@ const MobileEventSales = () => {
             <EventQrScannerUI
                 isOpen={isScannerOpen}
                 onClose={() => setIsScannerOpen(false)}
+                isContinuousScan={isContinuousScan}
+                toggleContinuousScan={() => setIsContinuousScan(!isContinuousScan)}
                 cameraError={cameraError}
                 fileInputRef={fileInputRef}
                 handleFileScan={handleFileScan}
@@ -633,6 +671,7 @@ const MobileEventSales = () => {
                 setScannerValue={setScannerValue}
                 processQrCode={processQrCode}
             />
+
         </div>
     );
 };

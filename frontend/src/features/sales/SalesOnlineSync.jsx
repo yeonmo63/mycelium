@@ -73,6 +73,7 @@ const SalesOnlineSync = () => {
 
     const handleParse = () => {
         if (!file) return;
+        console.log('handleParse called with file:', file.name);
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -87,19 +88,18 @@ const SalesOnlineSync = () => {
 
             try {
                 let orders = [];
-                if (mallType === 'naver') orders = parseNaverCsv(text);
-                else if (mallType === 'coupang') orders = parseCoupangCsv(text);
-                else if (mallType === 'custom') {
-                    const allRows = parseCSV(text);
-                    if (allRows.length < 2) {
-                        await showAlert('오류', '데이터가 부족합니다.');
-                        return;
-                    }
-                    setUploadFileData({ headers: allRows[0], rows: allRows.slice(1).filter(r => r.some(c => c)) });
-                    setIsExcelCustomModalOpen(true);
-                    return; // Wait for modal
+                if (mallType === 'naver') {
+                    orders = parseNaverCsv(text);
                 }
-                else orders = parseGenericCsv(text);
+                else if (mallType === 'coupang') {
+                    orders = parseCoupangCsv(text);
+                }
+                else if (mallType === 'custom') {
+                    // 추후 커스텀 파서
+                }
+                else {
+                    orders = parseGenericCsv(text);
+                }
 
                 if (orders.length === 0) {
                     await showAlert('오류', '데이터를 추출하지 못했습니다. 형식을 확인해주세요.');
@@ -107,21 +107,32 @@ const SalesOnlineSync = () => {
                 }
 
                 // Identify Customers
-                for (const order of orders) {
+                const finalOrders = [];
+                for (let idx = 0; idx < orders.length; idx++) {
+                    const order = orders[idx];
                     try {
-                        if (!order.mobile) { order.isNewCustomer = true; continue; }
-                        const dups = await searchCustomerByMobile(order.mobile);
-                        if (dups && dups.length > 0) {
-                            order.isNewCustomer = false;
-                            order.existingCustomerId = dups[0].customer_id;
-                            order.existingCustomerName = dups[0].customer_name;
-                        } else {
+                        if (!order.mobile) {
                             order.isNewCustomer = true;
+                        } else {
+                            const dups = await searchCustomerByMobile(order.mobile);
+                            if (dups && dups.length > 0) {
+                                order.isNewCustomer = false;
+                                order.existingCustomerId = dups[0].customer_id;
+                                order.existingCustomerName = dups[0].customer_name;
+                                order.customerStatus = 'Exist';
+                            } else {
+                                order.isNewCustomer = true;
+                            }
                         }
-                    } catch (e) { console.warn(e); order.isNewCustomer = true; }
+                        finalOrders.push(order);
+                    } catch (e) {
+                        console.warn('Customer identification error:', e);
+                        order.isNewCustomer = true;
+                        finalOrders.push(order);
+                    }
                 }
 
-                setParsedOrders(orders);
+                setParsedOrders(finalOrders);
                 setStep('review');
 
             } catch (err) {
@@ -256,6 +267,7 @@ const SalesOnlineSync = () => {
         if (rows.length < 2) return [];
         return rows.slice(1).map(r => {
             const uPrice = parseNumber(r[6]) || 0;
+            const matchId = matchProduct(r[4], uPrice);
             return {
                 customerName: r[0],
                 mobile: r[1],
@@ -264,7 +276,7 @@ const SalesOnlineSync = () => {
                 mallProductName: r[4],
                 qty: parseInt(r[5]) || 1,
                 unitPrice: uPrice,
-                internalProductId: matchProduct(r[4], uPrice)
+                internalProductId: matchId
             };
         }).filter(o => o.customerName);
     };
@@ -515,8 +527,8 @@ const SalesOnlineSync = () => {
                         </div>
 
                         <div className="mb-6 text-left bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                            <label className="block text-xs font-black text-slate-400 uppercase mb-2 ml-1">쇼핑몰 선택</label>
-                            <select value={mallType} onChange={e => setMallType(e.target.value)}
+                            <label htmlFor="mall-type-select" className="block text-xs font-black text-slate-400 uppercase mb-2 ml-1">쇼핑몰 선택</label>
+                            <select id="mall-type-select" value={mallType} onChange={e => setMallType(e.target.value)}
                                 className="w-full h-12 px-4 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 focus:ring-4 focus:ring-teal-500/20 focus:border-teal-500 transition-all outline-none">
                                 <option value="sabangnet">사방넷 (Sabangnet API)</option>
                                 <option value="playauto">플레이오토 (PlayAuto API)</option>

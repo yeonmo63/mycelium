@@ -109,7 +109,13 @@ function AppContent() {
   const { showConfirm } = useModal();
   const IS_MOBILE = useMemo(() => getEnvironment(), []);
 
+  useEffect(() => {
+    document.documentElement.classList.add(IS_MOBILE ? 'is-mobile' : 'is-desktop');
+    document.documentElement.classList.remove(IS_MOBILE ? 'is-desktop' : 'is-mobile');
+  }, [IS_MOBILE]);
+
   const [isConfigured, setIsConfigured] = useState(null);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isLoggedIn') === 'true');
   const [isPinVerified, setIsPinVerified] = useState(() => localStorage.getItem('pin_verified') === 'true');
   const [mobileAuthRequired, setMobileAuthRequired] = useState(false);

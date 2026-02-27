@@ -37,7 +37,31 @@ html.is-mobile {
   color-scheme: light !important;
 }
 
-/* Global Print Mode Class - Final Override */
+/* Mobile-optimized Date Input Styling */
+html.is-mobile input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 2.5rem;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: right;
+  border: none;
+  cursor: pointer;
+  color: #0f172a;
+  padding: 0;
+  margin: 0;
+}
+
+/* Ensure the native date picker icon/arrow doesn't clutter the premium look if possible, but keep functionality */
+html.is-mobile input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: opacity(0.5);
+  margin-left: 0.5rem;
+}
+
+/* Desktop Dark Theme */
 html.printing-active,
 html.printing-active body,
 html.printing-active :root {
