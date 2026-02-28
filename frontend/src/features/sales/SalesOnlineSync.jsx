@@ -3,6 +3,7 @@ import { formatCurrency, parseNumber } from '../../utils/common';
 import { useModal } from '../../contexts/ModalContext';
 import { invoke } from '../../utils/apiBridge';
 import ExcelUploadModal from './components/reception/ExcelUploadModal';
+import { analyzeCSVError } from '../../utils/aiErrorHandler';
 
 const SalesOnlineSync = () => {
     const { showAlert, showConfirm } = useModal();
@@ -23,6 +24,10 @@ const SalesOnlineSync = () => {
     const [isQuickRegOpen, setIsQuickRegOpen] = useState(false);
     const [quickRegData, setQuickRegData] = useState({ name: '', spec: '1kg', price: '', tag: '' });
     const [pendingOrderForQuickReg, setPendingOrderForQuickReg] = useState(null);
+
+    // AI Analysis
+    const [aiGuidance, setAiGuidance] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     useEffect(() => {
         loadBaseData();
@@ -102,7 +107,10 @@ const SalesOnlineSync = () => {
                 }
 
                 if (orders.length === 0) {
-                    await showAlert('오류', '데이터를 추출하지 못했습니다. 형식을 확인해주세요.');
+                    setIsAnalyzing(true);
+                    const guidance = await analyzeCSVError(mallType, text);
+                    setAiGuidance(guidance);
+                    setIsAnalyzing(false);
                     return;
                 }
 
@@ -137,7 +145,10 @@ const SalesOnlineSync = () => {
 
             } catch (err) {
                 console.error(err);
-                await showAlert('파싱 오류', err.toString());
+                setIsAnalyzing(true);
+                const guidance = await analyzeCSVError(mallType, text);
+                setAiGuidance(guidance);
+                setIsAnalyzing(false);
             }
         };
         reader.readAsArrayBuffer(file);
@@ -574,6 +585,36 @@ const SalesOnlineSync = () => {
                                 </div>
                                 <button onClick={() => setFile(null)} className="text-emerald-400 hover:text-emerald-600">
                                     <span className="material-symbols-rounded text-sm">close</span>
+                                </button>
+                            </div>
+                        )}
+
+                        {isAnalyzing && (
+                            <div className="mb-6 bg-blue-50 p-6 rounded-2xl border border-blue-100 flex flex-col items-center gap-3 animate-pulse">
+                                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-xs font-black text-blue-600 uppercase tracking-widest">AI가 파일 형식을 분석하고 있습니다...</span>
+                            </div>
+                        )}
+
+                        {aiGuidance && !isAnalyzing && (
+                            <div className="mb-6 bg-gradient-to-br from-indigo-50 to-blue-50 p-6 rounded-[2rem] border border-blue-100 text-left relative overflow-hidden animate-in fade-in zoom-in duration-300">
+                                <div className="absolute top-0 right-0 p-4 opacity-10">
+                                    <span className="material-symbols-rounded text-6xl text-indigo-500">auto_awesome</span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-6 h-6 rounded-lg bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-200">
+                                        <span className="material-symbols-rounded text-white text-[14px]">smart_toy</span>
+                                    </div>
+                                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Smart AI Guide</span>
+                                </div>
+                                <div className="text-slate-700 text-[13px] font-medium leading-relaxed whitespace-pre-wrap">
+                                    {aiGuidance}
+                                </div>
+                                <button
+                                    onClick={() => setAiGuidance(null)}
+                                    className="mt-4 w-full h-10 bg-white/50 hover:bg-white text-slate-500 text-[11px] font-black rounded-xl border border-indigo-100/50 transition-all flex items-center justify-center gap-2"
+                                >
+                                    내용 확인함
                                 </button>
                             </div>
                         )}

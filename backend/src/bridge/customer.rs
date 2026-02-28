@@ -1,8 +1,9 @@
 use crate::db::{Customer, CustomerAddress, DbPool};
+use crate::middleware::auth::Claims;
 use axum::{
     extract::{Query, State},
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -45,6 +46,7 @@ pub async fn get_customer_addresses_bridge(
 
 pub async fn create_customer_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -86,11 +88,20 @@ pub async fn create_customer_bridge(
     };
     let new_cid = format!("{}-{:05}", prefix, next_seq);
 
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = pool.begin().await.unwrap();
+    crate::db::set_db_user_context(&mut *tx, username)
+        .await
+        .unwrap();
+
     let res = sqlx::query("INSERT INTO customers (customer_id, customer_name, customer_level, address_primary, address_detail, mobile_number, phone_number, memo, join_date, zip_code, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '정상')")
-        .bind(&new_cid).bind(name).bind(level).bind(addr1).bind(addr2).bind(mobile).bind(phone).bind(memo).bind(join_date).bind(zip).execute(&pool).await;
+        .bind(&new_cid).bind(name).bind(level).bind(addr1).bind(addr2).bind(mobile).bind(phone).bind(memo).bind(join_date).bind(zip).execute(&mut *tx).await;
 
     match res {
-        Ok(_) => Json(json!({ "success": true, "customerId": new_cid })),
+        Ok(_) => {
+            tx.commit().await.unwrap();
+            Json(json!({ "success": true, "customerId": new_cid }))
+        }
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
 }

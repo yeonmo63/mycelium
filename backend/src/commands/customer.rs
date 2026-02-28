@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
 use crate::db::{BestCustomer, Customer, CustomerAddress, CustomerLog, DbPool, Sales};
 
+use crate::middleware::auth::Claims;
 use axum::{
     extract::{Query, State as AxumState},
-    Json,
+    Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 
@@ -218,6 +219,7 @@ pub async fn get_customer(
 
 pub async fn create_customer(
     state: State<'_, DbPool>,
+    username: &str,
     customerName: String,
     mobileNumber: String,
     membershipLevel: Option<String>,
@@ -239,6 +241,8 @@ pub async fn create_customer(
     purchaseCycle: Option<String>,
 ) -> MyceliumResult<String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     // 1. Generate ID (CUID-XXXXXX)
     let new_id = format!("C-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
@@ -282,14 +286,16 @@ pub async fn create_customer(
     .bind(healthConcern)
     .bind(subInterest.unwrap_or(false))
     .bind(purchaseCycle)
-    .execute(&*state)
+    .execute(&mut *tx)
     .await?;
 
+    tx.commit().await?;
     Ok(new_id)
 }
 
 pub async fn update_customer(
     state: State<'_, DbPool>,
+    username: &str,
     customerId: String,
     customerName: String,
     mobileNumber: String,
@@ -315,8 +321,8 @@ pub async fn update_customer(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    // Enable Audit Context (Tauri context uses "Admin" by default)
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    // Enable Audit Context
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let a_date = if let Some(ref d) = anniversaryDate {
         if d.is_empty() {
@@ -378,11 +384,15 @@ pub async fn get_customer_logs(
     .await?)
 }
 
-pub async fn delete_customer(state: State<'_, DbPool>, customerId: String) -> MyceliumResult<()> {
+pub async fn delete_customer(
+    state: State<'_, DbPool>,
+    username: &str,
+    customerId: String,
+) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("UPDATE customers SET status = '말소' WHERE customer_id = $1")
         .bind(customerId)
@@ -395,12 +405,13 @@ pub async fn delete_customer(state: State<'_, DbPool>, customerId: String) -> My
 
 pub async fn reactivate_customer(
     state: State<'_, DbPool>,
+    username: &str,
     customerId: String,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = $1")
         .bind(customerId)
@@ -413,6 +424,7 @@ pub async fn reactivate_customer(
 
 pub async fn delete_customers_batch(
     state: State<'_, DbPool>,
+    username: &str,
     ids: Vec<String>,
     permanent: bool,
     also_delete_sales: bool,
@@ -420,7 +432,7 @@ pub async fn delete_customers_batch(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     if permanent {
         if also_delete_sales {
@@ -446,12 +458,13 @@ pub async fn delete_customers_batch(
 
 pub async fn reactivate_customers_batch(
     state: State<'_, DbPool>,
+    username: &str,
     ids: Vec<String>,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = ANY($1)")
         .bind(&ids)
@@ -731,20 +744,27 @@ pub async fn search_best_customers(
 
 pub async fn update_customer_membership_batch(
     state: State<'_, DbPool>,
+    username: &str,
     customerIds: Vec<String>,
     newLevel: String,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE customers SET membership_level = $1 WHERE customer_id = ANY($2)")
         .bind(newLevel)
         .bind(&customerIds)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
 pub async fn update_customer_memo_batch(
     state: State<'_, DbPool>,
+    username: &str,
     customerIds: Vec<String>,
     newMemo: String,
     append: bool,
@@ -752,7 +772,7 @@ pub async fn update_customer_memo_batch(
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
 
-    crate::db::set_db_user_context(&mut *tx, "Admin").await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     if append {
         sqlx::query("UPDATE customers SET memo = COALESCE(memo, '') || '\n' || $1 WHERE customer_id = ANY($2)")
@@ -814,9 +834,13 @@ pub async fn search_customers_by_mobile_axum(
 
 pub async fn create_customer_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<CustomerInput>,
 ) -> MyceliumResult<Json<String>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     // 1. Generate ID (CUID-XXXXXX)
     let new_id = format!("C-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
@@ -860,14 +884,17 @@ pub async fn create_customer_axum(
     .bind(input.health_concern)
     .bind(input.sub_interest.unwrap_or(false))
     .bind(input.purchase_cycle)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     Ok(Json(new_id))
 }
 
 pub async fn update_customer_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<CustomerInput>,
 ) -> MyceliumResult<Json<()>> {
     let customer_id = input.customer_id.ok_or(MyceliumError::Validation(
@@ -875,7 +902,9 @@ pub async fn update_customer_axum(
     ))?;
 
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
     let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     // 1. Get Old Data for logging
     let old: Customer = sqlx::query_as("SELECT * FROM customers WHERE customer_id = $1")
@@ -1011,34 +1040,51 @@ pub async fn get_customer_logs_axum(
 
 pub async fn delete_customer_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<CustomerDeleteInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE customers SET status = '말소' WHERE customer_id = $1")
         .bind(input.customer_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(Json(()))
 }
 
 pub async fn reactivate_customer_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<CustomerDeleteInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = $1")
         .bind(input.customer_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(Json(()))
 }
 
 pub async fn create_customer_address_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<AddressInput>,
 ) -> MyceliumResult<Json<i32>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
     let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     if input.is_default {
         sqlx::query("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = $1")
@@ -1116,22 +1162,32 @@ pub async fn update_customer_address_axum(
 
 pub async fn delete_customer_address_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<AddressDeleteInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("DELETE FROM customer_addresses WHERE address_id = $1")
         .bind(input.address_id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(Json(()))
 }
 
 pub async fn set_default_customer_address_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<SetDefaultAddressInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
     let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = $1")
         .bind(&input.customer_id)
@@ -1342,10 +1398,13 @@ pub struct BatchDeleteInput {
 
 pub async fn delete_customers_batch_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<BatchDeleteInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
     let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     if input.permanent {
         if input.also_delete_sales {
@@ -1389,13 +1448,20 @@ pub struct BatchReactivateInput {
 
 pub async fn reactivate_customers_batch_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<BatchReactivateInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE customers SET status = '정상' WHERE customer_id = ANY($1)")
         .bind(&input.ids)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(Json(()))
 }
 
@@ -1457,14 +1523,21 @@ pub struct UpdateMembershipBatchInput {
 
 pub async fn update_customer_membership_batch_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(input): Json<UpdateMembershipBatchInput>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    let mut tx = state.pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE customers SET membership_level = $1 WHERE customer_id = ANY($2)")
         .bind(input.new_level)
         .bind(&input.customer_ids)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(Json(()))
 }
 
@@ -1478,10 +1551,12 @@ pub struct UpdateMemoBatchRequest {
 
 pub async fn update_customer_memo_batch_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<UpdateMemoBatchRequest>,
 ) -> MyceliumResult<Json<()>> {
     update_customer_memo_batch(
         crate::stubs::State::from(&state.pool),
+        claims.username.as_deref().unwrap_or("Admin"),
         payload.customer_ids,
         payload.new_memo,
         payload.append,

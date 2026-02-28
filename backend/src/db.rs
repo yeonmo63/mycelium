@@ -146,6 +146,8 @@ pub struct Sales {
     pub tax_type: Option<String>,
     #[sqlx(default)]
     pub tax_exempt_value: Option<i32>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -352,6 +354,8 @@ pub struct Product {
     pub tax_type: Option<String>,
     #[sqlx(default)]
     pub tax_exempt_value: Option<i32>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -706,6 +710,8 @@ pub struct ProductPriceHistory {
     pub new_price: i32,
     pub reason: Option<String>,
     pub changed_at: chrono::NaiveDateTime,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -723,6 +729,8 @@ pub struct InventoryLog {
     pub created_at: Option<chrono::NaiveDateTime>,
     #[sqlx(default)]
     pub updated_at: Option<chrono::NaiveDateTime>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -767,6 +775,8 @@ pub struct ProductionSpace {
     pub memo: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -783,6 +793,8 @@ pub struct ProductionBatch {
     pub unit: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -799,6 +811,8 @@ pub struct FarmingLog {
     pub photos: Option<serde_json::Value>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
@@ -826,6 +840,8 @@ pub struct HarvestRecord {
     pub created_at: Option<DateTime<Utc>>,
     #[sqlx(default)]
     pub updated_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub changed_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]

@@ -31,6 +31,7 @@ mod tests {
 
         let result: MyceliumResult<String> = create_sale_internal(
             &pool,
+            "Admin",
             None,
             product_name.clone(),
             Some("테스트 규격".to_string()),
@@ -98,6 +99,7 @@ mod tests {
 
         let create_res: MyceliumResult<String> = create_sale_internal(
             &pool,
+            "Admin",
             None,
             product_name.clone(),
             None,
@@ -121,7 +123,12 @@ mod tests {
         let sale_id = create_res.unwrap();
 
         // 2. Delete the sale
-        let delete_res = crate::commands::sales::order::delete_sale(&pool, sale_id.clone()).await;
+        let delete_res = crate::commands::sales::order::delete_sale(
+            crate::stubs::State::from(&pool),
+            "Admin",
+            sale_id.clone(),
+        )
+        .await;
 
         assert!(
             delete_res.is_ok(),
@@ -150,6 +157,7 @@ mod tests {
         let product_name = "상태 업데이트 테스트".to_string();
         let sale_id = create_sale_internal(
             &pool,
+            "Admin",
             None,
             product_name,
             None,
@@ -172,7 +180,8 @@ mod tests {
 
         // 2. Update status
         let res = crate::commands::sales::order::update_sale_status(
-            &pool,
+            crate::stubs::State::from(&pool),
+            "Admin",
             sale_id.clone(),
             "입금완료".to_string(),
         )
@@ -276,8 +285,14 @@ mod tests {
         }
         println!("TRIGGER COUNT ON sales: {}", trig_names.len());
 
-        let main_pid: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ('BOM Main Test', 'Test Spec', 100, 'product') RETURNING product_id").fetch_one(&pool).await.unwrap();
-        let mat_pid: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ('BOM Material Test', 'Test Spec', 100, 'material') RETURNING product_id").fetch_one(&pool).await.unwrap();
+        let test_suffix = uuid::Uuid::new_v4().to_string()[..8].to_string();
+        let main_name = format!("BOM Main Test {}", test_suffix);
+        let mat_name = format!("BOM Material Test {}", test_suffix);
+
+        let main_pid: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ($1, 'Test Spec', 100, 'product') RETURNING product_id")
+            .bind(&main_name).fetch_one(&pool).await.unwrap();
+        let mat_pid: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ($1, 'Test Spec', 100, 'material') RETURNING product_id")
+            .bind(&mat_name).fetch_one(&pool).await.unwrap();
         println!("PIDs: Main={}, Material={}", main_pid, mat_pid);
 
         // 2. Setup BOM: 1 Main needs 2.5 units of Material
@@ -293,8 +308,9 @@ mod tests {
         // 3. Create a sale for 4 units
         let sale_id = create_sale_internal(
             &pool,
+            "Admin",
             None,
-            "BOM Main Test".to_string(),
+            main_name.clone(),
             Some("Test Spec".to_string()),
             4,
             1000,
@@ -350,9 +366,13 @@ mod tests {
         assert_eq!(s2, 90, "Material product stock mismatch after insert");
 
         // 5. Delete sale
-        crate::commands::sales::order::delete_sale(&pool, sale_id)
-            .await
-            .unwrap();
+        crate::commands::sales::order::delete_sale(
+            crate::stubs::State::from(&pool),
+            "Admin",
+            sale_id,
+        )
+        .await
+        .unwrap();
 
         // 6. Check stocks again: everything restored
         let r1: i32 =
@@ -518,8 +538,9 @@ mod tests {
             unit: Some("kg".to_string()),
             created_at: None,
             updated_at: None,
+            changed_by: None,
         };
-        save_production_batch(crate::stubs::State::from(&pool), batch)
+        save_production_batch(crate::stubs::State::from(&pool), "Admin", batch)
             .await
             .expect("Failed to create production batch");
 
@@ -551,12 +572,18 @@ mod tests {
             memo: Some("Test Harvest".to_string()),
             created_at: None,
             updated_at: None,
+            changed_by: None,
         };
 
         // Use a transaction scope if needed, but save_harvest_record starts its own
-        save_harvest_record(crate::stubs::State::from(&pool), record, Some(true))
-            .await
-            .expect("Failed to record harvest");
+        save_harvest_record(
+            crate::stubs::State::from(&pool),
+            "Admin",
+            record,
+            Some(true),
+        )
+        .await
+        .expect("Failed to record harvest");
 
         // 4. Verify Results
         // Verify Stock Increase
@@ -591,5 +618,104 @@ mod tests {
         );
 
         println!("SUCCESS: Production harvest flow verified. Stock increased and batch completed.");
+    }
+
+    #[tokio::test]
+    async fn test_harvest_bom_deduction_integration() {
+        let pool = setup_test_db().await;
+
+        // 1. Setup - Create a main product and material products
+        let u_str = uuid::Uuid::new_v4().to_string();
+        let main_name = format!("BOM Harvest Main - {}", &u_str[..8]);
+        let mat1_name = format!("BOM Mat Box - {}", &u_str[..8]);
+        let mat2_name = format!("BOM Mat Vinyl - {}", &u_str[..8]);
+
+        let main_id: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ($1, 'Test', 0, 'product') RETURNING product_id")
+            .bind(&main_name).fetch_one(&pool).await.unwrap();
+        let mat1_id: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ($1, 'Box', 100, 'material') RETURNING product_id")
+            .bind(&mat1_name).fetch_one(&pool).await.unwrap();
+        let mat2_id: i32 = sqlx::query_scalar("INSERT INTO products (product_name, specification, stock_quantity, item_type) VALUES ($1, 'Vinyl', 100, 'material') RETURNING product_id")
+            .bind(&mat2_name).fetch_one(&pool).await.unwrap();
+
+        // 2. Setup - Create BOM: 1 Main needs 1 Box (ratio 1.0) and 2 Vinyls (ratio 2.0)
+        sqlx::query("INSERT INTO product_bom (product_id, material_id, ratio) VALUES ($1, $2, 1.0), ($1, $3, 2.0)")
+            .bind(main_id).bind(mat1_id).bind(mat2_id).execute(&pool).await.unwrap();
+
+        // 3. Setup - Create a production batch
+        let b_code = format!("BATCH-BOM-{}", &u_str[..8]);
+        sqlx::query("INSERT INTO production_batches (batch_code, product_id, start_date, status) VALUES ($1, $2, CURRENT_DATE, 'running')")
+            .bind(&b_code).bind(main_id).execute(&pool).await.unwrap();
+        let b_id: i32 =
+            sqlx::query_scalar("SELECT batch_id FROM production_batches WHERE batch_code = $1")
+                .bind(&b_code)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        // 4. Record a Harvest of 10 units
+        let record = HarvestRecord {
+            harvest_id: 0,
+            batch_id: Some(b_id),
+            harvest_date: chrono::Local::now().date_naive(),
+            quantity: Decimal::from(10),
+            defective_quantity: None,
+            loss_quantity: None,
+            unit: "kg".to_string(),
+            grade: None,
+            traceability_code: None,
+            lot_number: None,
+            package_count: None,
+            weight_per_package: None,
+            package_unit: None,
+            memo: Some("BOM Test Harvest".to_string()),
+            created_at: None,
+            updated_at: None,
+            changed_by: None,
+        };
+
+        save_harvest_record(
+            crate::stubs::State::from(&pool),
+            "Admin",
+            record,
+            Some(false),
+        )
+        .await
+        .expect("Failed to record harvest");
+
+        // 5. Verify Results
+        // Main product stock: 0 -> 10
+        let s_main: i32 =
+            sqlx::query_scalar("SELECT stock_quantity FROM products WHERE product_id = $1")
+                .bind(main_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(s_main, 10, "Main product stock should be 10");
+
+        // Material 1 (Box): 100 -> 100 - (10 * 1.0) = 90
+        let s_mat1: i32 =
+            sqlx::query_scalar("SELECT stock_quantity FROM products WHERE product_id = $1")
+                .bind(mat1_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(s_mat1, 90, "Material 1 (Box) stock should be 90");
+
+        // Material 2 (Vinyl): 100 -> 100 - (10 * 2.0) = 80
+        let s_mat2: i32 =
+            sqlx::query_scalar("SELECT stock_quantity FROM products WHERE product_id = $1")
+                .bind(mat2_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(s_mat2, 80, "Material 2 (Vinyl) stock should be 80");
+
+        // Verify Inventory Logs for BOM materials
+        let logs: Vec<(String, i32)> = sqlx::query_as("SELECT product_name, change_quantity FROM inventory_logs WHERE reference_id = $1 AND product_id IN ($2, $3)")
+            .bind(format!("HARVEST_{}", b_code))
+            .bind(mat1_id).bind(mat2_id).fetch_all(&pool).await.unwrap();
+
+        assert_eq!(logs.len(), 2, "Should have 2 BOM deduction logs");
+        println!("BOM deduction verified successfully.");
     }
 }

@@ -202,6 +202,7 @@ pub async fn consolidate_products(
 pub async fn create_product(
     app: AppHandle,
     state: TauriState<'_, DbPool>,
+    username: &str,
     productName: String,
     specification: Option<String>,
     unitPrice: i32,
@@ -221,6 +222,7 @@ pub async fn create_product(
     // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let row: (i32,) = sqlx::query_as(
         "INSERT INTO products (
@@ -272,6 +274,7 @@ pub async fn create_product(
 pub async fn update_product(
     app: AppHandle,
     state: TauriState<'_, DbPool>,
+    username: &str,
     productId: i32,
     productName: String,
     specification: Option<String>,
@@ -292,6 +295,7 @@ pub async fn update_product(
 ) -> MyceliumResult<()> {
     // config_check_admin(&app)?;
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
     let sync = syncSalesNames.unwrap_or(false);
     let cost = costPrice.unwrap_or(0);
     let ratio = materialRatio.unwrap_or(1.0);
@@ -408,10 +412,16 @@ pub async fn update_product(
 }
 
 
-pub async fn discontinue_product(app: AppHandle, state: TauriState<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+pub async fn discontinue_product(
+    app: AppHandle,
+    state: TauriState<'_, DbPool>,
+    username: &str,
+    productId: i32,
+) -> MyceliumResult<()> {
     // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(productId)
@@ -440,7 +450,12 @@ pub async fn discontinue_product(app: AppHandle, state: TauriState<'_, DbPool>, 
 }
 
 
-pub async fn delete_product(app: AppHandle, state: TauriState<'_, DbPool>, productId: i32) -> MyceliumResult<()> {
+pub async fn delete_product(
+    app: AppHandle,
+    state: TauriState<'_, DbPool>,
+    username: &str,
+    productId: i32,
+) -> MyceliumResult<()> {
     // config_check_admin(&app)?;
     let sales_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM sales WHERE product_id = $1")
         .bind(productId)
@@ -475,6 +490,7 @@ pub async fn delete_product(app: AppHandle, state: TauriState<'_, DbPool>, produ
 
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("DELETE FROM inventory_logs WHERE product_id = $1")
         .bind(productId)
@@ -594,6 +610,7 @@ pub async fn get_product_history(
 pub async fn update_product_stock(
     app: AppHandle,
     state: TauriState<'_, DbPool>,
+    username: &str,
     productId: i32,
     newQty: i32,
     reason: String,
@@ -601,6 +618,7 @@ pub async fn update_product_stock(
     // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(productId)
@@ -634,6 +652,7 @@ pub async fn update_product_stock(
 pub async fn convert_stock(
     app: AppHandle,
     state: TauriState<'_, DbPool>,
+    username: &str,
     materialId: i32,
     productId: i32,
     convertQty: i32,
@@ -643,6 +662,7 @@ pub async fn convert_stock(
     // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let material: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(materialId)
@@ -723,6 +743,7 @@ pub async fn convert_stock(
 pub async fn adjust_product_stock(
     app: AppHandle,
     state: TauriState<'_, DbPool>,
+    username: &str,
     productId: i32,
     changeQty: i32,
     memo: String,
@@ -731,6 +752,7 @@ pub async fn adjust_product_stock(
     // config_check_admin(&app)?;
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let product: Product = sqlx::query_as("SELECT product_id, product_name, specification, product_code, stock_quantity, unit_price FROM products WHERE product_id = $1")
         .bind(productId).fetch_one(&mut *tx).await?;
@@ -818,10 +840,13 @@ pub struct AdjustStockRequest {
 
 pub async fn adjust_product_stock_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<AdjustStockRequest>,
 ) -> MyceliumResult<Json<()>> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let product: Product = sqlx::query_as("SELECT product_id, product_name, specification, product_code, stock_quantity, unit_price FROM products WHERE product_id = $1")
         .bind(payload.productId).fetch_one(&mut *tx).await?;
@@ -1114,11 +1139,13 @@ pub async fn get_product_bom(
 
 pub async fn save_product_bom(
     pool: TauriState<'_, DbPool>,
+    username: &str,
     productId: i32,
     bomList: Vec<BomItemInput>,
 ) -> MyceliumResult<()> {
     // DB_MODIFIED.store(true, Ordering::Relaxed); // Optional unless strictly needed
     let mut tx = pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     // 1. Delete existing BOM
     sqlx::query("DELETE FROM product_bom WHERE product_id = $1")
@@ -1481,6 +1508,8 @@ pub async fn create_product_axum(
     }
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let row: (i32,) = sqlx::query_as(
         "INSERT INTO products (
@@ -1574,6 +1603,8 @@ pub async fn update_product_axum(
         return Err(MyceliumError::Validation("Admin authority required".into()));
     }
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
     let sync = payload.syncSalesNames.unwrap_or(false);
     let cost = payload.costPrice.unwrap_or(0);
     let ratio = payload.materialRatio.unwrap_or(1.0);
@@ -1712,6 +1743,8 @@ pub async fn discontinue_product_axum(
     }
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let product: Product = sqlx::query_as("SELECT * FROM products WHERE product_id = $1")
         .bind(payload.productId)
@@ -1780,6 +1813,8 @@ pub async fn delete_product_axum(
 
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("DELETE FROM inventory_logs WHERE product_id = $1")
         .bind(payload.productId)
@@ -1939,9 +1974,12 @@ pub struct SaveBomRequest {
 
 pub async fn save_product_bom_axum(
     AxumState(state): AxumState<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<SaveBomRequest>,
 ) -> MyceliumResult<Json<()>> {
     let mut tx = state.pool.begin().await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     sqlx::query("DELETE FROM product_bom WHERE product_id = $1")
         .bind(payload.productId)

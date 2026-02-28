@@ -1,8 +1,10 @@
 use crate::db::{DbPool, FarmingLog};
 use crate::error::MyceliumResult;
+use crate::middleware::auth::Claims;
 use crate::state::AppState;
 use crate::stubs::State;
 use axum::extract::{Json, Query, State as AxumState};
+use axum::Extension;
 use serde::Deserialize;
 use sqlx::{query, query_as};
 
@@ -33,8 +35,15 @@ pub async fn get_farming_logs(
     Ok(logs)
 }
 
-pub async fn save_farming_log(state: State<'_, DbPool>, log: FarmingLog) -> MyceliumResult<()> {
+pub async fn save_farming_log(
+    state: State<'_, DbPool>,
+    username: &str,
+    log: FarmingLog,
+) -> MyceliumResult<()> {
     let pool = &*state;
+    let mut tx = pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     if log.log_id > 0 {
         query(
             "UPDATE farming_logs SET batch_id = $1, space_id = $2, log_date = $3, worker_name = $4, work_type = $5, work_content = $6, input_materials = $7, env_data = $8, photos = $9, updated_at = CURRENT_TIMESTAMP WHERE log_id = $10"
@@ -49,7 +58,7 @@ pub async fn save_farming_log(state: State<'_, DbPool>, log: FarmingLog) -> Myce
         .bind(&log.env_data)
         .bind(&log.photos)
         .bind(log.log_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     } else {
         query(
@@ -64,18 +73,28 @@ pub async fn save_farming_log(state: State<'_, DbPool>, log: FarmingLog) -> Myce
         .bind(&log.input_materials)
         .bind(&log.env_data)
         .bind(&log.photos)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     }
+    tx.commit().await?;
     Ok(())
 }
 
-pub async fn delete_farming_log(state: State<'_, DbPool>, log_id: i32) -> MyceliumResult<()> {
+pub async fn delete_farming_log(
+    state: State<'_, DbPool>,
+    username: &str,
+    log_id: i32,
+) -> MyceliumResult<()> {
     let pool = &*state;
+    let mut tx = pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     query("DELETE FROM farming_logs WHERE log_id = $1")
         .bind(log_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -114,41 +133,11 @@ pub async fn get_farming_logs_axum(
 
 pub async fn save_farming_log_axum(
     AxumState(state): AxumState<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(log): Json<FarmingLog>,
 ) -> MyceliumResult<Json<()>> {
-    let pool = &state.pool;
-    if log.log_id > 0 {
-        query(
-            "UPDATE farming_logs SET batch_id = $1, space_id = $2, log_date = $3, worker_name = $4, work_type = $5, work_content = $6, input_materials = $7, env_data = $8, photos = $9, updated_at = CURRENT_TIMESTAMP WHERE log_id = $10"
-        )
-        .bind(log.batch_id)
-        .bind(log.space_id)
-        .bind(log.log_date)
-        .bind(&log.worker_name)
-        .bind(&log.work_type)
-        .bind(&log.work_content)
-        .bind(&log.input_materials)
-        .bind(&log.env_data)
-        .bind(&log.photos)
-        .bind(log.log_id)
-        .execute(pool)
-        .await?;
-    } else {
-        query(
-            "INSERT INTO farming_logs (batch_id, space_id, log_date, worker_name, work_type, work_content, input_materials, env_data, photos) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
-        )
-        .bind(log.batch_id)
-        .bind(log.space_id)
-        .bind(log.log_date)
-        .bind(&log.worker_name)
-        .bind(&log.work_type)
-        .bind(&log.work_content)
-        .bind(&log.input_materials)
-        .bind(&log.env_data)
-        .bind(&log.photos)
-        .execute(pool)
-        .await?;
-    }
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    save_farming_log(crate::stubs::State::from(&state.pool), username, log).await?;
     Ok(Json(()))
 }
 
@@ -159,12 +148,10 @@ pub struct DeleteLogRequest {
 
 pub async fn delete_farming_log_body_axum(
     AxumState(state): AxumState<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<DeleteLogRequest>,
 ) -> MyceliumResult<Json<()>> {
-    let pool = &state.pool;
-    query("DELETE FROM farming_logs WHERE log_id = $1")
-        .bind(payload.id)
-        .execute(pool)
-        .await?;
+    let username = claims.username.as_deref().unwrap_or("Admin");
+    delete_farming_log(crate::stubs::State::from(&state.pool), username, payload.id).await?;
     Ok(Json(()))
 }

@@ -13,10 +13,11 @@ use crate::commands::sales::query::{
     search_sales_by_any_internal,
 };
 use crate::db::{DbPool, Sales};
+use crate::middleware::auth::Claims;
 use axum::{
     extract::{Query, State},
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -37,6 +38,7 @@ pub async fn get_sales_claims_bridge(
 
 pub async fn create_sales_claim_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let sales_id = payload
@@ -67,8 +69,11 @@ pub async fn create_sales_claim_bridge(
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
 
+    let username = claims.username.as_deref().unwrap_or("Admin");
+
     match create_sales_claim_internal(
         &pool,
+        username,
         sales_id,
         customer_id,
         claim_type,
@@ -85,6 +90,7 @@ pub async fn create_sales_claim_bridge(
 
 pub async fn process_sales_claim_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
@@ -102,8 +108,11 @@ pub async fn process_sales_claim_bridge(
         .and_then(|v| v.as_i64())
         .unwrap_or(0) as i32;
 
+    let username = claims.username.as_deref().unwrap_or("Admin");
+
     match process_sales_claim_internal(
         &pool,
+        username,
         claim_id,
         claim_status,
         is_inventory_recovered,
@@ -118,6 +127,7 @@ pub async fn process_sales_claim_bridge(
 
 pub async fn update_sales_claim_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
@@ -135,7 +145,11 @@ pub async fn update_sales_claim_bridge(
         .and_then(|v| v.as_str())
         .map(|v| v.to_string());
 
-    match update_sales_claim_internal(&pool, claim_id, reason_category, quantity, memo).await {
+    let username = claims.username.as_deref().unwrap_or("Admin");
+
+    match update_sales_claim_internal(&pool, username, claim_id, reason_category, quantity, memo)
+        .await
+    {
         Ok(_) => Json(json!({ "success": true })),
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
@@ -143,11 +157,14 @@ pub async fn update_sales_claim_bridge(
 
 pub async fn delete_sales_claim_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let claim_id = payload.get("claimId").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
-    match delete_sales_claim_internal(&pool, claim_id).await {
+    let username = claims.username.as_deref().unwrap_or("Admin");
+
+    match delete_sales_claim_internal(&pool, username, claim_id).await {
         Ok(_) => Json(json!({ "success": true })),
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
@@ -242,6 +259,7 @@ pub async fn get_shipments_bridge(
 
 pub async fn update_sale_status_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let sales_id = payload
@@ -249,38 +267,53 @@ pub async fn update_sale_status_bridge(
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let status = payload.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    let username = claims.username.as_deref().unwrap_or("Admin");
 
     if sales_id.is_empty() || status.is_empty() {
         return Json(json!({ "success": false, "error": "Invalid arguments" }));
     }
 
+    let mut tx = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => return Json(json!({ "success": false, "error": e.to_string() })),
+    };
+
+    if let Err(e) = crate::db::set_db_user_context(&mut *tx, username).await {
+        return Json(json!({ "success": false, "error": e.to_string() }));
+    }
+
     let res = sqlx::query("UPDATE sales SET status = $1 WHERE sales_id = $2")
         .bind(status)
         .bind(sales_id)
-        .execute(&pool)
+        .execute(&mut *tx)
         .await;
 
     match res {
-        Ok(_) => Json(json!({ "success": true })),
+        Ok(_) => {
+            let _ = tx.commit().await;
+            Json(json!({ "success": true }))
+        }
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
 }
 
 pub async fn complete_shipment_bridge(
     State((pool, _)): State<(DbPool, PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let sales_id = payload
         .get("salesId")
         .and_then(|v| v.as_str())
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
     let carrier = payload
         .get("carrier")
         .and_then(|v| v.as_str())
-        .unwrap_or("");
+        .map(|v| v.to_string());
     let tracking_val = payload.get("trackingNumber");
     let tracking = if tracking_val.is_some() && !tracking_val.unwrap().is_null() {
-        tracking_val.and_then(|v| v.as_str())
+        tracking_val.and_then(|v| v.as_str()).map(|v| v.to_string())
     } else {
         None
     };
@@ -289,18 +322,20 @@ pub async fn complete_shipment_bridge(
         .get("shippingDate")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let shipping_date = chrono::NaiveDate::parse_from_str(shipping_date_str, "%Y-%m-%d")
-        .unwrap_or_else(|_| chrono::Local::now().date_naive());
 
-    let res = sqlx::query("UPDATE sales SET status = '배송중', courier_name = $1, tracking_number = $2, shipping_date = $3 WHERE sales_id = $4")
-        .bind(carrier)
-        .bind(tracking)
-        .bind(shipping_date)
-        .bind(sales_id)
-        .execute(&pool)
-        .await;
+    let username = claims.username.as_deref().unwrap_or("Admin");
 
-    match res {
+    match crate::commands::sales::order::complete_shipment(
+        crate::stubs::State::from(&pool),
+        username,
+        sales_id,
+        None, // memo
+        carrier,
+        tracking,
+        Some(shipping_date_str.to_string()),
+    )
+    .await
+    {
         Ok(_) => Json(json!({ "success": true })),
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
@@ -352,6 +387,7 @@ pub async fn save_special_sales_batch_bridge(
 
 pub async fn delete_sale_bridge(
     State((pool, _)): State<(DbPool, std::path::PathBuf)>,
+    Extension(claims): Extension<Claims>,
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let sales_id = payload
@@ -362,7 +398,15 @@ pub async fn delete_sale_bridge(
         return Json(json!({ "success": false, "error": "Missing salesId" }));
     }
 
-    match crate::commands::sales::order::delete_sale(&pool, sales_id.to_string()).await {
+    let username = claims.username.as_deref().unwrap_or("Admin");
+
+    match crate::commands::sales::order::delete_sale(
+        crate::stubs::State::from(&pool),
+        username,
+        sales_id.to_string(),
+    )
+    .await
+    {
         Ok(_) => Json(json!({ "success": true })),
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }

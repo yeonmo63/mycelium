@@ -619,10 +619,10 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                 }
                 "products" => {
                     let d: Product = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, updated_at, product_code, status, category, tax_type, tax_exempt_value) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) 
-                                 ON CONFLICT (product_id) DO UPDATE SET product_name=$2, specification=$3, unit_price=$4, stock_quantity=$5, safety_stock=$6, cost_price=$7, material_id=$8, material_ratio=$9, aux_material_id=$10, aux_material_ratio=$11, item_type=$12, updated_at=$13, product_code=$14, status=$15, category=$16, tax_type=$17, tax_exempt_value=$18")
-                        .bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.stock_quantity).bind(d.safety_stock).bind(d.cost_price).bind(d.material_id).bind(d.material_ratio).bind(d.aux_material_id).bind(d.aux_material_ratio).bind(&d.item_type).bind(d.updated_at).bind(&d.product_code).bind(&d.status).bind(&d.category).bind(&d.tax_type).bind(d.tax_exempt_value)
+                    sqlx::query("INSERT INTO products (product_id, product_name, specification, unit_price, stock_quantity, safety_stock, cost_price, material_id, material_ratio, aux_material_id, aux_material_ratio, item_type, updated_at, product_code, status, category, tax_type, tax_exempt_value, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) 
+                                 ON CONFLICT (product_id) DO UPDATE SET product_name=$2, specification=$3, unit_price=$4, stock_quantity=$5, safety_stock=$6, cost_price=$7, material_id=$8, material_ratio=$9, aux_material_id=$10, aux_material_ratio=$11, item_type=$12, updated_at=$13, product_code=$14, status=$15, category=$16, tax_type=$17, tax_exempt_value=$18, changed_by=$19")
+                        .bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.stock_quantity).bind(d.safety_stock).bind(d.cost_price).bind(d.material_id).bind(d.material_ratio).bind(d.aux_material_id).bind(d.aux_material_ratio).bind(&d.item_type).bind(d.updated_at).bind(&d.product_code).bind(&d.status).bind(&d.category).bind(&d.tax_type).bind(d.tax_exempt_value).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "product_bom" => {
@@ -633,10 +633,10 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                 }
                 "product_price_history" => {
                     let d: ProductPriceHistory = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO product_price_history (history_id, product_id, old_price, new_price, reason, changed_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6) 
+                    sqlx::query("INSERT INTO product_price_history (history_id, product_id, old_price, new_price, reason, changed_at, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7) 
                                  ON CONFLICT (history_id) DO NOTHING")
-                        .bind(d.history_id).bind(d.product_id).bind(d.old_price).bind(d.new_price).bind(&d.reason).bind(d.changed_at)
+                        .bind(d.history_id).bind(d.product_id).bind(d.old_price).bind(d.new_price).bind(&d.reason).bind(d.changed_at).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "customers" => {
@@ -657,18 +657,18 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                 }
                 "sales" => {
                     let d: Sales = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at, product_code, product_id, supply_value, vat_amount, tax_type, tax_exempt_value) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) 
-                                 ON CONFLICT (sales_id) DO UPDATE SET status=$3, order_date=$4, product_name=$5, specification=$6, unit_price=$7, quantity=$8, total_amount=$9, discount_rate=$10, courier_name=$11, tracking_number=$12, memo=$13, shipping_name=$14, shipping_zip_code=$15, shipping_address_primary=$16, shipping_address_detail=$17, shipping_mobile_number=$18, shipping_date=$19, paid_amount=$20, payment_status=$21, updated_at=$22, product_code=$23, product_id=$24, supply_value=$25, vat_amount=$26, tax_type=$27, tax_exempt_value=$28")
-                        .bind(&d.sales_id).bind(&d.customer_id).bind(&d.status).bind(d.order_date).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.quantity).bind(d.total_amount).bind(d.discount_rate).bind(&d.courier_name).bind(&d.tracking_number).bind(&d.memo).bind(&d.shipping_name).bind(&d.shipping_zip_code).bind(&d.shipping_address_primary).bind(&d.shipping_address_detail).bind(&d.shipping_mobile_number).bind(d.shipping_date).bind(d.paid_amount).bind(&d.payment_status).bind(d.updated_at).bind(&d.product_code).bind(d.product_id).bind(d.supply_value).bind(d.vat_amount).bind(&d.tax_type).bind(d.tax_exempt_value)
+                    sqlx::query("INSERT INTO sales (sales_id, customer_id, status, order_date, product_name, specification, unit_price, quantity, total_amount, discount_rate, courier_name, tracking_number, memo, shipping_name, shipping_zip_code, shipping_address_primary, shipping_address_detail, shipping_mobile_number, shipping_date, paid_amount, payment_status, updated_at, product_code, product_id, supply_value, vat_amount, tax_type, tax_exempt_value, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) 
+                                 ON CONFLICT (sales_id) DO UPDATE SET status=$3, order_date=$4, product_name=$5, specification=$6, unit_price=$7, quantity=$8, total_amount=$9, discount_rate=$10, courier_name=$11, tracking_number=$12, memo=$13, shipping_name=$14, shipping_zip_code=$15, shipping_address_primary=$16, shipping_address_detail=$17, shipping_mobile_number=$18, shipping_date=$19, paid_amount=$20, payment_status=$21, updated_at=$22, product_code=$23, product_id=$24, supply_value=$25, vat_amount=$26, tax_type=$27, tax_exempt_value=$28, changed_by=$29")
+                        .bind(&d.sales_id).bind(&d.customer_id).bind(&d.status).bind(d.order_date).bind(&d.product_name).bind(&d.specification).bind(d.unit_price).bind(d.quantity).bind(d.total_amount).bind(d.discount_rate).bind(&d.courier_name).bind(&d.tracking_number).bind(&d.memo).bind(&d.shipping_name).bind(&d.shipping_zip_code).bind(&d.shipping_address_primary).bind(&d.shipping_address_detail).bind(&d.shipping_mobile_number).bind(d.shipping_date).bind(d.paid_amount).bind(&d.payment_status).bind(d.updated_at).bind(&d.product_code).bind(d.product_id).bind(d.supply_value).bind(d.vat_amount).bind(&d.tax_type).bind(d.tax_exempt_value).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "inventory_logs" => {
                     let d: InventoryLog = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO inventory_logs (log_id, product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
+                    sqlx::query("INSERT INTO inventory_logs (log_id, product_id, product_name, specification, product_code, change_type, change_quantity, current_stock, reference_id, memo, created_at, updated_at, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
                                  ON CONFLICT (log_id) DO NOTHING")
-                        .bind(d.log_id).bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(&d.product_code).bind(&d.change_type).bind(d.change_quantity).bind(d.current_stock).bind(&d.reference_id).bind(&d.memo).bind(d.created_at).bind(d.updated_at)
+                        .bind(d.log_id).bind(d.product_id).bind(&d.product_name).bind(&d.specification).bind(&d.product_code).bind(&d.change_type).bind(d.change_quantity).bind(d.current_stock).bind(&d.reference_id).bind(&d.memo).bind(d.created_at).bind(d.updated_at).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "purchases" => {
@@ -689,26 +689,26 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                 }
                 "farming_logs" => {
                     let d: FarmingLog = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO farming_logs (log_id, batch_id, space_id, log_date, worker_name, work_type, work_content, input_materials, env_data, photos, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
-                                 ON CONFLICT (log_id) DO UPDATE SET batch_id=$2, space_id=$3, log_date=$4, worker_name=$5, work_type=$6, work_content=$7, input_materials=$8, env_data=$9, photos=$10, updated_at=$12")
-                        .bind(d.log_id).bind(d.batch_id).bind(d.space_id).bind(d.log_date).bind(&d.worker_name).bind(&d.work_type).bind(&d.work_content).bind(&d.input_materials).bind(&d.env_data).bind(&d.photos).bind(d.created_at).bind(d.updated_at)
+                    sqlx::query("INSERT INTO farming_logs (log_id, batch_id, space_id, log_date, worker_name, work_type, work_content, input_materials, env_data, photos, created_at, updated_at, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+                                 ON CONFLICT (log_id) DO UPDATE SET batch_id=$2, space_id=$3, log_date=$4, worker_name=$5, work_type=$6, work_content=$7, input_materials=$8, env_data=$9, photos=$10, updated_at=$12, changed_by=$13")
+                        .bind(d.log_id).bind(d.batch_id).bind(d.space_id).bind(d.log_date).bind(&d.worker_name).bind(&d.work_type).bind(&d.work_content).bind(&d.input_materials).bind(&d.env_data).bind(&d.photos).bind(d.created_at).bind(d.updated_at).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "production_batches" => {
                     let d: ProductionBatch = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO production_batches (batch_id, batch_code, product_id, space_id, start_date, end_date, expected_harvest_date, status, initial_quantity, unit, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
-                                 ON CONFLICT (batch_id) DO UPDATE SET batch_code=$2, product_id=$3, space_id=$4, start_date=$5, end_date=$6, expected_harvest_date=$7, status=$8, initial_quantity=$9, unit=$10, updated_at=$12")
-                        .bind(d.batch_id).bind(&d.batch_code).bind(d.product_id).bind(d.space_id).bind(d.start_date).bind(d.end_date).bind(d.expected_harvest_date).bind(&d.status).bind(d.initial_quantity).bind(&d.unit).bind(d.created_at).bind(d.updated_at)
+                    sqlx::query("INSERT INTO production_batches (batch_id, batch_code, product_id, space_id, start_date, end_date, expected_harvest_date, status, initial_quantity, unit, created_at, updated_at, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+                                 ON CONFLICT (batch_id) DO UPDATE SET batch_code=$2, product_id=$3, space_id=$4, start_date=$5, end_date=$6, expected_harvest_date=$7, status=$8, initial_quantity=$9, unit=$10, updated_at=$12, changed_by=$13")
+                        .bind(d.batch_id).bind(&d.batch_code).bind(d.product_id).bind(d.space_id).bind(d.start_date).bind(d.end_date).bind(d.expected_harvest_date).bind(&d.status).bind(d.initial_quantity).bind(&d.unit).bind(d.created_at).bind(d.updated_at).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "harvest_records" => {
                     let d: HarvestRecord = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO harvest_records (harvest_id, batch_id, harvest_date, quantity, unit, grade, traceability_code, lot_number, package_count, weight_per_package, package_unit, memo, created_at, updated_at, defective_quantity, loss_quantity) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) 
-                                 ON CONFLICT (harvest_id) DO UPDATE SET batch_id=$2, harvest_date=$3, quantity=$4, unit=$5, grade=$6, traceability_code=$7, lot_number=$8, package_count=$9, weight_per_package=$10, package_unit=$11, memo=$12, updated_at=$14, defective_quantity=$15, loss_quantity=$16")
-                        .bind(d.harvest_id).bind(d.batch_id).bind(d.harvest_date).bind(d.quantity).bind(&d.unit).bind(&d.grade).bind(&d.traceability_code).bind(&d.lot_number).bind(d.package_count).bind(d.weight_per_package).bind(&d.package_unit).bind(&d.memo).bind(d.created_at).bind(d.updated_at).bind(d.defective_quantity).bind(d.loss_quantity)
+                    sqlx::query("INSERT INTO harvest_records (harvest_id, batch_id, harvest_date, quantity, unit, grade, traceability_code, lot_number, package_count, weight_per_package, package_unit, memo, created_at, updated_at, defective_quantity, loss_quantity, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
+                                 ON CONFLICT (harvest_id) DO UPDATE SET batch_id=$2, harvest_date=$3, quantity=$4, unit=$5, grade=$6, traceability_code=$7, lot_number=$8, package_count=$9, weight_per_package=$10, package_unit=$11, memo=$12, updated_at=$14, defective_quantity=$15, loss_quantity=$16, changed_by=$17")
+                        .bind(d.harvest_id).bind(d.batch_id).bind(d.harvest_date).bind(d.quantity).bind(&d.unit).bind(&d.grade).bind(&d.traceability_code).bind(&d.lot_number).bind(d.package_count).bind(d.weight_per_package).bind(&d.package_unit).bind(&d.memo).bind(d.created_at).bind(d.updated_at).bind(d.defective_quantity).bind(d.loss_quantity).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "deletion_log" => {
@@ -727,10 +727,10 @@ pub async fn restore_database(pool: &DbPool, path: String) -> MyceliumResult<Str
                 }
                 "production_spaces" => {
                     let d: ProductionSpace = serde_json::from_value(data.clone())?;
-                    sqlx::query("INSERT INTO production_spaces (space_id, space_name, space_type, location_info, area_size, area_unit, is_active, memo, created_at, updated_at) 
-                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
-                                 ON CONFLICT (space_id) DO UPDATE SET space_name=$2, space_type=$3, location_info=$4, area_size=$5, area_unit=$6, is_active=$7, memo=$8, updated_at=$10")
-                        .bind(d.space_id).bind(&d.space_name).bind(&d.space_type).bind(&d.location_info).bind(d.area_size).bind(&d.area_unit).bind(d.is_active).bind(&d.memo).bind(d.created_at).bind(d.updated_at)
+                    sqlx::query("INSERT INTO production_spaces (space_id, space_name, space_type, location_info, area_size, area_unit, is_active, memo, created_at, updated_at, changed_by) 
+                                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+                                 ON CONFLICT (space_id) DO UPDATE SET space_name=$2, space_type=$3, location_info=$4, area_size=$5, area_unit=$6, is_active=$7, memo=$8, updated_at=$10, changed_by=$11")
+                        .bind(d.space_id).bind(&d.space_name).bind(&d.space_type).bind(&d.location_info).bind(d.area_size).bind(&d.area_unit).bind(d.is_active).bind(&d.memo).bind(d.created_at).bind(d.updated_at).bind(&d.changed_by)
                         .execute(&mut *tx).await?;
                 }
                 "experience_programs" => {

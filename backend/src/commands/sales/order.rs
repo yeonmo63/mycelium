@@ -6,6 +6,8 @@ use chrono::Local;
 use std::sync::atomic::Ordering;
 
 use super::utils::{calculate_bom_tax_distribution, calculate_tax_from_total, parse_date_safe};
+use crate::middleware::auth::Claims;
+use axum::Extension;
 
 pub async fn create_sale(
     state: State<'_, DbPool>,
@@ -21,6 +23,7 @@ pub async fn create_sale(
 ) -> MyceliumResult<String> {
     create_sale_internal(
         &*state,
+        "Admin", // Default for Tauri
         customer_id,
         product_name,
         specification,
@@ -36,7 +39,7 @@ pub async fn create_sale(
         None,
         None,
         None,
-        None, // Missing shipping info in original signature
+        None,
     )
     .await
 }
@@ -44,6 +47,7 @@ pub async fn create_sale(
 // Internal implementation that takes &DbPool
 pub async fn create_sale_internal(
     pool: &DbPool,
+    username: &str,
     customer_id: Option<String>,
     product_name: String,
     specification: Option<String>,
@@ -63,6 +67,8 @@ pub async fn create_sale_internal(
     paid_amount: Option<i32>,
 ) -> MyceliumResult<String> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = pool.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let sale_id = format!("S-{}", uuid::Uuid::new_v4().to_string()[..8].to_uppercase());
 
@@ -74,7 +80,7 @@ pub async fn create_sale_internal(
     )
     .bind(&product_name)
     .bind(&specification)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
     let product_id = p_info.as_ref().map(|r| r.0);
@@ -114,11 +120,6 @@ pub async fn create_sale_internal(
     }
 
     // Insert sale
-    // Note: The original query didn't include shipping info, but we should add it if we want full feature parity with what frontend is sending
-    // Frontend sends: shipping info.
-    // The query below needs to be updated to include shipping columns if the table has them.
-    // Checking `update_sale` below, the table HAS shipping_* columns.
-
     sqlx::query(
         "INSERT INTO sales (
             sales_id, customer_id, product_name, specification, quantity, unit_price, total_amount, 
@@ -149,9 +150,10 @@ pub async fn create_sale_internal(
     .bind(shipping_address_detail)
     .bind(shipping_mobile_number)
     .bind(paid_amount)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
+    tx.commit().await?;
     Ok(sale_id)
 }
 
@@ -178,6 +180,7 @@ pub struct CreateSaleRequest {
 
 pub async fn create_sale_axum(
     axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+    Extension(claims): Extension<Claims>,
     axum::Json(payload): axum::Json<CreateSaleRequest>,
 ) -> impl axum::response::IntoResponse {
     let customer_id_str = match payload.customer_id {
@@ -188,6 +191,7 @@ pub async fn create_sale_axum(
 
     match create_sale_internal(
         &state.pool,
+        claims.username.as_deref().unwrap_or("Admin"),
         customer_id_str,
         payload.product_name,
         payload.specification,
@@ -214,38 +218,63 @@ pub async fn create_sale_axum(
 
 pub async fn update_sale_status(
     state: State<'_, DbPool>,
+    username: &str,
     sales_id: String,
     status: String,
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE sales SET status = $1 WHERE sales_id = $2")
         .bind(status)
         .bind(sales_id)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
-pub async fn cancel_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
+pub async fn cancel_sale(
+    state: State<'_, DbPool>,
+    username: &str,
+    sales_id: String,
+) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("UPDATE sales SET status = '취소' WHERE sales_id = $1")
         .bind(sales_id)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
-pub async fn delete_sale(state: State<'_, DbPool>, sales_id: String) -> MyceliumResult<()> {
+pub async fn delete_sale(
+    state: State<'_, DbPool>,
+    username: &str,
+    sales_id: String,
+) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
+    let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
+
     sqlx::query("DELETE FROM sales WHERE sales_id = $1")
         .bind(sales_id)
-        .execute(&*state)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 
 pub async fn update_sale(
     state: State<'_, DbPool>,
+    username: &str,
     sales_id: String,
     product_name: String,
     specification: Option<String>,
@@ -268,6 +297,9 @@ pub async fn update_sale(
 ) -> MyceliumResult<()> {
     DB_MODIFIED.store(true, Ordering::Relaxed);
     let mut tx = state.begin().await?;
+
+    // Enable Audit Context
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     // Date parsing
     let shipping_date_parsed = match shipping_date {
@@ -371,6 +403,7 @@ pub async fn update_sale(
 
 pub async fn complete_shipment(
     state: State<'_, DbPool>,
+    username: &str,
     sales_id: String,
     memo: Option<String>,
     carrier: Option<String>,
@@ -380,6 +413,7 @@ pub async fn complete_shipment(
     DB_MODIFIED.store(true, Ordering::Relaxed);
 
     let mut tx = state.begin().await?;
+    crate::db::set_db_user_context(&mut *tx, username).await?;
 
     let sale: Option<(String, i32, Option<String>)> =
         sqlx::query_as("SELECT status, total_amount, customer_id FROM sales WHERE sales_id = $1")
