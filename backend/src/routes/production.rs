@@ -65,7 +65,7 @@ pub fn router() -> Router<AppState> {
             post(commands::production::media::upload_media_axum),
         )
         .route(
-            "/api/production/media/:filename",
+            "/api/production/media/{filename}",
             get(commands::production::media::serve_media_axum),
         )
 }

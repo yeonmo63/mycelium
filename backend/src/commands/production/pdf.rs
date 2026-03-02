@@ -316,7 +316,6 @@ pub async fn generate_production_pdf(
         for log in raw_logs {
             if current_y < 35.0 {
                 let (page, layer) = doc.add_page(page_w, page_h, "Report Continued");
-                current_page = page;
                 current_layer = doc.get_page(page).get_layer(layer);
                 current_y = 262.0;
 
