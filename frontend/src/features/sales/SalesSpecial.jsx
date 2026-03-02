@@ -405,13 +405,7 @@ const SalesSpecial = () => {
                 {/* Event Info Card */}
                 <div className="grid grid-cols-12 gap-3 items-stretch mt-4">
                     <div className="col-span-12 bg-white rounded-[1.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                        <div className="flex items-center gap-2 mb-6 border-b border-slate-50 pb-4">
-                            <div className="bg-indigo-50 p-2 rounded-lg">
-                                <span className="material-symbols-rounded text-indigo-600 text-xl">campaign</span>
-                            </div>
-                            <span className="text-sm font-black text-slate-700 uppercase tracking-tight">행사 기본 정보</span>
-                            <span className="text-xs text-slate-400 font-medium ml-auto">* 행사명을 입력하고 엔터를 누르면 검색됩니다.</span>
-                        </div>
+
 
                         <div className="grid grid-cols-12 gap-6 mb-2">
                             <div className="col-span-4 lg:col-span-3">
@@ -571,46 +565,41 @@ const SalesSpecial = () => {
                         </table>
                     </div>
 
-                    {/* Footer Summary - Dark Theme Matching SalesReception */}
-                    <div className="bg-slate-900 border-t border-slate-800 p-4 px-8 flex justify-between items-center shrink-0 z-30 h-[90px] shadow-[0_-10px_40px_rgba(0,0,0,0.2)]">
+                    {/* Footer Summary - Unified UI with General Reception */}
+                    <div className="bg-slate-900 p-4 px-8 flex justify-between items-center text-white border-t border-slate-800 rounded-b-[1.5rem]">
                         <div className="flex gap-10 items-center">
-                            <div className="flex gap-4 items-center">
-                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner">
-                                    <span className="material-symbols-rounded text-indigo-400 text-2xl">analytics</span>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">전체 합계 요약</span>
-                                    <div className="flex items-baseline gap-2 text-white">
-                                        <span className="text-2xl font-black tracking-tight">{summary.count}<span className="text-sm font-normal text-slate-500 ml-1">건</span></span>
-                                        <span className="w-px h-4 bg-white/10 mx-2"></span>
-                                        <span className="text-2xl font-black tracking-tight">{summary.qty}<span className="text-sm font-normal text-slate-500 ml-1">개</span></span>
+                            <div className="flex gap-3 items-center">
+                                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40"><span className="material-symbols-rounded">analytics</span></div>
+                                <div className="flex flex-col">
+                                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">전체 합계 요약</span>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-xl font-black">{summary.count}건</span>
+                                        <span className="mx-2 w-1 h-3 bg-white/10 rounded-full"></span>
+                                        <span className="text-xl font-black">{summary.qty}개</span>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex flex-col pl-10 border-l border-white/10 ml-2">
-                                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest italic mb-1">Total Amount</span>
+                                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest italic mb-0.5">최종 합계</span>
                                 <div className="flex items-baseline gap-1">
-                                    <span className="text-[11px] font-black text-emerald-400/50 uppercase">KRW</span>
-                                    <span className="text-3xl font-black text-emerald-400 leading-none drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">{formatCurrency(summary.amount)}</span>
-                                    <span className="text-lg font-bold text-emerald-400/50">원</span>
+                                    <span className="text-[9px] font-black text-indigo-400/50 uppercase">KRW</span>
+                                    <span className="text-xl font-black text-indigo-400 leading-none">{formatCurrency(summary.amount)}원</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-3 h-12">
                             <button onClick={() => { setEventData({ event_id: '', event_name: '', organizer: '', manager_name: '', manager_contact: '', location_address: '', memo: '', start_date: '', end_date: '' }); setSalesRows([]); setDeletedSalesIds([]); setIsDirty(false); clearDraft(); }}
-                                className="h-12 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold transition-all text-xs flex items-center gap-2 border border-slate-700/50">
-                                <span className="material-symbols-rounded">refresh</span> 초기화
+                                className="px-6 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-black transition-all text-xs">
+                                초기화
                             </button>
-                            <button onClick={handleSaveAll} className="h-12 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-900/40 transition-all hover:scale-105 active:scale-95 text-sm flex items-center gap-3" disabled={isLoading || !eventData.event_name}>
+                            <button onClick={handleSaveAll} disabled={isLoading || !eventData.event_name}
+                                className={`px-10 rounded-xl font-black shadow-xl flex items-center gap-2 transition-all ${isLoading ? 'bg-slate-700 text-slate-500' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/40'}`}>
                                 {isLoading ? (
-                                    <>
-                                        <span className="material-symbols-rounded animate-spin">sync</span> 저장 중...
-                                    </>
+                                    <span className="material-symbols-rounded animate-spin text-lg">refresh</span>
                                 ) : (
-                                    <>
-                                        <span className="material-symbols-rounded">save</span> 일괄 저장하기
-                                    </>
+                                    <span className="material-symbols-rounded text-lg">save_as</span>
                                 )}
+                                <span className="text-sm uppercase tracking-tight">일괄 저장하기</span>
                             </button>
                         </div>
                     </div>

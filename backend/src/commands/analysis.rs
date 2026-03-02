@@ -60,7 +60,7 @@ pub async fn sales_polars_analysis_v4(
     .collect()?;
 
     // 3. Analytics
-    let total_sum: i64 = df.column("total_amount")?.sum::<i64>()?;
+    let total_sum: i64 = df.column("total_amount")?.sum::<i64>().unwrap_or(0);
 
     let monthly_df = df
         .clone()
@@ -430,6 +430,7 @@ pub async fn get_sales_by_region_analysis(
     let r_vals = df.column("region")?.str()?;
     let q_vals = df.column("total_quantity")?.i64()?;
     let t_vals = df.column("total_amount")?.i64()?;
+    let total_sum: i64 = df.column("total_amount")?.sum::<i64>()?;
 
     let mut result_list = Vec::new();
     for i in 0..df.height() {

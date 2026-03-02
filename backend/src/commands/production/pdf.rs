@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use crate::db::{DbPool, FarmingLog};
 use crate::error::{MyceliumError, MyceliumResult};
 use crate::stubs::{Manager, State};
@@ -110,14 +111,16 @@ pub async fn generate_production_pdf(
         let margin_x: f32 = 10.0;
         let content_w: f32 = 190.0;
 
-        let (doc, page1, layer1) = PdfDocument::new("GAP Log", page_w, page_h, "Layer 1");
+        let (doc, page1, layer1) = PdfDocument::new(main_title, page_w, page_h, "Layer 1");
 
         let font_path = std::path::Path::new("C:\\Windows\\Fonts\\malgun.ttf");
         let font = doc
-            .add_external_font(
-                File::open(font_path)
-                    .map_err(|e| MyceliumError::Internal(format!("Font error: {}", e)))?,
-            )
+            .add_external_font(File::open(font_path).map_err(|e| {
+                MyceliumError::Internal(format!(
+                    "Font file not found (C:\\Windows\\Fonts\\malgun.ttf): {}",
+                    e
+                ))
+            })?)
             .map_err(|e| MyceliumError::Internal(format!("Font load error: {}", e)))?;
 
         // Helpers
@@ -175,6 +178,7 @@ pub async fn generate_production_pdf(
         };
 
         let mut current_layer = doc.get_page(page1).get_layer(layer1);
+        let mut current_page = page1;
         let mut current_y: f32 = 262.0;
 
         // 1. HEADER
@@ -312,6 +316,7 @@ pub async fn generate_production_pdf(
         for log in raw_logs {
             if current_y < 35.0 {
                 let (page, layer) = doc.add_page(page_w, page_h, "Report Continued");
+                current_page = page;
                 current_layer = doc.get_page(page).get_layer(layer);
                 current_y = 262.0;
 
@@ -509,6 +514,8 @@ pub async fn generate_production_pdf(
 
                     let img_path = media_dir.join(path);
                     if img_path.exists() {
+                        // Use original image crate name
+                        extern crate image as image_crate;
                         if let Ok(img) = image_crate::open(&img_path) {
                             let scaled = if img.width() > 1024 || img.height() > 768 {
                                 img.resize(1024, 768, image_crate::imageops::FilterType::Triangle)
